@@ -52,7 +52,7 @@ document.addEventListener('keydown', function (e) {
     if (freeCamera && (freeCamera.active || freeCamera.locked)) resetFreeCameraToDefault();
     else {
       recenterCamera();
-      showToast('镜头已回正');
+      showToast('Camera recentered');
     }
     return;
   }
@@ -85,4 +85,4 @@ window.addEventListener('blur', function () {
 });
 
 // ============================================================
-//  API 助手
+//  API helpers

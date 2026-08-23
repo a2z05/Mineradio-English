@@ -26,14 +26,14 @@ function firstImageUploadFile(files) {
 }
 function localSongFromAudioFile(file) {
   var rel = String(file.webkitRelativePath || file.name || '');
-  var filename = String(file.name || rel || '本地音乐');
+  var filename = String(file.name || rel || 'Local music');
   var title = filename.replace(/\.[^.]+$/, '');
   return hydrateCustomCover({
     type: 'local',
     source: 'local',
     provider: 'local',
-    name: title || '本地音乐',
-    artist: '本地文件',
+    name: title || 'Local music',
+    artist: 'Local file',
     album: rel && rel !== filename ? rel.split(/[\\/]/).slice(0, -1).join(' / ') : '',
     localKey: [rel || filename, file.size || 0, file.lastModified || 0].join(':'),
     localUrl: URL.createObjectURL(file),
@@ -130,8 +130,8 @@ async function restorePersistedLocalLibrary() {
   updateControlTrackInfo(current);
   var titleEl = document.getElementById('thumb-title');
   var artistEl = document.getElementById('thumb-artist');
-  if (titleEl) titleEl.textContent = current.name || current.title || '本地音乐';
-  if (artistEl) artistEl.textContent = current.artist || '本地文件';
+  if (titleEl) titleEl.textContent = current.name || current.title || 'Local music';
+  if (artistEl) artistEl.textContent = current.artist || 'Local file';
   var thumbWrap = document.getElementById('thumb-wrap');
   if (thumbWrap) thumbWrap.classList.add('visible');
   if (current.cover) {
@@ -265,7 +265,7 @@ function importLocalAudioSongs(songs, opts) {
   safeShelfRebuild('local-import', true);
   forcePlaybackControlsInteractive();
   updateEmptyHomeVisibility({ forceLoad: false });
-  showToast(songs.length > 1 ? ('已导入 ' + songs.length + ' 首本地音乐') : '正在播放本地音乐');
+  showToast(songs.length > 1 ? ('Imported ' + songs.length + ' local songs') : 'Playing local music');
   Promise.resolve(playQueueAt(0, { manual: true })).then(function () {
     if (opts.coverFile && currentIdx === 0 && playQueue[0]) {
       loadCoverFromFile(opts.coverFile, { trackToken: trackSwitchToken, deferHeavy: false, delay: 0, timeout: 260 });
@@ -277,7 +277,7 @@ function handleCoverFiles(files) {
   finishUploadFilePicker(true);
   var imgFile = firstImageUploadFile(files);
   if (!imgFile) {
-    showToast('没有找到可用的封面图片');
+    showToast('No usable cover image found');
     return;
   }
   loadCoverFromFile(imgFile, null);
@@ -292,14 +292,14 @@ async function handleFiles(files, opts) {
     var songs;
     var persistenceFailed = false;
     if (canUsePersistentLocalMusicLibrary()) {
-      showToast('正在读取 ' + audioFiles.length + ' 首本地音乐的标签与歌词…');
+      showToast('Reading tags and lyrics for ' + audioFiles.length + ' local songs…');
       try {
         var persisted = await importPersistentLocalAudioFiles(audioFiles);
         songs = persisted && persisted.tracks;
         if (!songs || !songs.length) throw new Error('LOCAL_LIBRARY_IMPORT_EMPTY');
         persistentLocalLibraryTracks = songs.map(cloneSong);
         if (persisted && Array.isArray(persisted.failures) && persisted.failures.length) {
-          setTimeout(function () { showToast('有 ' + persisted.failures.length + ' 个文件无法读取，其余歌曲已保存'); }, 900);
+          setTimeout(function () { showToast('Could not read ' + persisted.failures.length + ' files; the rest were saved'); }, 900);
         }
       } catch (e) {
         persistenceFailed = true;
@@ -309,7 +309,7 @@ async function handleFiles(files, opts) {
     if (!songs || !songs.length) songs = audioFiles.map(localSongFromAudioFile);
     importLocalAudioSongs(songs, { coverFile: songs.length === 1 ? imgFile : null, mode: opts.mode || '' });
     if (persistenceFailed) {
-      setTimeout(function () { showToast('本地曲库保存失败：这些歌曲仅本次可用，重启后不会保留'); }, 260);
+      setTimeout(function () { showToast('Failed to save to the local library: these songs are available this session only and will not survive a restart'); }, 260);
     }
     return;
   }
@@ -317,7 +317,7 @@ async function handleFiles(files, opts) {
     handleCoverFiles([imgFile]);
     return;
   }
-  showToast('没有找到可导入的音乐或封面文件');
+  showToast('No importable music or cover files found');
 }
 var fileInput = document.getElementById('file-input');
 if (fileInput) fileInput.addEventListener('change', function (e) { handleFiles(e.target.files, { mode: 'audio' }); e.target.value = ''; });
@@ -346,4 +346,4 @@ document.addEventListener('drop', function (e) {
 });
 
 // ============================================================
-//  控制台 — 预设卡片 + 主滑块 + 开关 + 三态
+//  Console — preset cards + main sliders + toggles + tri-state

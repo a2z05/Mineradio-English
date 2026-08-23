@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, screen, session, globalShortcut, dialog, Tray, Menu, protocol, desktopCapturer, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, session, globalShortcut, dialog, Tray, Menu, protocol, desktopCapturer, safeStorage, powerMonitor } = require('electron');
 const net = require('net');
 const http = require('http');
 const path = require('path');
@@ -29,6 +29,7 @@ const {
   exchangeSpotifyOAuthCode,
   clearSpotifyToken,
 } = require('../spotify-api');
+const { SpotifySecureAuthStore } = require('../spotify-secure-auth-store');
 
 registerWallpaperEngineScheme(protocol);
 registerLocalMusicScheme(protocol);
@@ -4783,6 +4784,16 @@ function configureLocalServerEnvironment(port) {
   if (!process.env.SPOTIFY_CONFIG_FILE && !process.env.MINERADIO_SPOTIFY_CONFIG_FILE) {
     process.env.SPOTIFY_CONFIG_FILE = path.join(STABLE_USER_DATA_PATH, '.spotify-credentials.json');
   }
+  const spotifyAuthStore = new SpotifySecureAuthStore({
+    filePath: path.join(STABLE_USER_DATA_PATH, '.spotify-auth.enc'),
+    safeStorage,
+    legacyPaths: [
+      path.join(__dirname, '..', '.spotify-auth'),
+      path.join(STABLE_USER_DATA_PATH, '.spotify-auth'),
+    ],
+  });
+  spotifyAuthStore.clearLegacyPlaintext();
+  global.__mineradioSpotifyAuthStore = spotifyAuthStore;
 }
 
 const APP_OWNED_MIGRATION_FILES = [

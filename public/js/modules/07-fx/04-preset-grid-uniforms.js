@@ -79,7 +79,7 @@ function setPreset(p, opts) {
   if (typeof updateSonicSeriesControlVisibility === 'function') updateSonicSeriesControlVisibility();
   if (typeof updateSonicWorkshopColorControls === 'function') updateSonicWorkshopColorControls();
   if (changed && !opts.skipTransition) triggerPresetParticleTransition(prev, p);
-  // 每个预设对应的相机基线 (改 userOrbit)
+  // Per-preset camera baseline (modifies userOrbit)
   if (changed && !opts.preserveCamera) {
     if (p === 5) {
       captureCurrentOrbitAsBaseline();
@@ -88,7 +88,7 @@ function setPreset(p, opts) {
       applyPresetOrbitBaseline(p);
     }
   }
-  if (changed && !opts.silent) showToast('视觉预设: ' + presetMeta[p].name);
+  if (changed && !opts.silent) showToast('Visual preset: ' + presetMeta[p].name);
   var shouldCommitPlaybackPreset = !!opts.commitPlaybackPreset || !opts.noSave;
   if (shouldCommitPlaybackPreset) {
     playbackVisualPreset = p;

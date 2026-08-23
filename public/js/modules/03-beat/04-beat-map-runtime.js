@@ -1,6 +1,6 @@
 function smoothBeatMapHandoff(songId, map, token, song) {
   if (!map) return;
-  showBeatChip('节奏缓冲中…');
+  showBeatChip('Buffering beats…');
   var wait = Math.max(260, Math.min(720, 340 + (beatPulse + beatCam.punch) * 260));
   var apply = function () {
     if (token !== beatMapToken) return;
@@ -11,7 +11,7 @@ function smoothBeatMapHandoff(songId, map, token, song) {
     syncBeatMapPlaybackCursor(t, true);
     hideBeatChip();
     notifyDesktopLyricsBeatMapReady();
-    showToast('节奏分析完成: ' + (map.visualBeatCount || (map.cameraBeats && map.cameraBeats.length) || 0) + ' 个视觉主拍');
+    showToast('Beat analysis complete: ' + (map.visualBeatCount || (map.cameraBeats && map.cameraBeats.length) || 0) + ' visual main beats');
     writeBeatDiskCache(songId, map, song, 'mr');
     scheduleQueueBeatPrefetch(currentIdx, 1000);
   };
@@ -31,7 +31,7 @@ function applyBeatMapCacheForCurrent(songId, map, token, message) {
   return true;
 }
 
-// 每帧调用 — 按 beatMap 触发预演鼓点
+// Called every frame — fires preview drum hits from the beat map
 function syncBeatMapPlaybackCursor(t, preserveVisualState) {
   if (djMode.active) {
     syncPodcastDjMapCursor(t, preserveVisualState);
@@ -98,7 +98,7 @@ function tickBeatMap() {
     beatCam.nextIdx++;
   }
   while (beatMapNextIdx < pulseEvents.length && beatEventTime(pulseEvents[beatMapNextIdx]) <= t) {
-    // 触发预演冲击
+    // Trigger preview impact
     if (gridTimingLocked || !realtimeHasLock) triggerScheduledBeat(pulseEvents[beatMapNextIdx]);
     beatMapNextIdx++;
   }

@@ -2,14 +2,14 @@ var targetVolume = readSavedVolume();
 var lastNonZeroVolume = targetVolume > 0.01 ? targetVolume : 0.8;
 var volumeCloseTimer = null;
 
-// v7.2: 离线节拍预解析
-//   每次切歌, fetch 完整音频 → OfflineAudioContext 分析 → 标出真鼓点
-//   缓存按 song.id 存, 避免重复
+// v7.2: offline beat pre-analysis
+//   On every track switch: fetch full audio → OfflineAudioContext analysis → mark real kicks
+//   Cache stored by song.id to avoid repeats
 var beatMapCache = {};       // { songId: { kicks: [t1, t2, ...], duration: ... } }
-var currentBeatMap = null;   // 当前播放的歌的 beatMap
-var beatMapNextIdx = 0;      // 下一个待触发的 kick index
-var beatMapBusy = false;     // 正在分析中
-var beatMapToken = 0;        // 取消旧分析
+var currentBeatMap = null;   // beatMap of the currently playing song
+var beatMapNextIdx = 0;      // next kick index to trigger
+var beatMapBusy = false;     // analysis in progress
+var beatMapToken = 0;        // cancels a previous analysis
 var beatAnalysisTimer = null;
 var beatAnalysisStartedAt = 0;
 var beatPrefetchTimer = null;
@@ -157,8 +157,8 @@ function maybeAnnounceDjMode() {
   var now = performance.now();
   if (now - djMode.lastNoticeAt > 8000) {
     djMode.lastNoticeAt = now;
-    showToast('DJ Mode · 离线锁拍');
+    showToast('DJ Mode · offline beat sync');
   }
 }
 
-// fx 状态: 预设 + 主滑块 + 开关 + 三态
+// fx state: presets + main slider + toggles + tri-state

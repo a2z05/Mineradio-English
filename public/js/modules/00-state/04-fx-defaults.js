@@ -142,8 +142,8 @@ var fxDefaults = {
   sonicWorkshopRippleColor: '#ffffff',
   sonicWorkshopPeakColorMode: 'cover',
   sonicWorkshopPeakColor: '#f2f5f8',
-  particleLyrics: true,    // v7.2: 粒子歌词
-  backCover: false,        // 旧的封面背面粒子层关闭；浮空粒子层会跟随封面翻转
+  particleLyrics: true,    // v7.2: particle lyrics
+  backCover: false,        // old back-of-cover particle layer off; floating particle layer flips with the cover
   shelf: 'side',
   shelfPinnedOpen: false,
   shelfCameraMode: 'dynamic',

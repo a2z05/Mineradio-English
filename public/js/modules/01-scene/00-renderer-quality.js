@@ -186,8 +186,8 @@ renderer.domElement.tabIndex = 0;
 document.getElementById('canvas-container').appendChild(renderer.domElement);
 
 // ============================================================
-//  相机系统 v7.1 — 分离 user offset / cinema offset
-//   - userOrbit: 用户拖拽的目标 (永久保留, 不会被电影模式覆盖)
-//   - cinemaOffset: 电影模式的微偏移 (始终叠加, 即使用户在拖)
-//   - 最终 theta = userOrbit.theta + cinemaOffset.theta
-//   - 回正按钮 / 双击屏幕: 让 userOrbit 缓慢归零
+//  camera system v7.1 — separates user offset / cinema offset
+//   - userOrbit: target of user dragging (kept permanently, never overridden by cinema mode)
+//   - cinemaOffset: cinema-mode micro offset (always applied, even while dragging)
+//   - final theta = userOrbit.theta + cinemaOffset.theta
+//   - recenter button / double-click: slowly zero userOrbit

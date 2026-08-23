@@ -81,7 +81,7 @@ function setCloseBehaviorPreference(value, opts) {
   if (window.desktopWindow && typeof window.desktopWindow.setCloseBehavior === 'function') {
     window.desktopWindow.setCloseBehavior(closeBehaviorPreference).catch(function (e) { console.warn('[CloseBehavior]', e); });
   }
-  if (opts.toast) showToast(closeBehaviorPreference === 'tray' ? '关闭按钮将放到后台托盘' : '关闭按钮将直接退出');
+  if (opts.toast) showToast(closeBehaviorPreference === 'tray' ? 'Close button will minimize to tray' : 'Close button will exit the app');
 }
 function bindCloseBehaviorControls() {
   var seg = document.getElementById('close-behavior-seg');
@@ -127,7 +127,7 @@ function setStartupResumeModePreference(value, opts) {
   saveStartupResumeModePreference(startupResumeModePreference);
   syncStartupResumeModeUi();
   applyStartupResumeModeToRestoredSnapshot();
-  if (opts.toast) showToast(startupResumeModePreference === 'restart' ? '恢复播放将重播整首' : '恢复播放将按上次进度继续');
+  if (opts.toast) showToast(startupResumeModePreference === 'restart' ? 'Resume playback will restart from the beginning' : 'Resume playback continues from last position');
 }
 function bindStartupResumeModeControls() {
   var seg = document.getElementById('startup-resume-mode-seg');
@@ -151,7 +151,7 @@ function toggleStartupAutoplay() {
   startupAutoplayPreference = !startupAutoplayPreference;
   saveBooleanPreference(STARTUP_AUTOPLAY_STORE_KEY, startupAutoplayPreference);
   applyStartupAutoplayUi();
-  showToast(startupAutoplayPreference ? '启动自动播放已开启' : '启动自动播放已关闭');
+  showToast(startupAutoplayPreference ? 'Startup autoplay enabled' : 'Startup autoplay disabled');
   if (startupAutoplayPreference) {
     startupAutoplayAttempted = false;
     queueStartupAutoplayAfterHomeReveal('setting-toggle');
@@ -165,7 +165,7 @@ function toggleStartupFastSkip() {
   startupFastSkipPreference = !startupFastSkipPreference;
   saveBooleanPreference(STARTUP_FAST_SKIP_STORE_KEY, startupFastSkipPreference);
   applyStartupAutoplayUi();
-  showToast(startupFastSkipPreference ? '秒启动已开启' : '秒启动已关闭');
+  showToast(startupFastSkipPreference ? 'Fast startup enabled' : 'Fast startup disabled');
 }
 window.toggleStartupAutoplay = toggleStartupAutoplay;
 window.toggleStartupFastSkip = toggleStartupFastSkip;
@@ -175,7 +175,7 @@ function applyUserCapsuleAutoHideState() {
   if (btn) {
     btn.classList.toggle('on', !!userCapsuleAutoHide);
     btn.textContent = userCapsuleAutoHide ? '›' : '‹';
-    btn.title = userCapsuleAutoHide ? '取消自动隐藏账号胶囊' : '自动隐藏账号胶囊';
+    btn.title = userCapsuleAutoHide ? 'Stop auto-hiding account capsule' : 'Auto-hide account capsule';
   }
 }
 function toggleUserCapsuleAutoHide(e) {
@@ -183,7 +183,7 @@ function toggleUserCapsuleAutoHide(e) {
   userCapsuleAutoHide = !userCapsuleAutoHide;
   saveBooleanPreference(USER_CAPSULE_AUTO_HIDE_STORE_KEY, userCapsuleAutoHide);
   applyUserCapsuleAutoHideState();
-  showToast(userCapsuleAutoHide ? '账号胶囊已自动隐藏' : '账号胶囊已固定显示');
+  showToast(userCapsuleAutoHide ? 'Account capsule now auto-hides' : 'Account capsule pinned visible');
 }
 function updateUserCapsuleAutoHideFromPointer(x, y) {
   if (!userCapsuleAutoHide || immersiveMode) {
@@ -207,7 +207,7 @@ function applyFxFabAutoHideState(opts) {
   if (btn) {
     btn.classList.toggle('on', !!fxFabAutoHide);
     btn.textContent = fxFabAutoHide ? '›' : '‹';
-    btn.title = fxFabAutoHide ? '取消自动隐藏视觉控制台' : '自动隐藏视觉控制台';
+    btn.title = fxFabAutoHide ? 'Stop auto-hiding FX console' : 'Auto-hide FX console';
   }
 }
 function toggleFxFabAutoHide(e) {
@@ -215,7 +215,7 @@ function toggleFxFabAutoHide(e) {
   fxFabAutoHide = !fxFabAutoHide;
   saveBooleanPreference(FX_FAB_AUTO_HIDE_STORE_KEY, fxFabAutoHide);
   applyFxFabAutoHideState({ forceHidden: fxFabAutoHide });
-  showToast(fxFabAutoHide ? '视觉控制台按钮已自动隐藏' : '视觉控制台按钮已固定显示');
+  showToast(fxFabAutoHide ? 'FX console button now auto-hides' : 'FX console button pinned visible');
 }
 function updateFxFabAutoHideFromPointer(x, y) {
   if (!fxFabAutoHide || !diyPlayerMode || immersiveMode) {
@@ -282,7 +282,7 @@ function syncDiyModeButton() {
     if (!btn) return;
     btn.classList.toggle('on', diyPlayerMode);
     btn.setAttribute('aria-pressed', diyPlayerMode ? 'true' : 'false');
-    btn.title = diyPlayerMode ? '关闭 DIY 玩家模式' : '开启 DIY 玩家模式';
+    btn.title = diyPlayerMode ? 'Turn off DIY player mode' : 'Turn on DIY player mode';
     btn.setAttribute('aria-label', btn.title);
   });
 }
@@ -304,7 +304,7 @@ function applyDiyMode(on, opts) {
     if (quality) quality.classList.remove('open');
     if (volume) volume.classList.remove('open');
   }
-  if (opts.toast) showToast(diyPlayerMode ? 'DIY 玩家模式已开启' : '已切回简约模式');
+  if (opts.toast) showToast(diyPlayerMode ? 'DIY player mode on' : 'Switched back to simple mode');
   if (opts.animate && window.gsap) {
     ['diy-mode-btn', 'fullscreen-diy-btn'].forEach(function (id) {
       var btn = document.getElementById(id);

@@ -128,7 +128,7 @@ function getMusicTempoWorkerUrl() {
 async function analyzeMusicTempoInWorker(buffer, token) {
   if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined') return null;
   try {
-    showBeatChip('后台锁定电影主拍…');
+    showBeatChip('Locking main beat in background…');
     await yieldToIdle(isHiddenForBackgroundOptimization() ? 20 : 180);
     if (token !== beatMapToken) return null;
     var channels = buffer.numberOfChannels;
@@ -215,7 +215,7 @@ function scheduleBeatAnalysis(songId, audioUrl, token, song) {
       if (token !== beatMapToken || !audio || audio.paused || beatMapCache[songId]) return;
       var diskMap = await readBeatDiskCache(songId);
       if (diskMap) {
-        applyBeatMapCacheForCurrent(songId, diskMap, token, 'D盘节拍缓存命中:');
+        applyBeatMapCacheForCurrent(songId, diskMap, token, 'Disk beat cache hit:');
         return;
       }
       if (token !== beatMapToken || !audio || audio.paused || beatMapCache[songId]) return;
@@ -271,7 +271,7 @@ function updateBeatDiskCacheStatus(data) {
   beatDiskCacheStatus.reason = data.reason || '';
   if (!beatDiskCacheStatus.enabled && !beatDiskCacheNoticeLogged) {
     beatDiskCacheNoticeLogged = true;
-    console.log('节拍磁盘缓存不可用，已降级为本次运行内存缓存:', beatDiskCacheStatus.reason || 'unknown');
+    console.log('Beat disk cache unavailable, falling back to in-memory cache for this run:', beatDiskCacheStatus.reason || 'unknown');
   }
 }
 
@@ -416,7 +416,7 @@ async function runQueueBeatPrefetch(fromIdx, token, seq, state) {
     if (token !== beatMapToken || seq !== beatPrefetchToken) return;
     var diskMap = await readBeatDiskCache(key);
     if (diskMap) {
-      console.log('队列节奏D盘缓存命中:', song.name || key, diskMap.visualBeatCount || 0);
+      console.log('Queue beat disk cache hit:', song.name || key, diskMap.visualBeatCount || 0);
       return;
     }
     var audioUrl = await fetchBeatPrefetchAudioUrl(song);
@@ -437,7 +437,7 @@ async function runQueueBeatPrefetch(fromIdx, token, seq, state) {
     if (token !== beatMapToken || seq !== beatPrefetchToken || !map) return;
     beatMapCache[key] = map;
     writeBeatDiskCache(key, map, song, 'mr');
-    console.log('队列节奏预热完成:', song.name || key, map.visualBeatCount || 0);
+    console.log('Queue beat prefetch complete:', song.name || key, map.visualBeatCount || 0);
   } catch (err) {
     console.warn('queue beat prefetch failed:', err && err.message ? err.message : err);
   } finally {

@@ -254,10 +254,10 @@ function toggleControlsAutoHide() {
   setControlsHidden(false);
   if (controlsAutoHide) {
     scheduleControlsHide(520);
-    showToast('控制条自动隐藏已开启');
+    showToast('Controls auto-hide enabled');
   } else {
     if (controlsHideTimer) { clearTimeout(controlsHideTimer); controlsHideTimer = null; }
-    showToast('控制条保持显示');
+    showToast('Controls stay visible');
   }
 }
 
@@ -350,5 +350,5 @@ function syncCursorAutoHideMode() {
 syncCursorAutoHideMode();
 
 // ============================================================
-//  指针 / 拖拽控制
-//   v7.1: 用 userOrbit 替代 targetOrbit; 加 drag 距离判断
+//  pointer / drag control
+//   v7.1: userOrbit replaces targetOrbit; adds drag-distance check

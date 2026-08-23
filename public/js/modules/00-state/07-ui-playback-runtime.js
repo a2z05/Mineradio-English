@@ -38,7 +38,7 @@ var immersiveState = {
   bottomVisible: false
 };
 
-// 鼠标 / 摄像头视差
+// mouse / camera parallax
 var pointerParallax = { x: 0, y: 0 };
 var pointerTarget = { x: 0, y: 0 };
 var headParallax = { x: 0, y: 0, active: false };

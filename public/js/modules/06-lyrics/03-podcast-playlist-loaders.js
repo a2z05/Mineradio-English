@@ -19,17 +19,17 @@ function renderMyPodcastRadioItems(key, title, items) {
   var $pod = document.getElementById('podcast-list');
   if (!$pod) return;
   if (!items.length) {
-    $pod.innerHTML = '<div class="podcast-inline-head"><div class="pl-section-label">' + escHtml(title || '我的播客') + '</div><button class="fx-mini-btn ghost" data-podcast-back="1" style="height:24px;padding:0 9px;font-size:10.5px">返回</button></div>' +
-      '<div style="text-align:center;padding:14px 0;color:rgba(255,255,255,.28);font-size:11.5px">暂无内容</div>';
+    $pod.innerHTML = '<div class="podcast-inline-head"><div class="pl-section-label">' + escHtml(title || 'My podcasts') + '</div><button class="fx-mini-btn ghost" data-podcast-back="1" style="height:24px;padding:0 9px;font-size:10.5px">Back</button></div>' +
+      '<div style="text-align:center;padding:14px 0;color:rgba(255,255,255,.28);font-size:11.5px">No content yet</div>';
     return;
   }
-  $pod.innerHTML = '<div class="podcast-inline-head"><div class="pl-section-label">' + escHtml(title || '我的播客') + '</div><button class="fx-mini-btn ghost" data-podcast-back="1" style="height:24px;padding:0 9px;font-size:10.5px">返回</button></div>' +
+  $pod.innerHTML = '<div class="podcast-inline-head"><div class="pl-section-label">' + escHtml(title || 'My podcasts') + '</div><button class="fx-mini-btn ghost" data-podcast-back="1" style="height:24px;padding:0 9px;font-size:10.5px">Back</button></div>' +
     items.map(function (r) {
       var thumb = r.cover ? coverUrlWithSize(r.cover, 88) : '';
       var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:44px;height:44px;border-radius:8px;background:rgba(0,245,212,.07);flex-shrink:0"></div>';
       return '<div class="pl-card podcast-card podcast-child" data-podcast-radio-id="' + escHtml(String(r.id || r.radioId || '')) + '" data-podcast-title="' + escHtml(r.name || '') + '">' +
         imgTag +
-        '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(r.name || '') + '</div><div class="pl-sub">' + escHtml((r.djName || r.artist || 'Podcast') + (r.programCount ? (' · ' + r.programCount + ' 集') : '')) + '</div></div>' +
+        '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(r.name || '') + '</div><div class="pl-sub">' + escHtml((r.djName || r.artist || 'Podcast') + (r.programCount ? (' · ' + r.programCount + ' episodes') : '')) + '</div></div>' +
         '</div>';
     }).join('');
   animateVisiblePanelList($pod, '.pl-card', document.getElementById('playlist-panel'));
@@ -43,7 +43,7 @@ async function openMyPodcastCollection(key, title) {
     var items = r.items || [];
     myPodcastItems[key] = items;
     if (!items.length) {
-      showToast('暂无内容: ' + (title || key));
+      showToast('No content: ' + (title || key));
       renderMyPodcastRadioItems(key, title, []);
       return;
     }
@@ -55,13 +55,13 @@ async function openMyPodcastCollection(key, title) {
       safeShelfRebuild('podcast-collection-voice', true);
       forcePlaybackControlsInteractive();
       await playQueueAt(0);
-      showToast('载入: ' + (title || '喜欢的声音'));
+      showToast('Loaded: ' + (title || 'Liked sounds'));
       return;
     }
     renderMyPodcastRadioItems(key, title, items);
   } catch (e) {
     console.warn(e);
-    showToast('播客加载失败');
+    showToast('Failed to load podcast');
   } finally {
     hideLoading();
   }
@@ -71,8 +71,8 @@ async function loadPodcastRadioIntoQueue(id, autoplay, title) {
   showLoading();
   try {
     var r = await apiJson('/api/podcast/programs?id=' + encodeURIComponent(id) + '&limit=' + PLAYLIST_LAZY_BATCH_SIZE);
-    if (r.error) { showToast('播客加载失败: ' + r.error); return; }
-    if (!r.programs || !r.programs.length) { showToast('播客暂无可播放节目'); return; }
+    if (r.error) { showToast('Failed to load podcast: ' + r.error); return; }
+    if (!r.programs || !r.programs.length) { showToast('No playable episodes in this podcast'); return; }
     playQueue = r.programs.map(cloneSong);
     currentIdx = 0;
     safeRenderQueuePanel('podcast-radio');
@@ -80,10 +80,10 @@ async function loadPodcastRadioIntoQueue(id, autoplay, title) {
     safeShelfRebuild('podcast-radio', true);
     forcePlaybackControlsInteractive();
     if (autoplay) await playQueueAt(0);
-    showToast('载入: ' + (title || '播客'));
+    showToast('Loaded: ' + (title || 'Podcast'));
   } catch (e) {
     console.warn(e);
-    showToast('播客加载失败');
+    showToast('Failed to load podcast');
   } finally {
     hideLoading();
   }
@@ -235,13 +235,13 @@ async function loadPlaylistIntoQueueById(id, autoplay, title, opts) {
     }
   } catch (e) {
     console.warn('[PlaylistLoadFirstPage]', id, e);
-    showToast('歌单首批加载失败');
+    showToast('Failed to load first songs of playlist');
     hideLoading();
     return false;
   }
   try {
     if (!seedTracks.length) {
-      showToast(r && (r.message || r.error) || '歌单为空');
+      showToast(r && (r.message || r.error) || 'Playlist is empty');
       return false;
     }
     playQueue = seedTracks;
@@ -286,28 +286,28 @@ async function loadPlaylistIntoQueueById(id, autoplay, title, opts) {
         await playQueueAt(currentIdx, { preserveHomeState: !!opts.preserveHomeState });
       } catch (playErr) {
         console.warn('[PlaylistAutoplay]', id, playErr);
-        showToast('歌单已载入，播放启动失败');
+        showToast('Playlist loaded, but playback failed to start');
       }
     }
     forcePlaybackControlsInteractive();
     if (queueHydrationState.active) {
-      showToast('已开始播放，后续歌曲会按需流式加入队列');
+      showToast('Playing — remaining songs stream into the queue as needed');
       if (queueHydrationState.warmPagesRemaining > 0) {
         queueHydrationState.warmPagesRemaining -= 1;
         schedulePlaylistQueueHydration(180, 'initial-warm-page');
       }
     } else {
-      showToast('载入: ' + (title || ('歌单 ' + id)));
+      showToast('Loaded: ' + (title || ('Playlist ' + id)));
     }
     return true;
   } catch (e) {
     console.warn('[PlaylistLoadState]', id, e);
     forcePlaybackControlsInteractive();
-    showToast('歌单已载入，界面刷新失败');
+    showToast('Playlist loaded, but the UI failed to refresh');
     return false;
   } finally {
     hideLoading();
   }
 }
 
-// 进度条
+// Progress bar

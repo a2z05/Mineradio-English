@@ -1,0 +1,69 @@
+name: Upstream Watch
+
+# Opens a PR merging XxHuberrr/Mineradio main into our english branch whenever upstream moves.
+# Our changes are never lost — updates arrive as merge PRs you review and click-merge.
+
+on:
+  schedule:
+    - cron: "23 9 * * *" # daily
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout english branch
+        uses: actions/checkout@v4
+        with:
+          ref: english
+          fetch-depth: 0
+
+      - name: Configure git + token
+        run: |
+          git config user.name "a2z05"
+          git config user.email "a2z05@users.noreply.github.com"
+          git remote add upstream https://github.com/XxHuberrr/Mineradio.git
+          git fetch upstream main --tags
+
+      - name: Skip if no new upstream commits
+        id: check
+        run: |
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "updated=false" >> $GITHUB_OUTPUT
+            echo "No new upstream commits."
+          else
+            echo "updated=true" >> $GITHUB_OUTPUT
+            echo "Upstream has new commits — opening/updating PR."
+          fi
+
+      - name: Merge upstream into english (opens PR on conflict)
+        if: steps.check.outputs.updated == 'true'
+        id: merge
+        continue-on-error: true
+        run: |
+          git merge upstream/main --no-edit -m "chore(sync): merge upstream $(git rev-parse --short upstream/main)"
+
+      - name: Clean merge or open conflict PR
+        if: steps.check.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.merge.outcome }}" = "success" ]; then
+            git push origin english
+            echo "✓ pushed clean merge of upstream"
+          else
+            BR="sync/upstream-$(date +%Y%m%d)"
+            git checkout -b "$BR"
+            git diff --name-only --diff-filter=U | xargs -r git checkout --theirs 2>/dev/null || true
+            # keep conflicted markers out; commit both sides' state for human resolution in PR
+            git commit -m "wip(sync): upstream conflicts need manual resolution" --no-verify || true
+            gh pr create \
+              --title "⬆️ Upstream update needs review ($(date +%F))" \
+              --body "Automatic PR: upstream XxHuberrr/Mineradio moved. Conflicts present — resolve manually, then merge." \
+              --base english --head "$BR" || true
+            echo "⚠ conflicts — opened PR for manual resolution"
+          fi

@@ -845,7 +845,7 @@ function applyLocalTrackLyricOnDemand(song, token) {
 async function playLocalQueueSong(song, idx, token, firstVisualPlay, opts, resumeAt) {
   opts = opts || {};
   if (!song || !song.localUrl) {
-    showToast('本地文件已失效，请重新导入后继续');
+    showToast('Local file is no longer available; re-import it to continue');
     forcePlaybackControlsInteractive();
     return false;
   }
@@ -910,8 +910,8 @@ async function playLocalQueueSong(song, idx, token, firstVisualPlay, opts, resum
       return false;
     }
     if (!opts.suppressPlayFailureNotice) {
-      if (opts.manual) showToast('播放启动失败，请重新选择本地音乐');
-      else showSourceFallbackNotice('本地音乐已载入', '点击播放器中间的播放按钮继续播放。');
+      if (opts.manual) showToast('Playback failed to start; pick another local song');
+      else showSourceFallbackNotice('Local music loaded', 'Click the Play button in the player to start listening.');
     }
     return false;
   }
@@ -1091,7 +1091,7 @@ async function playQueueAt(idx, opts) {
     safePlaybackStep('show-loading', function () { showLoading({ trackSwitch: true, seamlessCover: true }); });
     if (!qualitySwitch) lyricSunEnergy = 0; lyricSunTarget = 0; lyricSunHold = 0; lyricSunAvg = 0; lyricSunPeak = 0.55;
 
-    // 首次播放: 粒子从暗处浮出 (Apple 风格)
+    // First play: particles drift out of darkness (Apple style)
     if (firstVisualPlay) {
       safePlaybackStep('first-visual-alpha', function () {
         firstPlayDone = true;
@@ -1187,16 +1187,16 @@ async function playQueueAt(idx, opts) {
       var qualityDowngraded = !!(data && data.level && playbackQualityWasDowngraded(requestedQuality, data.level, playbackProvider));
       if (qualityDowngraded) markPlaybackQualityRuntimeCap(song, playbackProvider, data.level, 'resolved-lower');
       if (!opts.startupAutoplay && !isQQPlayback && qualityDowngraded) {
-        showSourceFallbackNotice((isKugouPlayback ? '酷狗' : (isQishuiPlayback ? '汽水' : '网易云')) + '音质自动降级', '请求 ' + playbackQualityLabel(requestedQuality, playbackProvider) + '，实际播放 ' + resolvedQualityText + '。');
+        showSourceFallbackNotice((isKugouPlayback ? 'Kugou' : (isQishuiPlayback ? 'Soda Music' : 'NetEase Cloud Music')) + ' quality auto-downgraded', 'Requested ' + playbackQualityLabel(requestedQuality, playbackProvider) + ', now playing ' + resolvedQualityText + '.');
       } else if (!opts.startupAutoplay && opts.qualitySwitch) {
-        showSourceFallbackNotice('音质已切换', '实际播放: ' + resolvedQualityText + '。');
+        showSourceFallbackNotice('Quality switched', 'Now playing: ' + resolvedQualityText + '.');
       }
       if (data.trial) {
         var txt;
-        if (data.loggedIn && data.vipLevel === 'svip') txt = '此歌曲需要单曲、专辑购买或更高权限';
-        else if (data.loggedIn && data.vipLevel === 'vip') txt = '此歌曲需要 SVIP 或购买 · 当前仅播放试听片段';
-        else if (data.loggedIn) txt = '此歌曲需 VIP · 当前仅播放试听片段';
-        else txt = '当前未登录 · 仅播放试听片段';
+        if (data.loggedIn && data.vipLevel === 'svip') txt = 'This song requires a single, album purchase, or higher tier';
+        else if (data.loggedIn && data.vipLevel === 'vip') txt = 'This song requires SVIP or purchase · Playing preview only';
+        else if (data.loggedIn) txt = 'This song requires VIP · Playing preview only';
+        else txt = 'Not signed in · Playing preview only';
         document.getElementById('trial-text').textContent = txt;
         var trialLoginBtn = document.getElementById('trial-login-btn');
         if (trialLoginBtn) {
@@ -1281,7 +1281,7 @@ async function playQueueAt(idx, opts) {
       if (qualitySwitch) {
         if (typeof markStageLyricsPlaybackResume === 'function') markStageLyricsPlaybackResume('quality-switch-audio-ready');
       } else try {
-        // 重置 beatmap 状态
+        // Reset beatmap state
         currentBeatMap = null;
         beatMapNextIdx = 0;
         resetAudioVisualState({ preserveEnvelope: albumGaplessMixed });
@@ -1290,7 +1290,7 @@ async function playQueueAt(idx, opts) {
         beatMapToken++;
         var bmTok = beatMapToken;
         if (podcastDjMode) {
-          // 播客走独立 DJ 离线锁拍系统, 不写入普通歌曲 beatMap.
+          // Podcasts use a separate offline DJ beat-detection system; not written to the regular song beatMap.
           djBeatMapToken++;
           cancelDjBeatAnalysisTimer();
           resetDjBeatMapState();
@@ -1304,21 +1304,21 @@ async function playQueueAt(idx, opts) {
             syncPodcastDjMapCursor(audio ? audio.currentTime : 0, true);
             hideBeatChip();
             notifyDesktopLyricsBeatMapReady();
-            console.log('podcast DJ beatmap 缓存命中:', currentDjBeatMap.cameraBeats.length, '个主拍');
+            console.log('podcast DJ beatmap cache hit:', currentDjBeatMap.cameraBeats.length, 'main beats');
           } else {
-            showBeatChip('DJ 离线锁拍准备中…');
+            showBeatChip('Preparing DJ beat detection…');
             var djDurationSec = Math.max(0, Number(song.duration) || 0);
             if (djDurationSec > 10000) djDurationSec /= 1000;
             schedulePodcastDjAnalysis(djKey, data.url, djTok, djDurationSec);
           }
           maybeAnnounceDjMode();
         } else if (bmKey && beatMapCache[bmKey]) {
-          // 如果缓存有, 直接用
+          // If cached, use it directly
           currentBeatMap = beatMapCache[bmKey];
           applyCinemaProfileFromBeatMap(currentBeatMap);
           syncBeatMapPlaybackCursor(audio ? audio.currentTime : 0, albumGaplessMixed);
           notifyDesktopLyricsBeatMapReady();
-          console.log('beatmap 缓存命中:', currentBeatMap.kicks.length, '个鼓点');
+          console.log('beatmap cache hit:', currentBeatMap.kicks.length, 'kicks');
           scheduleQueueBeatPrefetch(idx, 2600);
         } else {
           var diskBeatMap = bmKey ? await readBeatDiskCache(bmKey) : null;
@@ -1331,10 +1331,10 @@ async function playQueueAt(idx, opts) {
             applyCinemaProfileFromBeatMap(currentBeatMap);
             syncBeatMapPlaybackCursor(audio ? audio.currentTime : 0, albumGaplessMixed);
             notifyDesktopLyricsBeatMapReady();
-            console.log('beatmap D盘缓存命中:', currentBeatMap.kicks.length, '个鼓点');
+            console.log('beatmap disk cache hit:', currentBeatMap.kicks.length, 'kicks');
             scheduleQueueBeatPrefetch(idx, 2600);
           } else {
-            // 后台延迟分析, 避免新歌刚开始播放时抢占解码和渲染资源
+            // Delay analysis to background so it does not steal decode/render resources when a new song starts
             scheduleBeatAnalysis(bmKey || song.id, proxyAudioUrl, bmTok, song);
           }
         }
@@ -1383,7 +1383,7 @@ async function playQueueAt(idx, opts) {
             return await skipFailedQueueItem(
               idx,
               token,
-              '当前歌曲无法启动播放，正在尝试队列里的下一首。',
+              'This track could not start; trying the next song in the queue.',
               sourceFallbackRecoveryFailureOptions(retryPlaybackOpts)
             );
           }
@@ -1394,9 +1394,9 @@ async function playQueueAt(idx, opts) {
         }
         if (!opts.suppressPlayFailureNotice) {
           if (opts.manual) {
-            showToast('播放启动失败，请重新选择歌曲');
+            showToast('Playback failed to start; pick another song');
           } else {
-            showSourceFallbackNotice('歌曲已载入', '点击播放器中间的播放按钮继续播放。');
+            showSourceFallbackNotice('Song loaded', 'Click the Play button in the player to start listening.');
           }
         }
         return false;
@@ -1408,7 +1408,7 @@ async function playQueueAt(idx, opts) {
       }
       if (!opts.startupAutoplay && !opts.qualitySwitch && data && data.sourceMatch && !song.neteaseSourceMatchNotified && typeof showSourceFallbackNotice === 'function') {
         song.neteaseSourceMatchNotified = true;
-        showSourceFallbackNotice('网易云已匹配可播音源', '已在网易云内切换到同一首歌的可播版本；歌词、封面、专辑和队列仍保持原曲。');
+        showSourceFallbackNotice('NetEase matched a playable source', 'Switched to a playable version of this song on NetEase; lyrics, cover, album, and queue keep the original track.');
       }
       if (albumGaplessHandoff && albumGaplessMixed && typeof rampAudioOutputGain === 'function') {
         rampAudioOutputGain(targetVolume, ALBUM_GAPLESS_ADOPT_SLEW_MS);
@@ -1470,14 +1470,14 @@ async function playQueueAt(idx, opts) {
         return await skipFailedQueueItem(
           idx,
           token,
-          '当前歌曲加载失败，正在尝试队列里的下一首。',
+          'Failed to load this track; trying the next song in the queue.',
           catchRecovery ? sourceFallbackRecoveryFailureOptions(opts) : { playbackOpts: opts }
         );
       }
       if (opts.suppressPlayFailureNotice) return false;
       var failText = playbackFailureToastText(err);
       showToast(failText);
-      if (typeof showSourceFallbackNotice === 'function') showSourceFallbackNotice('播放失败', failText);
+      if (typeof showSourceFallbackNotice === 'function') showSourceFallbackNotice('Playback failed', failText);
       return false;
     }
   } catch (setupErr) {
@@ -1495,14 +1495,14 @@ async function playQueueAt(idx, opts) {
         return await skipFailedQueueItem(
           idx,
           token,
-          '当前歌曲切换失败，正在尝试队列里的下一首。',
+          'Failed to switch to this track; trying the next song in the queue.',
           setupRecovery ? sourceFallbackRecoveryFailureOptions(opts) : { playbackOpts: opts }
         );
     }
     if (opts.suppressPlayFailureNotice) return false;
     var setupFailText = playbackFailureToastText(setupErr);
     showToast(setupFailText);
-    if (typeof showSourceFallbackNotice === 'function') showSourceFallbackNotice('播放失败', setupFailText);
+    if (typeof showSourceFallbackNotice === 'function') showSourceFallbackNotice('Playback failed', setupFailText);
     return false;
   }
 }

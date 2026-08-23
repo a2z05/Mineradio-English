@@ -11,7 +11,7 @@ function songFromListenRecord(record) {
     mid: record.mid || '',
     songmid: record.mid || '',
     mediaMid: record.mediaMid || '',
-    name: record.name || '继续听',
+    name: record.name || 'Keep Listening',
     artist: record.artist || '',
     cover: record.cover || '',
   };
@@ -19,7 +19,7 @@ function songFromListenRecord(record) {
 async function playHomeRecent(record) {
   record = record || homeListenSummary().recent;
   if (!record) {
-    showToast('还没有听歌记录');
+    showToast('No listening history yet');
     return;
   }
   var song = songFromListenRecord(record);
@@ -45,7 +45,7 @@ function openHomeInsight() {
     runHomeSearch(summary.topSong.name);
     return;
   }
-  showToast('播放几首歌后会生成听歌画像');
+  showToast('Play a few songs to build your listening profile');
 }
 function handleHomeTileClick(index) {
   var row = document.getElementById('home-tile-row');

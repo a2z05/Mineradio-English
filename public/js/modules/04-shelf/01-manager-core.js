@@ -6,7 +6,7 @@ function makeShelfManager() {
   var SHELF_VISIBLE_RADIUS = 5;
   var SHELF_MAX_RENDER = SHELF_VISIBLE_RADIUS * 2 + 1;
   var shelfPane = 'mine';       // mine | fav
-  var collectionReveal = 0;     // 滚轮阻尼累积，用于打开/返回收藏歌单
+  var collectionReveal = 0;     // scroll wheel damped accumulation, used to open/return from the favorites pane
   var paneMemory = { mine: 0, fav: 0 };
   var paneSwitchAt = -10;
   var paneSwitchDir = 1;
@@ -23,16 +23,16 @@ function makeShelfManager() {
     return selectedIdx >= 0 && !document.body.classList.contains('cursor-hidden');
   }
 
-  // v7.2 PSP 风格状态
-  var centerIdx = 0;          // 当前居中卡片 index (在 items 数组中的位置)
-  var centerTarget = 0;       // 目标 centerIdx (插值)
-  var centerSmooth = 0;       // 当前实际 centerIdx 平滑值
-  var openCardIdx = -1;       // 已打开内容框的卡片 (-1 表示无)
-  var contentList = null;     // 二级 PSP 滚动列表 manager
+  // v7.2 PSP-style state
+  var centerIdx = 0;          // index of the currently centered card (position in the items array)
+  var centerTarget = 0;       // target centerIdx (interpolated)
+  var centerSmooth = 0;       // smoothed actual centerIdx
+  var openCardIdx = -1;       // card with an open content box (-1 means none)
+  var contentList = null;     // secondary PSP scroll list manager
   var connectorParticles = null;
   var playlistPaneCache = { revision: -1, source: null, mine: [], fav: [] };
 
-  // 一次性返回完整 items 数组 (不只 5 张, 全部参与 PSP 滚动)
+  // Return the full items array in one go (not just 5 — all take part in PSP scrolling)
   function splitPlaylists() {
     if (playlistPaneCache.revision === playlistCatalogRevision && playlistPaneCache.source === userPlaylists) {
       return { mine: playlistPaneCache.mine, fav: playlistPaneCache.fav };
@@ -72,13 +72,13 @@ function makeShelfManager() {
         var sourceLabel = provider === 'qq' ? 'QQ' : (provider === 'kugou' ? 'KG' : (provider === 'qishui' ? 'QS' : (provider === 'spotify' ? 'SP' : 'NE')));
         if (provider === 'spotify' && String(pl.id || '').indexOf('spotify:') !== 0) pl = Object.assign({}, pl, { id: 'spotify:' + pl.id });
         return {
-          type: 'playlist', title: pl.name, sub: sourceLabel + ' · ' + (pl.trackCount || 0) + ' 首 · 播放 ' + compactCount(pl.playCount || 0),
-          cover: pl.cover || '', tag: (pl.shelfPane || pl.shelf_pane) === 'fav' || (!(pl.shelfPane || pl.shelf_pane) && pl.subscribed) ? '收藏歌单' : (provider === 'qishui' ? '汽水歌单' : '我的歌单'), playlistId: (provider === 'qq' ? 'qq:' : (provider === 'kugou' ? 'kugou:' : (provider === 'qishui' ? 'qishui:' : ''))) + pl.id, provider: provider
+          type: 'playlist', title: pl.name, sub: sourceLabel + ' · ' + (pl.trackCount || 0) + ' tracks · Played ' + compactCount(pl.playCount || 0),
+          cover: pl.cover || '', tag: (pl.shelfPane || pl.shelf_pane) === 'fav' || (!(pl.shelfPane || pl.shelf_pane) && pl.subscribed) ? 'Saved playlist' : (provider === 'qishui' ? 'Soda playlist' : 'My playlist'), playlistId: (provider === 'qq' ? 'qq:' : (provider === 'kugou' ? 'kugou:' : (provider === 'qishui' ? 'qishui:' : ''))) + pl.id, provider: provider
         };
       });
       if (shelfShowsPodcasts() && (shelfPane === 'mine' || shelfMergesCollections()) && myPodcastCollections.length) {
         myPodcastCollections.forEach(function (pc) {
-          items.push({ type: 'podcastCollection', title: pc.title, sub: (pc.count || 0) + ' items', cover: pc.cover || '', tag: '我的播客', podcastKey: pc.key, itemType: pc.itemType });
+          items.push({ type: 'podcastCollection', title: pc.title, sub: (pc.count || 0) + ' items', cover: pc.cover || '', tag: 'My podcasts', podcastKey: pc.key, itemType: pc.itemType });
         });
       }
       if (items.length) return items;
@@ -86,8 +86,8 @@ function makeShelfManager() {
     if (playQueue.length) {
       return playQueue.map(function (song, idx) {
         return {
-          type: 'queue', title: song.name, sub: song.artist || '未知歌手',
-          cover: songCoverSrc(song, 360), tag: idx === currentIdx ? '正在播放' : ('#' + (idx + 1)), queueIndex: idx
+          type: 'queue', title: song.name, sub: song.artist || 'Unknown artist',
+          cover: songCoverSrc(song, 360), tag: idx === currentIdx ? 'Now playing' : ('#' + (idx + 1)), queueIndex: idx
         };
       });
     }
@@ -134,10 +134,10 @@ function makeShelfManager() {
     var W = cv.width, H = cv.height;
     ctx.clearRect(0, 0, W, H);
     var pad = 18;
-    var isNow = item.type === 'queue' && item.tag === '正在播放';
+    var isNow = item.type === 'queue' && item.tag === 'Now playing';
     var shelfLook = shelfSettings();
 
-    // 卡片底
+    // Card base
     makeRoundRect(ctx, pad, pad, W - pad * 2, H - pad * 2, 32);
     ctx.fillStyle = 'rgba(0,0,0,' + shelfLook.bgOpacity.toFixed(3) + ')'; ctx.fill();
     var grad = ctx.createLinearGradient(0, 0, W, H);
@@ -165,7 +165,7 @@ function makeShelfManager() {
       ctx.restore();
     }
 
-    // 大封面方块
+    // Large cover block
     var coverSize = H - pad * 2 - 8;
     var cx = pad + 6, cy = pad + 4;
     makeRoundRect(ctx, cx, cy, coverSize, coverSize, 26);
@@ -180,7 +180,7 @@ function makeShelfManager() {
       }
     }
 
-    // 文本区
+    // Text area
     var tx = pad + coverSize + 32;
     ctx.font = '700 17px Inter, Arial';
     ctx.fillStyle = isNow ? shelfAccentRgba(0.92) : 'rgba(255,255,255,0.92)';
@@ -194,7 +194,7 @@ function makeShelfManager() {
     ctx.fillStyle = 'rgba(255,255,255,0.52)';
     wrapText(ctx, item.sub || '', tx, pad + 156, W - tx - pad - 14, 24, 2);
 
-    // 律动进度条
+    // Groove progress bar
     ctx.strokeStyle = isNow ? shelfAccentRgba(0.90) : 'rgba(255,255,255,0.30)';
     ctx.lineWidth = 3.5;
     ctx.beginPath();
@@ -215,7 +215,7 @@ function makeShelfManager() {
         ctx.lineWidth = 1.1; ctx.stroke();
         ctx.font = '800 14px Inter, "Microsoft YaHei", Arial';
         ctx.fillStyle = readableInkForHex(shelfAccentHex());
-        ctx.fillText('▶ 播放歌单', tx + 25, actionY + 24);
+        ctx.fillText('▶ Play playlist', tx + 25, actionY + 24);
 
         makeRoundRect(ctx, tx + 150, actionY, 104, 38, 18);
         ctx.fillStyle = 'rgba(255,255,255,0.055)'; ctx.fill();
@@ -223,11 +223,11 @@ function makeShelfManager() {
         ctx.lineWidth = 1.1; ctx.stroke();
         ctx.font = '700 14px Inter, "Microsoft YaHei", Arial';
         ctx.fillStyle = 'rgba(255,255,255,0.78)';
-        ctx.fillText('详情', tx + 184, actionY + 24);
+        ctx.fillText('Details', tx + 184, actionY + 24);
       } else if (item.type === 'queue') {
         ctx.font = '600 14px Inter, "Microsoft YaHei", Arial';
         ctx.fillStyle = shelfAccentRgba(0.84);
-        ctx.fillText('点击播放', tx, actionY + 25);
+        ctx.fillText('Click to play', tx, actionY + 25);
       }
     }
 
@@ -392,7 +392,7 @@ function makeShelfManager() {
     lastSig = sig(allItems);
     lastCardRedrawAt = -10;
     lastCardPulseBucket = -1;
-    // center 起始 = currentIdx (如果是 queue), 否则 0
+    // center starts at currentIdx (if queue), otherwise 0
     if (allItems.length && allItems[0].type === 'queue' && currentIdx >= 0) {
       centerTarget = Math.min(allItems.length - 1, currentIdx);
       centerSmooth = centerTarget;
@@ -409,13 +409,13 @@ function makeShelfManager() {
   }
 
   // ====================================================
-  //  PSP 弧形布局: 以 centerSmooth 为基准, 卡片绕弧排列
-  //  i 距离 center 越远 → 越靠后, 越小, 越淡
+  //  PSP arc layout: cards are arranged around an arc based on centerSmooth
+  //  the farther i is from center → further back, smaller, more faded
   // ====================================================
   function placeCard(card, i, totalCards, modeIs) {
-    var delta = card.index - centerSmooth;     // 正=下方, 负=上方
+    var delta = card.index - centerSmooth;     // positive = below, negative = above
     var absD = Math.abs(delta);
-    // 隐藏太远的卡 (>4 全隐藏)
+    // Hide cards that are too far away (fully hidden beyond 4)
     if (absD > SHELF_VISIBLE_RADIUS + 0.5) { card.mesh.visible = false; return; }
     card.mesh.visible = true;
     card.mesh.renderOrder = 60 + Math.round((SHELF_VISIBLE_RADIUS + 1 - Math.min(absD, SHELF_VISIBLE_RADIUS + 1)) * 10);
@@ -435,7 +435,7 @@ function makeShelfManager() {
     }
 
     if (modeIs === 'side') {
-      // 右侧 3D 架: 恢复更靠近、更斜切的打开姿态，让卡片有真正的前后层次。
+      // Right 3D shelf: restore the closer, more slanted open pose so cards get real depth layering.
       var detailOpenSide = contentList && contentList.isOpen();
       var nowT = uniforms.uTime.value;
       var hoverBreath = (!shelfPinnedOpen && !detailOpenSide) ? shelfVisibility : 0;
@@ -500,11 +500,11 @@ function makeShelfManager() {
         if (passiveAlways) opacity *= 0.92 + lift * 0.08;
         card.mesh.material.color.setScalar(passiveAlways ? (0.96 + lift * 0.04) : 1);
       }
-      // v8: 自动隐藏 — shelf 不在 focus 区时整体淡化
+      // v8: auto-hide — fade the whole shelf out when not in the focus zone
       card.mesh.material.opacity = Math.min(1, opacity * (shelfVisibility != null ? shelfVisibility : 1) * reveal * (1 - paneEase * 0.24) + pulse * 0.10 * reveal + breathPulse * 0.035) * shelfLook.opacity;
       setCardCenter(card, absD < 0.5);
     } else {
-      // 舞台 PSP: 水平展开 + center 突出, dock 在底部
+      // Stage PSP: horizontal spread + emphasized center, docked at the bottom
       var pxStage = (layout.stageX || 0) + delta * layout.stageXStep;
       var pyStage = layout.stageY;
       var pzStage = absD < 0.5 ? layout.stageZ : (layout.stageZ - Math.min(2.0, absD) * 0.55);
@@ -642,7 +642,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     selectedIdx = Math.round(centerTarget);
     playShelfSelectTick(paneSwitchDir, 'card');
     rebuild();
-    showToast(nextPane === 'fav' ? '收藏歌单' : '我的歌单');
+    showToast(nextPane === 'fav' ? 'Saved playlists' : 'My playlists');
     return true;
   }
 
@@ -744,13 +744,13 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     getMode: function () { return mode; },
     update: function (dt) {
       if (!group) return;
-      // PSP 滚动平滑
+      // PSP scroll smoothing
       centerSmooth += (centerTarget - centerSmooth) * 0.16;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       var px = pointerParallax.x, py = pointerParallax.y;
       var appRevealed = !document.body.classList.contains('splash-active');
       var cueVis = tickShelfHoverCue(dt);
-      // v8: shelf 自动可见度 — 启动页期间不显示；侧栏只在右侧停留时淡入。
+      // v8: shelf auto visibility — hidden during the splash screen; the sidebar only fades in while hovering on the right.
       var targetVis;
       if (!appRevealed) {
         targetVis = 0;
@@ -802,7 +802,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       for (var i = 0; i < cards.length; i++) {
         placeCard(cards[i], i, cards.length, mode);
       }
-      // 内容更新 (节流)
+      // Content update (throttled)
       if (uniforms.uTime.value - lastUpdate > 0.8) {
         lastUpdate = uniforms.uTime.value;
         var nextSig = sig();
@@ -821,7 +821,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
           }
         }
       }
-      // 二级内容框 update
+      // Secondary content box update
       if (contentList) contentList.update(dt);
     },
     onCoverChange: function () {
@@ -853,7 +853,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       return { card: card, point: hits[0].point, uv: hits[0].uv };
     },
     pickCardAtScreen: pickCardAtScreen,
-    // PSP 步进
+    // PSP step
     next: function () { step(1); },
     prev: function () { step(-1); },
     scrollBy: function (d) { step(d); },
@@ -886,14 +886,14 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         togglePlaylistPanel(true);
       }
     },
-    // 二级内容框 open/close
+    // Secondary content box open/close
     openContent: function (cardIdx) {
       var card = cards.find(function (c) { return c.index === cardIdx; });
       if (!card) return;
       var action = card.mesh.userData.action;
       if (!action) return;
       pulseCard(card, 1.0);
-      // queue 类型 → 直接播放, 不需要内容框
+      // queue type → play directly, no content box needed
       if (action.kind === 'playQueue') {
         playQueueAt(action.index);
         return;

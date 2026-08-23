@@ -218,11 +218,11 @@ function syncAccountProviderOrderUi() {
   }
 }
 function platformMeta(provider) {
-  if (provider === 'qq') return { key: 'qq', short: 'QQ', label: 'QQ 音乐', app: 'QQ 音乐 App', dot: 'qq' };
-  if (provider === 'kugou') return { key: 'kugou', short: 'KG', label: '酷狗音乐', app: '酷狗音乐 App', dot: 'kugou' };
-  if (provider === 'qishui') return { key: 'qishui', short: 'QS', label: '汽水音乐', app: '汽水音乐 App', dot: 'qishui' };
+  if (provider === 'qq') return { key: 'qq', short: 'QQ', label: 'QQ Music', app: 'QQ Music app', dot: 'qq' };
+  if (provider === 'kugou') return { key: 'kugou', short: 'KG', label: 'Kugou Music', app: 'Kugou Music app', dot: 'kugou' };
+  if (provider === 'qishui') return { key: 'qishui', short: 'QS', label: 'Soda Music', app: 'Soda Music app', dot: 'qishui' };
   if (provider === 'spotify') return { key: 'spotify', short: 'SP', label: 'Spotify', app: 'Spotify', dot: 'spotify' };
-  return { key: 'netease', short: 'NE', label: '网易云音乐', app: '网易云音乐 App', dot: 'netease' };
+  return { key: 'netease', short: 'NE', label: 'NetEase Cloud Music', app: 'NetEase Cloud Music app', dot: 'netease' };
 }
 function platformStatus(provider) {
   if (provider === 'spotify') return spotifyLoginStatus;
@@ -311,7 +311,7 @@ function providerVipBadge(provider, status, idAttr, includeNormal) {
   var id = idAttr ? ' id="' + idAttr + '"' : '';
   var badgeLevel = pendingQQSync ? 'pending' : (level === 'none' ? 'normal' : level);
   var cls = 'top-account-vip ' + escHtml(provider || 'netease') + ' ' + badgeLevel;
-  var label = pendingQQSync ? '待同步' : (level === 'svip' ? 'SVIP' : (level === 'vip' ? 'VIP' : '普通'));
+  var label = pendingQQSync ? 'Syncing' : (level === 'svip' ? 'SVIP' : (level === 'vip' ? 'VIP' : 'Basic'));
   return '<span' + id + ' class="' + cls + '">' + label + '</span>';
 }
 function providerAccountIdentity(provider, status) {
@@ -345,7 +345,7 @@ function providerAccountIdentity(provider, status) {
     profile.public_name,
     profile.name
   ];
-  var syntheticPrefixes = [meta.label, meta.short, provider, 'QQ 音乐', 'QQ', '酷狗音乐', '酷狗', '汽水音乐', '网易云音乐', '网易云', 'Spotify']
+  var syntheticPrefixes = [meta.label, meta.short, provider, 'QQ音乐', 'QQ音乐App', '酷狗音乐', '酷狗音乐App', '汽水音乐', '汽水音乐App', '网易云音乐', '网易云音乐App', 'Spotify']
     .map(function (value) { return String(value || '').replace(/[\s·:_-]+/g, '').toLowerCase(); })
     .filter(Boolean);
   for (var i = 0; i < candidates.length; i += 1) {
@@ -359,7 +359,7 @@ function providerAccountIdentity(provider, status) {
     if (synthetic) continue;
     return nickname;
   }
-  return String(meta.label || provider || '账号');
+  return String(meta.label || provider || 'Account');
 }
 function renderTopAccountPill(provider, opts) {
   opts = opts || {};
@@ -368,7 +368,7 @@ function renderTopAccountPill(provider, opts) {
   if (!loggedIn && !opts.force) return '';
   var meta = platformMeta(provider);
   st = st || {};
-  var displayName = loggedIn ? ((provider === 'qq' && st.preview) ? '待接入' : providerAccountIdentity(provider, st)) : meta.label;
+  var displayName = loggedIn ? ((provider === 'qq' && st.preview) ? 'Linking' : providerAccountIdentity(provider, st)) : meta.label;
   var vipTag = providerVipBadge(provider, st, '', true);
   return '<span class="top-account-pill ' + (loggedIn ? 'online' : 'offline') + '" data-account-provider="' + escHtml(provider) + '">' +
     '<img src="' + providerAvatarSrc(provider, st) + '" alt="">' +

@@ -15,16 +15,16 @@ var bass = 0, mid = 0, treble = 0, audioEnergy = 0, beatPulse = 0, prevEnergy = 
 var lyricSunEnergy = 0, lyricSunTarget = 0, lyricSunHold = 0, lyricSunAvg = 0, lyricSunPeak = 0.55;
 var smoothBass = 0, smoothMid = 0, smoothTreb = 0, smoothEnergy = 0;
 var bassPeak = 0.12, midPeak = 0.10, treblePeak = 0.08, energyPeak = 0.10;
-var beatOnsetFlag = false;        // beat 上升沿瞬时标志,每帧消费一次
-var lastStrongDrop = 0;           // 用于 burst 预设的强 drop 时刻
+var beatOnsetFlag = false;        // rising-edge beat flag, consumed once per frame
+var lastStrongDrop = 0;           // strong drop timestamp for burst presets
 
 var lyricsLines = [], lyricsTranslationLines = [], lyricsVisible = false, lyricsHasNativeKaraoke = false, lyricsTimingSource = 'none', lyricsTranslationSource = 'none';
 var playlist = [], playQueue = [], currentIdx = -1, playing = false, playToggleBusy = false;
 var searchMode = 'song', podcastResults = [], podcastPrograms = [], podcastCurrentRadio = null;
-var loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '无VIP' };
-var qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ 音乐', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false };
-var kugouLoginStatus = { provider: 'kugou', loggedIn: false, preview: false, nickname: '酷狗音乐', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false };
-var qishuiLoginStatus = { provider: 'qishui', loggedIn: false, configured: false, preview: false, nickname: '汽水音乐', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match' };
+var loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: 'No VIP' };
+var qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false };
+var kugouLoginStatus = { provider: 'kugou', loggedIn: false, preview: false, nickname: 'Kugou Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false };
+var qishuiLoginStatus = { provider: 'qishui', loggedIn: false, configured: false, preview: false, nickname: 'Soda Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match' };
 var qqLoginAutoRefreshTimer = null;
 var qqLoginStatusLastForcedAt = 0;
 var kugouLoginAutoRefreshTimer = null;
@@ -112,29 +112,29 @@ var LOGIN_COOKIE_EXPORT_STORE_KEY = 'mineradio-login-cookie-export-v1';
 var PLAYBACK_QUALITY_DEFAULTS = { netease: 'hires', qq: 'lossless', kugou: 'lossless', qishui: 'standard', spotify: 'standard' };
 var PLAYBACK_QUALITY_OPTIONS = {
   netease: [
-    { key: 'jymaster', title: '超清母带', sub: 'SVIP / 最高规格', svip: true },
-    { key: 'hires', title: '高清臻音', sub: '默认 / 细节优先' },
-    { key: 'lossless', title: '无损 SQ', sub: 'FLAC 优先' },
-    { key: 'exhigh', title: '极高 HQ', sub: '320kbps' },
-    { key: 'standard', title: '标准', sub: '128kbps' }
+    { key: 'jymaster', title: 'Ultra Master', sub: 'SVIP / highest tier', svip: true },
+    { key: 'hires', title: 'Hi-Res', sub: 'default / detail-first' },
+    { key: 'lossless', title: 'Lossless SQ', sub: 'FLAC preferred' },
+    { key: 'exhigh', title: 'Very High HQ', sub: '320kbps' },
+    { key: 'standard', title: 'Standard', sub: '128kbps' }
   ],
   qq: [
-    { key: 'hires', title: 'Hi-Res FLAC', sub: 'QQ 高解析 / 优先尝试' },
-    { key: 'lossless', title: '无损 FLAC', sub: 'QQ SQ / 稳定优先' },
-    { key: 'exhigh', title: '320k MP3', sub: 'QQ 高品质' },
-    { key: 'standard', title: '128k MP3', sub: '兼容优先' }
+    { key: 'hires', title: 'Hi-Res FLAC', sub: 'QQ Hi-Res / try first' },
+    { key: 'lossless', title: 'Lossless FLAC', sub: 'QQ SQ / stable pick' },
+    { key: 'exhigh', title: '320k MP3', sub: 'QQ high quality' },
+    { key: 'standard', title: '128k MP3', sub: 'max compatibility' }
   ],
   kugou: [
-    { key: 'hires', title: 'Hi-Res / 臻品', sub: '酷狗高解析 / 优先尝试' },
-    { key: 'lossless', title: '无损 FLAC', sub: '酷狗 SQ / 稳定优先' },
-    { key: 'exhigh', title: '320k MP3', sub: '酷狗高品质' },
-    { key: 'standard', title: '128k MP3', sub: '兼容优先' }
+    { key: 'hires', title: 'Hi-Res / Premium', sub: 'Kugou Hi-Res / try first' },
+    { key: 'lossless', title: 'Lossless FLAC', sub: 'Kugou SQ / stable pick' },
+    { key: 'exhigh', title: '320k MP3', sub: 'Kugou high quality' },
+    { key: 'standard', title: '128k MP3', sub: 'max compatibility' }
   ],
   qishui: [
-    { key: 'standard', title: '汽水匹配源', sub: 'QS 推荐 / 播放自动换源' }
+    { key: 'standard', title: 'Soda Match Source', sub: 'QS recommend / auto fallback on play' }
   ],
   spotify: [
-    { key: 'standard', title: 'Spotify 匹配源', sub: 'SP 搜索 / 播放自动换源' }
+    { key: 'standard', title: 'Spotify Match Source', sub: 'SP search / auto fallback on play' }
   ]
 };
 var UPLOAD_TIP_STORE_KEY = 'mineradio-upload-tip-seen';
@@ -156,14 +156,14 @@ var LOCAL_BEATMAP_STORE_KEY = 'mineradio-local-beatmaps-v1';
 var LOCAL_BEAT_PREF_STORE_KEY = 'mineradio-local-beatmap-prefs-v1';
 var LOCAL_BEAT_COMBOS = ['', 'downbeat', 'push', 'drop', 'rebound', 'accent'];
 var HOTKEY_ACTIONS = [
-  { key: 'togglePlay', label: '播放 / 暂停', category: '播放', local: 'Space', global: 'Ctrl+Alt+Space' },
-  { key: 'prevTrack', label: '上一首', category: '播放', local: 'ArrowLeft', global: 'Ctrl+Alt+ArrowLeft' },
-  { key: 'nextTrack', label: '下一首', category: '播放', local: 'ArrowRight', global: 'Ctrl+Alt+ArrowRight' },
-  { key: 'volumeUp', label: '音量增加', category: '音量', local: 'ArrowUp', global: 'Ctrl+Alt+ArrowUp' },
-  { key: 'volumeDown', label: '音量降低', category: '音量', local: 'ArrowDown', global: 'Ctrl+Alt+ArrowDown' },
-  { key: 'toggleFullscreen', label: '全屏', category: '窗口', local: 'KeyF', global: 'Ctrl+Alt+KeyF' },
-  { key: 'toggleDesktopInteraction', label: '切换完整桌面模式', category: '窗口', local: '', global: 'Ctrl+Shift+KeyM' },
-  { key: 'toggleDesktopLyrics', label: '桌面歌词', category: '歌词', local: 'Alt+KeyL', global: 'Ctrl+Alt+KeyL' }
+  { key: 'togglePlay', label: 'Play / Pause', category: 'Playback', local: 'Space', global: 'Ctrl+Alt+Space' },
+  { key: 'prevTrack', label: 'Previous Track', category: 'Playback', local: 'ArrowLeft', global: 'Ctrl+Alt+ArrowLeft' },
+  { key: 'nextTrack', label: 'Next Track', category: 'Playback', local: 'ArrowRight', global: 'Ctrl+Alt+ArrowRight' },
+  { key: 'volumeUp', label: 'Volume Up', category: 'Volume', local: 'ArrowUp', global: 'Ctrl+Alt+ArrowUp' },
+  { key: 'volumeDown', label: 'Volume Down', category: 'Volume', local: 'ArrowDown', global: 'Ctrl+Alt+ArrowDown' },
+  { key: 'toggleFullscreen', label: 'Fullscreen', category: 'Window', local: 'KeyF', global: 'Ctrl+Alt+KeyF' },
+  { key: 'toggleDesktopInteraction', label: 'Toggle Full Desktop Mode', category: 'Window', local: '', global: 'Ctrl+Shift+KeyM' },
+  { key: 'toggleDesktopLyrics', label: 'Desktop Lyrics', category: 'Lyrics', local: 'Alt+KeyL', global: 'Ctrl+Alt+KeyL' }
 ];
 var hotkeyCaptureState = null;
 var hotkeyGlobalStatus = {};

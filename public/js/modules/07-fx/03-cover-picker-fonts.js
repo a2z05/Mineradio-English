@@ -44,7 +44,7 @@ function openCoverColorPicker(target) {
   if (!cv) {
     setVisualTintAuto();
     closeCoverColorPicker();
-    showToast('暂无封面，已切换为自动封面取色');
+    showToast('No cover yet — switched to automatic cover color');
     return;
   }
   var imgSrc = '';
@@ -53,7 +53,7 @@ function openCoverColorPicker(target) {
   art.style.backgroundImage = imgSrc ? 'url("' + cssImageUrl(imgSrc) + '")' : '';
   setCoverPickerPreview(fx.visualTintColor || (stageLyrics.coverPalette && stageLyrics.coverPalette.primary) || '#9db8cf');
   renderCoverPickerSwatches();
-  if (hint) hint.textContent = '点击专辑封面任意位置取色，或使用下方推荐色。';
+  if (hint) hint.textContent = 'Click anywhere on the album cover to pick a color, or use the swatches below.';
   pop.classList.add('show');
   placeFxFloatingPanel(pop, document.getElementById('visual-tint-auto-btn') || document.getElementById('visual-tint-picker') || art, { gap: 12, pad: 14 });
 }
@@ -67,7 +67,7 @@ function applyCoverPickerColor(hex) {
   setCoverPickerPreview(hex);
   if (coverColorPickerState.target === 'visualTint') {
     setVisualTintCustom(hex, true);
-    showToast('视觉主色: ' + hex.toUpperCase());
+    showToast('Visual tint: ' + hex.toUpperCase());
   }
   closeCoverColorPicker();
 }
@@ -106,7 +106,7 @@ function pickCoverColorFromArt(e) {
     var data = cv.getContext('2d').getImageData(sx, sy, 1, 1).data;
     applyCoverPickerColor(rgbToHexColor(data[0], data[1], data[2]));
   } catch (err) {
-    showToast('封面取色不可用，已保留自动取色');
+    showToast('Cover color picking unavailable — kept automatic mode');
     setVisualTintAuto();
     closeCoverColorPicker();
   }
@@ -132,7 +132,7 @@ function setLyricFont(key) {
   refreshCurrentLyricStyle();
   saveLyricLayout({ user: true, reason: 'lyricFont' });
   pushDesktopLyricsState(true);
-  showToast('歌词字体已切换');
+  showToast('Lyric font changed');
 }
 function renderCustomLyricFontButtons() {
   var grid = document.getElementById('lyric-font-grid');
@@ -146,9 +146,9 @@ function renderCustomLyricFontButtons() {
     btn.type = 'button';
     btn.dataset.font = key;
     btn.dataset.customFont = '1';
-    btn.title = font.name + ' / 点右侧小叉删除';
+    btn.title = font.name + ' / click the small × to remove';
     btn.style.fontFamily = lyricFontStackForKey(key);
-    btn.innerHTML = '<span>' + escHtml(font.name) + '</span><span class="font-remove" title="删除字体" onclick="removeCustomLyricFont(event,\'' + font.id + '\')">×</span>';
+    btn.innerHTML = '<span>' + escHtml(font.name) + '</span><span class="font-remove" title="Remove font" onclick="removeCustomLyricFont(event,\'' + font.id + '\')">×</span>';
     btn.onclick = function () { setLyricFont(key); };
     if (uploadBtn) grid.insertBefore(btn, uploadBtn);
     else grid.appendChild(btn);
@@ -175,11 +175,11 @@ async function handleLyricFontFiles(files) {
   files = Array.from(files || []);
   var file = files.find(isSupportedLyricFontFile);
   if (!file) {
-    showToast('没有找到可用字体文件');
+    showToast('No supported font file found');
     return;
   }
   if (file.size > CUSTOM_LYRIC_FONT_MAX_BYTES) {
-    showToast('字体文件太大，建议小于 3.6MB');
+    showToast('Font file is too large — keep it under 3.6MB');
     return;
   }
   try {
@@ -194,12 +194,12 @@ async function handleLyricFontFiles(files) {
       savedAt: Date.now()
     });
     if (!record) {
-      showToast('字体文件读取失败');
+      showToast('Failed to read font file');
       return;
     }
     var loaded = await registerCustomLyricFont(record);
     if (!loaded) {
-      showToast('字体加载失败，请换一个字体文件');
+      showToast('Font failed to load — try another file');
       return;
     }
     customLyricFonts = [record].concat((customLyricFonts || []).filter(function (item) {
@@ -208,10 +208,10 @@ async function handleLyricFontFiles(files) {
     var saved = saveCustomLyricFonts();
     updateLyricFontControls();
     setLyricFont(customLyricFontKey(record.id));
-    showToast(saved ? '歌词字体已上传' : '字体已临时加载，文件过大无法保存');
+    showToast(saved ? 'Lyric font uploaded' : 'Font loaded for this session — too large to save');
   } catch (e) {
     console.warn('[LyricFont] upload failed', e);
-    showToast('字体上传失败');
+    showToast('Font upload failed');
   }
 }
 function removeCustomLyricFont(event, id) {

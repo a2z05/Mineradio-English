@@ -67,7 +67,7 @@ function openHomePlayerConsole() {
   forcePlaybackControlsInteractive();
   updateControlsChromeState();
   if (controlsAutoHide) scheduleControlsHide(1800);
-  showToast('播放器控制台已展开');
+  showToast('Player controls expanded');
 }
 function ensureHomeWallpaperParticles(opts) {
   opts = opts || {};
@@ -207,7 +207,7 @@ async function playHomeDaily() {
     await loadHomeDiscover(true);
   }
   if (!homeDiscoverState.songs.length) {
-    runHomeSearch('每日推荐');
+    runHomeSearch('Daily Mix');
     return;
   }
   playQueue = homeDiscoverState.songs.map(cloneSong);
@@ -240,7 +240,7 @@ async function playHomePrivateRadio() {
   }
   var item = homeDiscoverState.playlists[0];
   if (item && item.id) {
-    await loadPlaylistIntoQueueById(item.id, true, item.name || '私人雷达');
+    await loadPlaylistIntoQueueById(item.id, true, item.name || 'Private Radar');
     return;
   }
   openHomeLibrary();
@@ -311,7 +311,7 @@ function openHomeLibrary() {
 function goHome() {
   if (homeForcedOpen || emptyHomeActive) {
     dismissHomePage({ toast: true });
-    showToast('已关闭 Home');
+    showToast('Home closed');
     return;
   }
   homeSuppressed = false;
@@ -326,7 +326,7 @@ function goHome() {
   if (typeof setFocusZone === 'function') setFocusZone(null, true);
   if (orbit && orbit.focus) orbit.focus.active = false;
   updateEmptyHomeVisibility({ forceLoad: true });
-  showToast('已回到 Home');
+  showToast('Back to Home');
 }
 function dismissHomePage(opts) {
   opts = opts || {};

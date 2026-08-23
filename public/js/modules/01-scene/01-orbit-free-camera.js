@@ -10,7 +10,7 @@ var orbit = {
   recentering: false,
   recenterStartedAt: 0,
   centerLocked: false,
-  // v8: 镜头跟拍 (hover shelf / queue 时)
+  // v8: focus tracking (while hovering shelf / queue)
   lookAt: new THREE.Vector3(0, 0, 0),
   focus: {
     active: false,
@@ -417,7 +417,7 @@ function resetFreeCameraToDefault() {
   if (freeCamera.velocity) freeCamera.velocity.set(0, 0, 0);
   releaseFreeCameraPointerLock();
   updateFreeCameraHint();
-  showToast('自由镜头正在平滑回正');
+  showToast('Free camera smoothly recentering');
 }
 function toggleFreeCamera() {
   if (!freeCamera) freeCamera = defaultFreeCameraState();
@@ -429,7 +429,7 @@ function toggleFreeCamera() {
     releaseFreeCameraPointerLock();
     saveFreeCameraState();
     updateFreeCameraHint();
-    showToast('自由镜头已固定');
+    showToast('Free camera locked');
     return;
   }
   captureFreeCameraFromCurrent();
@@ -445,7 +445,7 @@ function toggleFreeCamera() {
   saveFreeCameraState();
   updateFreeCameraHint();
   requestFreeCameraPointerLock('toggle');
-  showToast('自由镜头: WASD 移动 · 鼠标转向 · K 回正');
+  showToast('Free camera: WASD to move · mouse to look · K to recenter');
 }
 function updateFreeCamera(dt) {
   if (!freeCamera) return;
@@ -469,7 +469,7 @@ function updateFreeCamera(dt) {
       freeCamera.locked = false;
       saveFreeCameraState();
       updateFreeCameraHint();
-      showToast('自由镜头已回正');
+      showToast('Free camera recentered');
     }
     return;
   }

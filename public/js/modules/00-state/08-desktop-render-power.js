@@ -472,4 +472,4 @@ function installRenderPowerHooks() {
 }
 
 // ============================================================
-//  Three.js 场景
+//  Three.js scene

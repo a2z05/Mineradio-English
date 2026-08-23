@@ -1,7 +1,7 @@
 // ============================================================
 function makeContentListManager() {
   var group = null;
-  var rows = [];           // 每行一张卡 (歌曲)
+  var rows = [];           // one card (song) per row
   var panel = null;
   var allTracks = [];
   var renderedStart = -1;
@@ -112,15 +112,15 @@ function makeContentListManager() {
     ctx.stroke();
     ctx.font = '800 38px Inter, "Microsoft YaHei", Arial';
     ctx.fillStyle = 'rgba(255,246,220,0.94)';
-    ctx.fillText(ellipsize(ctx, playlistTitle || '歌单详情', W - 310), 72, 92);
+    ctx.fillText(ellipsize(ctx, playlistTitle || 'Playlist details', W - 310), 72, 92);
     ctx.font = '500 18px Inter, "Microsoft YaHei", Arial';
     ctx.fillStyle = canvasAccent(0.62);
     var playableCount = allTracks.filter(function (song) { return song && song.id && song.type !== 'podcast-radio'; }).length;
     var contentCount = allTracks.filter(function (song) { return song && song.id; }).length;
     var isLoading = allTracks.length === 1 && isLoadingLabel(allTracks[0] && allTracks[0].name);
     var countLabel = contentKind === 'podcast'
-      ? (contentCount ? (contentCount + ' 项播客内容') : (isLoading ? '正在载入' : '暂无播客内容'))
-      : (playableCount ? (playableCount + ' 首歌曲') : (isLoading ? '正在载入' : '暂无可播放歌曲'));
+      ? (contentCount ? (contentCount + ' podcast items') : (isLoading ? 'Loading' : 'No podcast content'))
+      : (playableCount ? (playableCount + ' songs') : (isLoading ? 'Loading' : 'Nothing to play yet'));
     if (contentKind !== 'podcast' && contentTotalCount && contentTotalCount > playableCount) {
       countLabel = playableCount + '/' + contentTotalCount + (contentLoadingMore ? ' loading' : ' loaded');
     }
@@ -167,7 +167,7 @@ function makeContentListManager() {
   }
 
   function isLoadingLabel(text) {
-    return /加载中|正在载入/.test(String(text || ''));
+    return /^loading/i.test(String(text || ''));
   }
 
   function isLoadingContent() {
@@ -289,7 +289,7 @@ function makeContentListManager() {
       return added > 0;
     } catch (e) {
       console.warn('[ShelfContentLoadMore]', reason || '', e);
-      if (open && token === requestToken) showToast('歌单后续加载失败');
+      if (open && token === requestToken) showToast('Failed to load more of this playlist');
       return false;
     } finally {
       if (open && token === requestToken) {
@@ -374,7 +374,7 @@ function makeContentListManager() {
         }
       }
     }
-    // 标题
+    // Title
     var textX = (actionReady || hasSongCover) ? 154 : 82;
     var btnW = 104, btnH = 48, btnX = W - 144, btnY = H / 2 - btnH / 2;
     var miniBtn = 44, likeX = btnX - 156, collectX = btnX - 104, nextX = btnX - 52;
@@ -383,7 +383,7 @@ function makeContentListManager() {
     if (loadingRow) {
       ctx.font = '700 22px Inter, "Microsoft YaHei", Arial';
       ctx.fillStyle = 'rgba(255,247,224,0.88)';
-      ctx.fillText('正在载入歌单', textX, 42);
+      ctx.fillText('Loading playlist', textX, 42);
       var phase = ((uniforms.uTime.value || 0) * 0.85) % 1;
       for (var sk = 0; sk < 3; sk++) {
         var barY = 58 + sk * 13;
@@ -406,7 +406,7 @@ function makeContentListManager() {
     ctx.font = '500 15px Inter, "Microsoft YaHei", Arial';
     ctx.fillStyle = isCenter ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.64)';
     ctx.fillText(ellipsize(ctx, song.artist || '', textMax), textX, 72);
-    // center 行右侧显示红心/收藏/播放按钮
+    // Right side of the center row shows heart/save/play buttons
     if (isCenter && actionReady) {
       if (!isPodcastRadio) {
         var liked = isSongLiked(song);
@@ -480,7 +480,7 @@ function makeContentListManager() {
       ctx.stroke();
       ctx.font = '700 15px Inter, Arial';
       ctx.fillStyle = readableInkForHex(shelfAccentHex());
-      ctx.fillText('播放', btnX + 36, btnY + 29);
+      ctx.fillText('Play', btnX + 36, btnY + 29);
     }
     row.texture.needsUpdate = true;
   }
@@ -689,10 +689,10 @@ function makeContentListManager() {
       }
       try {
         drawPanelIfNeeded(true);
-        // 清旧
+        // Clear old rows
         disposeRows();
-        // loading 行
-        allTracks = [{ name: '加载中…', artist: '' }];
+        // loading row
+        allTracks = [{ name: 'Loading…', artist: '' }];
         panelDirty = true;
         rowsDirty = true;
         syncRenderedRows(true);
@@ -709,7 +709,7 @@ function makeContentListManager() {
         provider: qqPlaylistId ? 'qq' : (kugouPlaylistId ? 'kugou' : (qishuiPlaylistId ? 'qishui' : (spotifyPlaylistId ? 'spotify' : 'netease'))),
         id: qqPlaylistId || kugouPlaylistId || qishuiPlaylistId || spotifyPlaylistId || playlistId
       };
-      // 拉取歌单/播客集合
+      // Fetch playlist / podcast collection
       var r = null;
       try {
         r = podcastCollectionKey
@@ -727,7 +727,7 @@ function makeContentListManager() {
         if (!open || token !== requestToken) return;
         console.warn('[ShelfContentLoadApi]', playlistId, e);
         try {
-          allTracks = [{ name: '歌单加载失败', artist: '' }];
+          allTracks = [{ name: 'Failed to load playlist', artist: '' }];
           panelDirty = true;
           rowsDirty = true;
           startRowsLoadedIntro();
@@ -735,16 +735,16 @@ function makeContentListManager() {
         } catch (renderErrorErr) {
           console.warn('[ShelfContentErrorRender]', playlistId, renderErrorErr);
         }
-        showToast('歌单加载失败');
+        showToast('Failed to load playlist');
         return;
       }
       if (!open || token !== requestToken) return;
       try {
-        // 清 loading
+        // Clear the loading row
         disposeRows();
         var tracks = podcastCollectionKey ? (r.items || []) : (r.tracks || []);
         if (!tracks.length) {
-          allTracks = [{ name: podcastCollectionKey ? '播客为空' : '歌单为空', artist: '' }];
+          allTracks = [{ name: podcastCollectionKey ? 'Podcast is empty' : 'Playlist is empty', artist: '' }];
           panelDirty = true;
           rowsDirty = true;
           startRowsLoadedIntro();
@@ -766,7 +766,7 @@ function makeContentListManager() {
         scheduleContentWarmPrefetch(token);
       } catch (renderReadyErr) {
         console.warn('[ShelfContentReadyRender]', playlistId, renderReadyErr);
-        showToast('歌单已载入，3D列表刷新失败');
+        showToast('Playlist loaded, but 3D list refresh failed');
       }
     },
     close: function () {
@@ -1025,7 +1025,7 @@ function makeContentListManager() {
       return null;
     },
     playRow: function (row) {
-      // 把整个歌单导入队列, 从这首开始播
+      // Import the whole playlist into the queue, starting from this song
       pulseObjectValue(row, 'fxPulse', 1.0, 0.34);
       var idx = row.index;
       if (idx < 0) return;
@@ -1052,7 +1052,7 @@ function makeContentListManager() {
         hasMore: contentHasMore,
         preserveHomeState: true
       }).catch(function (e) { console.warn('[ContentPlayRow]', e); });
-      // 关闭内容框
+      // Close the content box
       var sm = shelfManager;
       if (sm) safeShelfCloseContent('content-play-row');
     }

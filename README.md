@@ -1,110 +1,70 @@
-# Mineradio
+# Mineradio English
 
-![Mineradio 暗场启动页](./docs/assets/readme/cinema-beat-smoke.png)
+An English-language community fork of [Mineradio](https://github.com/XxHuberrr/Mineradio) — an immersive Windows music player built around cinematic camera work, particle visuals, a lyrics stage, and a 3D playlist shelf.
 
-Mineradio 是一款 Windows 桌面沉浸式音乐播放器，把搜索播放、歌词舞台、粒子视觉、3D 歌单架和完整桌面模式组合成一个更接近现场感的私人音乐空间。
+> **Maintained by [a2z05](https://github.com/a2z05).** Original Mineradio and all its core features by **[XxHuberrr](https://github.com/XxHuberrr)**. Spotify/lyrics feature design adapted from [QingYaoSheep/Mineradio-for-Spotify](https://github.com/QingYaoSheep/Mineradio-for-Spotify).
 
-## 立即下载 Windows 安装包
+## What this fork changes
 
-> 安装包可从夸克盘、百度云、蓝奏云或 GitHub Release 手动下载；软件内更新入口仍只打开网盘线路，不读取 Release 附件。
+- **Full English interface** — every screen translated: player, settings, login flows, dialogs, installer.
+- **Spotify integration** — sign in with your own Spotify account via secure PKCE OAuth (no client secret stored), search, playlists, likes, and playback metadata alongside NetEase / QQ / Kugou / Soda Music.
+- **Apple-Music-style lyrics** — word-by-word synced lyrics (AMLL/TTML), romanization for Japanese/Korean tracks, decoded QQ QRC karaoke lyrics, and an aggressive lyric cache so songs load instantly on repeat.
+- **Phone remote & music sync** — control PC playback from any phone browser on the same Wi-Fi (auto-detected LAN address + QR pairing, PWA-installable, live progress via SSE):
+  - transport control, seek, volume, queue management, search-and-enqueue from your phone;
+  - a phone UI that mirrors the PC app's dark glass design;
+  - **two-way music transfer**: upload songs or whole folders from your phone to the PC's library inbox, browse the PC library on your phone, and download individual tracks or entire folders as ZIP back to your phone.
 
-| 下载入口 | 推荐人群 | 链接 |
-| --- | --- | --- |
-| 夸克盘 | 夸克用户 | [下载 Mineradio 2.1.0](https://pan.quark.cn/s/df00d9520835) |
-| 百度云 | 百度网盘用户（提取码 `SJHP`） | [下载 Mineradio 2.1.0](https://pan.baidu.com/s/1UAAyvXHNJjxVXAHIPtl4Ow?pwd=SJHP) |
-| 蓝奏云 | 直接下载 | [下载 Mineradio 2.1.0](https://xxhuber.lanzout.com/s/Mineradio) |
-| GitHub Release | GitHub 用户、版本说明与源码 | [下载 Mineradio 2.1.0](https://github.com/XxHuberrr/Mineradio/releases/tag/v2.1.0) |
 
-安装时只需要下载并运行 `Mineradio-2.1.0-Setup.exe`。不要把 `.blockmap`、`latest.yml` 或 `win-unpacked` 当成正式安装包。
+## Staying up to date with upstream
 
-## 下载或安装被拦截怎么办
+Upstream moves fast. This fork is structured so its changes are never lost:
 
-小众 Electron 桌面软件、未签名安装包有时会被浏览器、Windows Defender 或 SmartScreen 提示风险。请先确认安装包来自上面的网盘入口或官方 GitHub Release，文件名是 `Mineradio-2.1.0-Setup.exe`。
+```
+main      <- pristine mirror of XxHuberrr/Mineradio (never commit here)
+english   <- all fork work lives here; upstream merges land here
+```
 
-1. 浏览器下载栏提示风险时，打开下载列表，点这条下载右侧的 `...` 三个点，选择 `保留` / `仍要保留` / `显示更多` 后继续保留。
-2. Windows SmartScreen 弹出蓝色拦截窗口时，点 `更多信息`，再点 `仍要运行`。
-3. 如果杀毒软件明确显示木马、高危或已经隔离，不要强行运行；删除该文件后重新从上面的网盘入口下载，仍然异常请带截图反馈给作者。
+To pull in upstream updates manually:
 
-## 作者支持
+```bash
+bash scripts/sync-upstream.sh
+```
 
-如果 Mineradio 陪你多听了一首歌，也欢迎请作者一杯咖啡。
+A GitHub Action (`upstream-watch.yml`) also checks daily and opens a PR when upstream publishes new commits — review and merge like any PR.
 
-[查看完整支持页](./docs/SUPPORT.md)
-
-![Mineradio 作者支持渠道](./docs/assets/support/mineradio-author-support-poster.png)
-
-Mineradio 2.1 进一步优化了壁纸与全屏体验，并提升了登录、账号、本地曲库和长时间运行的稳定性。
-
-## 当前版本
-
-当前版本：`2.1.0`
-
-状态：Mineradio 2.1.0 正式版。
-
-> 安全提示：`v1.0.10` 及更早旧安装包不再建议继续安装或传播。请使用本页提供的 `Mineradio-2.1.0-Setup.exe`。
-
-## 核心特性
-
-- 首页包含每日推荐、平台推荐、继续听、听歌画像和我的歌单入口
-- 完整桌面模式保留播放器、主页、歌单和桌面交互
-- 支持本地 MP4 与 Wallpaper Engine 视觉内容
-- 播放后切换到 Emily / 默认播放态视觉，歌词舞台与粒子舞台同步工作
-- 基于节奏的电影镜头视觉系统
-- 面向长播客和 DJ 曲目的专属视觉模式
-- 歌词舞台、自定义歌词、歌词位置与视觉控制
-- 自定义专辑封面上传与裁剪
-- 右键唤起 3D 歌单架，支持歌单队列浏览
-- 网易云音乐账号、搜索、歌单、播客等体验接入
-- QQ 音乐搜索、登录态与音源补充接入
-- GitHub Releases 更新检测与下载入口
-- 首次启动内置「默认测试」视觉用户存档，软件内默认视觉参数与该存档一致
-
-## 使用说明
-
-Windows 用户可以从本页列出的夸克盘、百度云、蓝奏云或 GitHub Release 下载安装包。
-
-正式分发以 `Mineradio-2.1.0-Setup.exe` 为准，不建议直接使用 `win-unpacked` 目录。安装包会创建桌面快捷方式。
-
-已经安装过旧版本的用户可直接运行 `Mineradio-2.1.0-Setup.exe` 完成更新。软件内更新入口只会打开浏览器下载页，不会在客户端内下载或应用补丁。
-
-## 开发运行
+## Development
 
 ```bash
 npm install
-npm start
-npm run build:win
+npm start            # run the desktop app
+npm run build:win    # build the NSIS installer into dist/
 ```
 
-桌面版入口由 Electron 主进程加载本地服务。`npm run build:win` 会生成 Windows NSIS 安装包，产物位于 `dist/`。
+### Phone remote
 
-## 更新机制
+1. Start the app on your PC.
+2. Click the **phone icon** in the titlebar (or open Settings → Phone Remote).
+3. Scan the QR code with your phone camera — the paired remote opens in your browser automatically.
+4. Install it as an app from your phone's browser menu ("Add to Home Screen").
 
-Mineradio 会请求 GitHub Releases latest 检测新版本。远端版本高于本地版本时，应用内更新入口会展示 Release 内容，并通过系统浏览器打开可选网盘线路；即使 Release 附带完整安装包，`2.0.3+` 客户端也不会读取、下载、缓存或应用该附件与补丁。
+Both devices must be on the same network. If it doesn't connect, allow Node/Electron through Windows Firewall for private networks.
 
-本地验证更新链路时，可以通过 `MINERADIO_UPDATE_MANIFEST` 指向一个本地 manifest JSON 或 HTTP 地址来模拟线上 Release。
+**Moving music:** open the **Transfer** tab on your phone to upload songs or entire folders to the PC (they land in `data/music-inbox/`), and the **Library** tab to browse and download the PC's music — single tracks or whole folders zipped on the fly.
 
-## 第三方音乐平台说明
+### Spotify setup
 
-Mineradio 不是网易云音乐、QQ 音乐或腾讯音乐娱乐集团的官方客户端，也不隶属于任何音乐平台。
+Spotify login uses OAuth PKCE — you need a free Spotify developer app:
 
-项目中的第三方平台接入仅用于个人学习、本地客户端体验和用户自有账号的播放辅助。请遵守对应平台的用户协议、版权规则和会员权益规则。项目不会提供绕过付费、绕过会员、破解音质或重新分发音乐内容的能力。
+1. Create an app at https://developer.spotify.com/dashboard
+2. Add redirect URI: `http://127.0.0.1:3000/api/spotify/callback`
+3. Copy the **Client ID** into Mineradio → Spotify login panel and click Connect.
 
-## 用户数据与隐私
+## Credits
 
-登录 Cookie、搜索历史、自定义封面、自定义歌词、节奏分析缓存等数据只应保存在本机用户数据目录或浏览器本地存储中，不应提交到仓库。
+- **English edition maintained by [a2z05](https://github.com/a2z05)**
+- Upstream project and all original features: **[XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)** — thank you for the amazing player
+- Spotify/AMLL feature design adapted from **[QingYaoSheep/Mineradio-for-Spotify](https://github.com/QingYaoSheep/Mineradio-for-Spotify)**
 
-更多说明见 [PRIVACY.md](./PRIVACY.md)。
+## License
 
-## 致谢
-
-Mineradio 由 XxHuberrr 主要设计与打造。emily 作为早期视觉底层想法与 `emily` 视觉预设改进方向的共创者和灵感来源之一，特此感谢。
-
-同时感谢小天才e宝、应春日、锋将军、軌跡、林中、骊、风痕、花椰菜🥦在早期体验、测试反馈和发布准备中的帮助。
-
-## 版权与授权
-
-Copyright (C) 2026 XxHuberrr.
-
-本项目采用 GPL-3.0 授权。详见 [LICENSE](./LICENSE)。
-
-MR Logo、Mineradio 名称、界面视觉设计与原创视觉表达归作者所有；第三方依赖和第三方服务分别遵循其各自授权与服务条款。
+Follows upstream licensing (see LICENSE / NOTICE.md).

@@ -4,17 +4,17 @@ async function analyzeAudioBeats(audioUrl, durationSec, token, options) {
   var softGrooveAnalysis = !!(analysisProfile && analysisProfile.softGroove);
   try {
     beatMapBusy = true;
-    if (options.prefetch) showBeatChip('预热下一首节奏…');
-    else if (options.background) showBeatChip('后台缓冲节奏…');
+    if (options.prefetch) showBeatChip('Warming up next beat…');
+    else if (options.background) showBeatChip('Buffering beats in background…');
     await yieldToIdle(beatAnalysisYieldMs(options, 140, 760));
     if (token !== beatMapToken) { hideBeatChip(); beatMapBusy = false; return null; }
-    showBeatChip('正在分析节奏…');
+    showBeatChip('Analyzing beats…');
     var resp = await fetch(audioUrl);
     if (token !== beatMapToken) { hideBeatChip(); return null; }
     var ab = await resp.arrayBuffer();
     if (token !== beatMapToken) { hideBeatChip(); return null; }
 
-    // 用临时 AudioContext 解码 (我们不能复用 audioCtx 因为它可能 closed)
+    // Decode with a temporary AudioContext (cannot reuse audioCtx as it may be closed)
     var TmpCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!TmpCtx) { hideBeatChip(); return null; }
     var DecodeCtx = window.AudioContext || window.webkitAudioContext;
@@ -30,7 +30,7 @@ async function analyzeAudioBeats(audioUrl, durationSec, token, options) {
     var musicTempoGridStep = 0;
     var musicTempoTask = options.skipMusicTempo ? Promise.resolve(null) : analyzeMusicTempoInWorker(buffer, token);
 
-    // 用 OfflineAudioContext 分离低频重鼓 / 中频鼓身 / 高频敲击感.
+    // Use OfflineAudioContext to separate deep low-frequency kicks / mid-frequency drum body / high-frequency transients.
     var sr = buffer.sampleRate;
     async function renderBand(hpFreq, lpFreq) {
       var off = new TmpCtx(1, buffer.length, sr);
@@ -73,7 +73,7 @@ async function analyzeAudioBeats(audioUrl, durationSec, token, options) {
     var vocalPcm = bands[2];
     var snapPcm = bands[3];
 
-    // 帧化能量 (10ms 窗口)
+    // Frame energy (10ms window)
     var winSize = Math.floor(sr * 0.010);
     async function makeFrameEnergy(pcm) {
       var frames = Math.floor(pcm.length / winSize);
@@ -122,7 +122,7 @@ async function analyzeAudioBeats(audioUrl, durationSec, token, options) {
     var vocalRef = Math.max(0.0008, percentile(vocalEnergy, 0.86));
     var snapRef = Math.max(0.0008, percentile(snapEnergy, 0.86));
 
-    // 计算 onset (能量正向差分), 然后取峰
+    // Compute onsets (positive energy difference), then pick peaks
     function makeOnset(arr) {
       var out = new Float32Array(nFrames);
       for (var oi = 1; oi < nFrames; oi++) {
@@ -426,11 +426,11 @@ async function analyzeAudioBeats(audioUrl, durationSec, token, options) {
       return selected.length >= 4 ? selected : events.filter(function (b) { return b && b.camera !== false; });
     }
 
-    // 自适应阈值: 滑动均值 + 标准差, 输出带强度的 beat 事件.
-    var winN = 50;  // 0.5 秒
+    // Adaptive threshold: sliding mean + standard deviation, outputs beat events with intensity.
+    var winN = 50;  // 0.5 seconds
     var candidates = [];
     var lastKickFrame = -winN;
-    var minIntervalFrames = 12;  // 120ms, 粒子可响应较密集的低频瞬态.
+    var minIntervalFrames = 12;  // 120ms, lets particles respond to denser low-frequency transients.
     for (var f = winN; f < nFrames - 5; f++) {
       var sum = 0, sqSum = 0;
       for (var k = f - winN; k < f; k++) { sum += onset[k]; sqSum += onset[k] * onset[k]; }
@@ -748,7 +748,7 @@ async function analyzeAudioBeats(audioUrl, durationSec, token, options) {
     await yieldToPaint();
     if (token !== beatMapToken) { hideBeatChip(); return null; }
     if (options.prefetch) hideBeatChip();
-    else showBeatChip('节奏缓冲中…');
+    else showBeatChip('Buffering beats…');
     return { kicks: kicks, beats: beats, pulseBeats: pulseBeats, cameraBeats: cameraBeats, gridStep: gridStep, tempoSource: musicTempoBeats.length >= 4 ? 'music-tempo' : 'local', analysisProfile: analysisProfile.id || 'default', duration: buffer.duration, visualBeatCount: visualBeatCount, analyzedAt: Date.now() };
   } catch (e) {
     console.warn('beat analysis failed:', e);

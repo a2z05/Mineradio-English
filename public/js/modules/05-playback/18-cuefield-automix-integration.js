@@ -36,16 +36,16 @@ function cuefieldAutoMixNextIndex(index) {
 
 function cuefieldAutoMixStatusText(status) {
   return {
-    disabled: '已关闭',
-    waiting: '等待播放',
-    preparing: '正在分析下一首',
-    'waiting-beatmap': '正在准备节拍图',
-    'missing-audio': '下一首暂不可用',
-    fallback: '本组歌曲暂不适合混音',
-    ready: '过渡已准备',
-    handoff: '正在自动过渡',
-    error: '准备失败'
-  }[status] || status || '待命';
+    disabled: 'Off',
+    waiting: 'Waiting to play',
+    preparing: 'Analyzing next track',
+    'waiting-beatmap': 'Preparing beat map',
+    'missing-audio': 'Next track unavailable',
+    fallback: 'This set is not mixable yet',
+    ready: 'Transition ready',
+    handoff: 'Auto-transitioning',
+    error: 'Preparation failed'
+  }[status] || status || 'Standby';
 }
 
 function updateCuefieldAutoMixUi(status) {
@@ -57,8 +57,8 @@ function updateCuefieldAutoMixUi(status) {
   button.classList.toggle('cuefield-automix-ready', !!cuefieldAutoMixEnabled && ready);
   button.setAttribute('aria-pressed', cuefieldAutoMixEnabled ? 'true' : 'false');
   button.title = cuefieldAutoMixEnabled
-    ? ('Cuefield AutoMix · ' + (ready ? '过渡已准备' : cuefieldAutoMixStatusText(status || (snapshot && snapshot.lastStatus))))
-    : 'Cuefield AutoMix（实验功能，默认关闭）';
+    ? ('Cuefield AutoMix · ' + (ready ? 'Transition ready' : cuefieldAutoMixStatusText(status || (snapshot && snapshot.lastStatus))))
+    : 'Cuefield AutoMix (experimental, off by default)';
 }
 
 function cuefieldAutoMixAudioDescriptor(song) {
@@ -290,7 +290,7 @@ function toggleCuefieldAutoMix() {
   if (runtime) runtime.setEnabled(cuefieldAutoMixEnabled);
   if (!cuefieldAutoMixEnabled) resetCuefieldAutoMix('disabled');
   updateCuefieldAutoMixUi(cuefieldAutoMixEnabled ? 'waiting' : 'disabled');
-  showToast(cuefieldAutoMixEnabled ? 'Cuefield AutoMix 已开启：只在当前队列自动过渡' : 'Cuefield AutoMix 已关闭');
+  showToast(cuefieldAutoMixEnabled ? 'Cuefield AutoMix on: transitions within the current queue only' : 'Cuefield AutoMix off');
   if (cuefieldAutoMixEnabled) scheduleCuefieldAutoMixPrepare(trackSwitchToken, currentIdx, 720);
 }
 
@@ -342,7 +342,7 @@ async function runCuefieldAutoMixPrepare(token, currentIndex, nextIndex, attempt
   updateCuefieldAutoMixUi(result && result.status);
   if (result && result.status === 'ready' && result.pending) {
     prepareCuefieldPendingAudio(result.pending);
-    showToast('Cuefield 已准备下一首过渡');
+    showToast('Cuefield prepared the next transition');
     return;
   }
   if (result && (result.status === 'waiting-beatmap' || result.status === 'missing-audio' || result.status === 'busy') && attempt < 3) {
@@ -618,7 +618,7 @@ function showCuefieldFeedback(context) {
   cuefieldFeedbackState.submitted = false;
   var root = document.getElementById('cuefield-feedback');
   var meta = document.getElementById('cuefield-feedback-meta');
-  if (meta) meta.textContent = (context.pair.fromTitle || '当前歌曲') + ' → ' + (context.pair.toTitle || '下一首');
+  if (meta) meta.textContent = (context.pair.fromTitle || 'Current track') + ' → ' + (context.pair.toTitle || 'Next track');
   if (root) root.classList.add('show');
   if (cuefieldFeedbackState.timer) clearTimeout(cuefieldFeedbackState.timer);
   cuefieldFeedbackState.timer = setTimeout(function () { if (root) root.classList.remove('show'); }, 30000);
@@ -635,10 +635,10 @@ function submitCuefieldFeedback(rating) {
   }).then(function () {
     var root = document.getElementById('cuefield-feedback');
     if (root) root.classList.remove('show');
-    showToast('Cuefield 评分已保存');
+    showToast('Cuefield rating saved');
   }).catch(function () {
     cuefieldFeedbackState.submitted = false;
-    showToast('Cuefield 评分保存失败');
+    showToast('Failed to save Cuefield rating');
   });
 }
 
@@ -732,7 +732,7 @@ async function executeCuefieldAutoMix(pending) {
     if (cuefieldActiveTransitionContext === transitionContext) cuefieldActiveTransitionContext = null;
     updateCuefieldAutoMixUi('error');
     recoverCuefieldAutoMixEndedOutgoing(pending, transitionContext, 'error');
-    showToast('Cuefield AutoMix：下一首预载失败');
+    showToast('Cuefield AutoMix: failed to preload the next track');
     return;
   }
   var feedback = cuefieldFeedbackContext(pending);

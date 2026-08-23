@@ -138,7 +138,7 @@ function renderSearchHistory() {
   }
   $results.innerHTML =
     '<div class="search-history">' +
-    '<div class="search-history-head"><span>搜索历史</span><button class="search-history-clear" type="button" data-clear-history="1">清空</button></div>' +
+    '<div class="search-history-head"><span>Search History</span><button class="search-history-clear" type="button" data-clear-history="1">Clear</button></div>' +
     '<div class="search-history-list">' +
     items.map(function (q) { return '<button class="search-history-chip" type="button" data-history-query="' + escHtml(q) + '">' + escHtml(q) + '</button>'; }).join('') +
     '</div>' +
@@ -198,11 +198,11 @@ function updateSearchModeTabs() {
   }
   if ($input) {
     $input.placeholder = searchMode === 'podcast'
-      ? '搜索播客、电台...'
-      : (searchMode === 'kugou' ? '搜索酷狗音乐...' : (searchMode === 'qq' ? '搜索 QQ 音乐...' : (searchMode === 'netease' ? '搜索网易云音乐...' : '搜索歌曲、歌手...')));
+      ? 'Search podcasts, radio...'
+      : (searchMode === 'kugou' ? 'Search Kugou Music...' : (searchMode === 'qq' ? 'Search QQ Music...' : (searchMode === 'netease' ? 'Search NetEase Cloud Music...' : 'Search songs, artists...')));
   }
-  if ($input && searchMode === 'qishui') $input.placeholder = '搜索汽水音乐匹配源...';
-  if ($input && searchMode === 'spotify') $input.placeholder = '搜索 Spotify 匹配源...';
+  if ($input && searchMode === 'qishui') $input.placeholder = 'Search Soda Music match source...';
+  if ($input && searchMode === 'spotify') $input.placeholder = 'Search Spotify match source...';
   requestAnimationFrame(updateSearchPillGlassDisplacementMap);
 }
 function setSearchMode(mode) {
@@ -344,7 +344,7 @@ function renderPodcastPrograms() {
         '<div class="search-result-meta">' + escHtml(programMetaText(p)) + '</div>' +
         '</div>' +
         '</div>' +
-        '<button class="add-btn" title="下一首播放" onclick="event.stopPropagation();queuePodcastProgram(' + i + ')">+</button>' +
+        '<button class="add-btn" title="Play next" onclick="event.stopPropagation();queuePodcastProgram(' + i + ')">+</button>' +
         '</div>';
     }).join('');
   $results.classList.add('show');
@@ -353,7 +353,7 @@ function renderPodcastPrograms() {
 function queuePodcastProgram(i) {
   var item = podcastPrograms[i]; if (!item) return;
   queueSongNext(item);
-  showToast('已设为下一首: ' + item.name);
+  showToast('Set as next up: ' + item.name);
 }
 function playPodcastProgram(i) {
   var item = podcastPrograms[i]; if (!item) return;
@@ -373,7 +373,7 @@ $input.addEventListener('input', function () {
   }
   if (isMusicSearchMode(searchMode)) {
     setSearchHistorySurface(false);
-    $results.innerHTML = '<div class="search-empty">正在搜索 “' + escHtml(q) + '”…</div>';
+    $results.innerHTML = '<div class="search-empty">Searching for "' + escHtml(q) + '"…</div>';
     $results.classList.add('show');
   }
   searchTimer = setTimeout(function () { doSearch(q); }, 180);
@@ -455,17 +455,17 @@ function songSourceTagHtml(song, opts) {
   var key = /^(netease|qq|kugou|qishui|spotify)$/.test(String(rawKey || '')) ? String(rawKey) : songProviderKey(song);
   var label = key === 'qq' ? 'QQ' : (key === 'kugou' ? 'KG' : (key === 'qishui' ? 'QS' : (key === 'spotify' ? 'SP' : 'NE')));
   if (opts.switcher) {
-    return '<button type="button" class="tag-source ' + key + ' control-source-chip" title="切换音源" aria-haspopup="true" onclick="toggleControlSourceSwitcher(event)">' + label + '</button>';
+    return '<button type="button" class="tag-source ' + key + ' control-source-chip" title="Switch source" aria-haspopup="true" onclick="toggleControlSourceSwitcher(event)">' + label + '</button>';
   }
   return '<span class="tag-source ' + key + '">' + label + '</span>';
 }
 var controlSourceSwitcherState = { open: false, loading: false, requestId: 0, anchor: null };
 function controlSourceProviders() {
   return [
-    { key: 'netease', label: 'NE', title: '网易云' },
-    { key: 'qq', label: 'QQ', title: 'QQ音乐' },
-    { key: 'kugou', label: 'KG', title: '酷狗' },
-    { key: 'qishui', label: 'QS', title: '汽水' },
+    { key: 'netease', label: 'NE', title: 'NetEase Cloud Music' },
+    { key: 'qq', label: 'QQ', title: 'QQ Music' },
+    { key: 'kugou', label: 'KG', title: 'Kugou' },
+    { key: 'qishui', label: 'QS', title: 'Soda Music' },
     { key: 'spotify', label: 'SP', title: 'Spotify' }
   ];
 }
@@ -532,7 +532,7 @@ function renderControlSourceSwitcher(matches) {
   matches = matches || {};
   el.classList.toggle('loading', !!controlSourceSwitcherState.loading);
   el.innerHTML =
-    '<div class="control-source-switcher-head"><span>切换音源</span><small>' + (controlSourceSwitcherState.loading ? '正在匹配' : '保留当前进度') + '</small></div>' +
+    '<div class="control-source-switcher-head"><span>Switch Source</span><small>' + (controlSourceSwitcherState.loading ? 'Matching' : 'Keeps current position') + '</small></div>' +
     '<div class="control-source-options">' +
     controlSourceProviders().map(function (provider) {
       var entry = matches[provider.key];
@@ -541,9 +541,9 @@ function renderControlSourceSwitcher(matches) {
       var active = provider.key === current;
       var ready = active || !!match;
       var providerLimited = !!(match && provider.key === 'spotify' && match.playable === false);
-      var cleanStatus = active ? '当前' : (providerLimited ? '匹配源' : (match ? '可切换' : (controlSourceSwitcherState.loading ? '检测中' : controlSourceIssueLabel(issue))));
-      var title = active ? '当前音源' : (providerLimited ? (provider.title + ': 播放将自动换源') : (match ? ('切换到 ' + provider.title) : (provider.title + ': ' + controlSourceIssueLabel(issue))));
-      var status = active ? '当前' : (providerLimited ? '匹配源' : (match ? '可切换' : (controlSourceSwitcherState.loading ? '检测中' : '无匹配')));
+      var cleanStatus = active ? 'Current' : (providerLimited ? 'Match-only' : (match ? 'Switchable' : (controlSourceSwitcherState.loading ? 'Checking' : controlSourceIssueLabel(issue))));
+      var title = active ? 'Current source' : (providerLimited ? (provider.title + ': playback will switch source automatically') : (match ? ('Switch to ' + provider.title) : (provider.title + ': ' + controlSourceIssueLabel(issue))));
+      var status = active ? 'Current' : (providerLimited ? 'Match-only' : (match ? 'Switchable' : (controlSourceSwitcherState.loading ? 'Checking' : 'No match')));
       return '<button type="button" class="control-source-option' + (active ? ' active' : '') + (!ready ? ' disabled' : '') + '" data-source-provider="' + provider.key + '" title="' + escHtml(title) + '" ' + (!ready ? 'disabled ' : '') + 'onclick="switchCurrentSongSource(\'' + provider.key + '\')">' +
         '<span class="tag-source ' + provider.key + '">' + provider.label + '</span>' +
         '<span class="control-source-option-title">' + provider.title + '</span>' +
@@ -610,7 +610,7 @@ function toggleControlSourceSwitcher(e) {
   }
   var song = currentControlSong();
   if (!song || song.type === 'local' || song.source === 'local' || song.localUrl || song.type === 'podcast') {
-    showToast('当前歌曲不支持切换音源');
+    showToast('This track does not support switching sources');
     return;
   }
   var anchor = e && e.currentTarget ? e.currentTarget : null;
@@ -654,8 +654,8 @@ async function switchCurrentSongSource(provider) {
     }
     if (requestId !== controlSourceSwitcherState.requestId) return;
     if (!match) {
-      showSourceFallbackNotice('未找到可切换音源', controlSourceProviderTitle(provider) + ' 暂时没有匹配到同名同歌手版本。');
-      showSourceFallbackNotice('该平台无正版音源', controlSourceProviderTitle(provider) + ': ' + controlSourceIssueLabel(issue));
+      showSourceFallbackNotice('No switchable source found', controlSourceProviderTitle(provider) + ' has no matching version by the same artist right now.');
+      showSourceFallbackNotice('No licensed source on this platform', controlSourceProviderTitle(provider) + ': ' + controlSourceIssueLabel(issue));
       controlSourceSwitcherState.loading = false;
       renderControlSourceSwitcher(controlSourceSwitcherState.matches || {});
       return;
@@ -666,7 +666,7 @@ async function switchCurrentSongSource(provider) {
     closeControlSourceSwitcher();
     safeRenderQueuePanel('manual-source-switch', { scrollCurrent: miniQueueOpen });
     updateControlTrackInfo(playQueue[currentIdx]);
-    showSourceFallbackNotice('正在切换音源', (song.name || '当前歌曲') + ' -> ' + controlSourceProviderTitle(provider));
+    showSourceFallbackNotice('Switching source', (song.name || 'This track') + ' -> ' + controlSourceProviderTitle(provider));
     await playQueueAt(currentIdx, {
       manual: true,
       resumeAt: currentResumeSeconds(0),
@@ -680,7 +680,7 @@ async function switchCurrentSongSource(provider) {
       safeRenderQueuePanel('manual-source-switch-restore', { scrollCurrent: miniQueueOpen });
       updateControlTrackInfo(playQueue[currentIdx]);
     }
-    showSourceFallbackNotice('音源切换失败', '已保留当前播放队列，请稍后再试。');
+    showSourceFallbackNotice('Source switch failed', 'Your queue is unchanged; please try again later.');
   } finally {
     controlSourceSwitcherState.loading = false;
     forcePlaybackControlsInteractive();
@@ -723,10 +723,10 @@ function searchResultMetaText(song) {
   var bits = [];
   if (song.artist) bits.push(song.artist);
   if (song.album) bits.push(song.album);
-  if (songProviderKey(song) === 'qq' && !song.playable) bits.push('QQ 播放需会话/授权');
-  if (songProviderKey(song) === 'kugou' && !song.playable) bits.push('酷狗播放需会话/授权');
-  if (songProviderKey(song) === 'qishui' && !song.playable) bits.push('汽水匹配源，播放会自动换源');
-  if (songProviderKey(song) === 'spotify' && !song.playable) bits.push('Spotify 匹配源，播放会自动换源');
+  if (songProviderKey(song) === 'qq' && !song.playable) bits.push('QQ playback requires session/authorization');
+  if (songProviderKey(song) === 'kugou' && !song.playable) bits.push('Kugou playback requires session/authorization');
+  if (songProviderKey(song) === 'qishui' && !song.playable) bits.push('Soda match source; playback will switch automatically');
+  if (songProviderKey(song) === 'spotify' && !song.playable) bits.push('Spotify match source; playback will switch automatically');
   return bits.join('  ·  ') || songSourceLabel(song);
 }
 function searchResultMetaHtml(song, index) {
@@ -734,10 +734,10 @@ function searchResultMetaHtml(song, index) {
   var artist = String(song.artist || '').trim();
   var bits = [];
   if (song.album) bits.push(song.album);
-  if (songProviderKey(song) === 'qq' && !song.playable) bits.push('QQ 播放需会话/授权');
-  if (songProviderKey(song) === 'kugou' && !song.playable) bits.push('酷狗播放需会话/授权');
-  if (songProviderKey(song) === 'qishui' && !song.playable) bits.push('汽水匹配源，播放会自动换源');
-  if (songProviderKey(song) === 'spotify' && !song.playable) bits.push('Spotify 匹配源，播放会自动换源');
+  if (songProviderKey(song) === 'qq' && !song.playable) bits.push('QQ playback requires session/authorization');
+  if (songProviderKey(song) === 'kugou' && !song.playable) bits.push('Kugou playback requires session/authorization');
+  if (songProviderKey(song) === 'qishui' && !song.playable) bits.push('Soda match source; playback will switch automatically');
+  if (songProviderKey(song) === 'spotify' && !song.playable) bits.push('Spotify match source; playback will switch automatically');
   var tail = bits.length ? (' · ' + escHtml(bits.join('  ·  '))) : '';
   if (!artist) return escHtml(searchResultMetaText(song));
   return '<button class="search-artist-link" type="button" onclick="event.stopPropagation();openSearchResultArtist(' + index + ')">' + escHtml(artist) + '</button>' + tail;
@@ -785,9 +785,9 @@ function searchProviderLoginNotice(mode) {
   var specific = searchModeProvider(mode);
   if (specific) {
     var meta = typeof platformMeta === 'function' ? platformMeta(specific) : { label: specific };
-    return (meta.label || specific) + ' 搜索能力暂未就绪，请先完成该平台连接';
+    return (meta.label || specific) + ' search is not ready yet; connect the platform first';
   }
-  return '当前没有可用的音乐目录搜索源';
+  return 'No music catalog search source available';
 }
 function searchProviderUrl(provider, q, limit, offset) {
   var suffix = '&limit=' + limit + '&offset=' + Math.max(0, Number(offset) || 0);
@@ -921,12 +921,12 @@ function sourceCandidateRejectReason(source, candidate, provider) {
   return '';
 }
 function controlSourceIssueLabel(issue) {
-  if (issue === 'blocked_artist' || issue === 'derivative') return '翻唱禁用';
-  if (issue === 'artist_mismatch' || issue === 'artist_extra') return '非原唱版本';
-  return '无正版音源';
+  if (issue === 'blocked_artist' || issue === 'derivative') return 'Covers blocked';
+  if (issue === 'artist_mismatch' || issue === 'artist_extra') return 'Not the original';
+  return 'No licensed source';
 }
 var SEARCH_ORIGINAL_ARTIST_HINTS = [
-  { titles: ['日落大道'], artists: ['梁博'] },
+  { titles: ['日落大道'], artists: ['梁博'] }, // Sunset Boulevard by Liang Bo
   { titles: ['beautyandabeat', 'beauty and a beat'], artists: ['justin bieber', 'nicki minaj'] }
 ];
 function canonicalOriginalArtistsForSearch(q, song) {

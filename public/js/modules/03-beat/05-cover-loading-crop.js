@@ -3,7 +3,7 @@ var albumBackgroundClearTimer = 0;
 var albumBackgroundCurrentSrc = '';
 
 function showAIDepthChip(text) {
-  document.getElementById('ai-depth-text').textContent = text || 'AI 深度估计…';
+  document.getElementById('ai-depth-text').textContent = text || 'AI depth estimation…';
   document.getElementById('ai-depth-chip').classList.add('show');
 }
 function hideAIDepthChip() {
@@ -350,7 +350,7 @@ function commitCoverCrop() {
 }
 
 // ============================================================
-//  3D 歌单架 — 双模式 (off / side / stage)
-//   - side:   现版本精修, 右侧 5 张卡微角度堆叠
-//   - stage:  弧形排列, 居中, 有倒影, 当前卡片"呼吸+光环"
-//             卡片间粒子穿梭, 切歌时飞出动画
+//  3D playlist shelf — dual modes (off / side / stage)
+//   - side:   refined in the current version, 5 cards stacked at slight angles on the right
+//   - stage:  arc layout, centered, with reflections, current card "breathes + glows",
+//             particles travel between cards, fly-out animation on track change

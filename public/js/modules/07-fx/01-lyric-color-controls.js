@@ -1,7 +1,7 @@
 function buildLyricColorControls() {
   var grid = document.getElementById('lyric-color-grid');
   if (!grid) return;
-  var html = '<button class="lyric-swatch auto" type="button" data-auto="1" onclick="setLyricColorAuto()" title="封面取色">AUTO</button>';
+  var html = '<button class="lyric-swatch auto" type="button" data-auto="1" onclick="setLyricColorAuto()" title="Auto color from cover">AUTO</button>';
   html += lyricColorPresets.map(function (p, i) {
     return '<button class="lyric-swatch" type="button" data-color="' + p.color + '" onclick="setLyricColorPreset(' + i + ')" title="' + escHtml(p.name) + '" style="--swatch:' + p.color + '"></button>';
   }).join('');
@@ -23,7 +23,7 @@ function updateLyricColorControls() {
     ? color
     : lyricPaletteColorToHex(pal.primary || pal.secondary || color, '#a9b8c8', 0.38);
   if (picker) picker.value = tone;
-  if (value) value.textContent = fx.lyricColorMode === 'custom' ? color.toUpperCase() : '封面取色';
+  if (value) value.textContent = fx.lyricColorMode === 'custom' ? color.toUpperCase() : 'From cover';
   if (autoBtn) autoBtn.classList.toggle('active', fx.lyricColorMode !== 'custom');
   document.querySelectorAll('.lyric-swatch').forEach(function (btn) {
     var isAuto = btn.dataset.auto === '1';
@@ -41,7 +41,7 @@ function updateLyricHighlightControls() {
     ? color
     : lyricPaletteColorToHex(pal.highlight || pal.primary || color, '#fff0b8', 0.48);
   if (picker) picker.value = tone;
-  if (value) value.textContent = fx.lyricHighlightMode === 'custom' ? color.toUpperCase() : '跟随歌词';
+  if (value) value.textContent = fx.lyricHighlightMode === 'custom' ? color.toUpperCase() : 'Follow lyrics';
   if (autoBtn) autoBtn.classList.toggle('active', fx.lyricHighlightMode !== 'custom');
 }
 function lyricPaletteColorToHex(value, fallback, minLum) {
@@ -77,24 +77,24 @@ function updateLyricGlowControls() {
   }
   if (picker) picker.style.setProperty('--lyric-glow-color', tone);
   if (value) {
-    value.textContent = linked ? '跟随高亮' : color.toUpperCase();
+    value.textContent = linked ? 'Follow highlight' : color.toUpperCase();
     value.style.setProperty('--lyric-glow-color', tone);
   }
   if (linkBtn) {
     linkBtn.classList.toggle('active', linked);
     linkBtn.style.setProperty('--lyric-glow-color', tone);
-    linkBtn.textContent = linked ? '链接' : '独立';
-    linkBtn.title = linked ? '点击后单独设置溢光颜色' : '点击后让溢光跟随高亮';
+    linkBtn.textContent = linked ? 'Linked' : 'Custom';
+    linkBtn.title = linked ? 'Click to set the glow color separately' : 'Click to make the glow follow the highlight';
   }
   [glowEnableBtn, glowBeatBtn].forEach(function (btn) {
     if (btn) btn.style.setProperty('--lyric-glow-color', tone);
   });
   if (glowEnableBtn) {
     glowEnableBtn.classList.toggle('active', !!fx.lyricGlow);
-    glowEnableBtn.title = fx.lyricGlow ? '关闭歌词背后的溢光层' : '开启歌词背后的溢光层';
+    glowEnableBtn.title = fx.lyricGlow ? 'Turn off the glow layer behind lyrics' : 'Turn on the glow layer behind lyrics';
   }
   if (glowBeatBtn) {
     glowBeatBtn.classList.toggle('active', !!fx.lyricGlowBeat);
-    glowBeatBtn.title = fx.lyricGlowBeat ? '后层溢光正在跟随鼓点' : '让后层溢光跟随鼓点';
+    glowBeatBtn.title = fx.lyricGlowBeat ? 'Background glow is following the beat' : 'Make the background glow follow the beat';
   }
 }

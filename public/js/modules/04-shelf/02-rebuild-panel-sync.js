@@ -76,4 +76,4 @@ document.addEventListener('mouseout', function (e) {
 });
 
 // ============================================================
-//  二级内容框 (歌单内的歌曲列表) — 同样 PSP 风格滚动
+//  Secondary content box (song list inside a playlist) — also PSP-style scrolling

@@ -16,7 +16,7 @@ function setHomeAccentColor(color, silent) {
   fx.homeAccentColor = normalizeHexColor(color || '#00f5d4');
   updateHomeAccentControls();
   saveLyricLayout({ user: true, reason: 'homeAccentColor' });
-  if (!silent) showToast('Home 填充: ' + fx.homeAccentColor.toUpperCase());
+  if (!silent) showToast('Home fill: ' + fx.homeAccentColor.toUpperCase());
 }
 function resetHomeAccentColor() {
   setHomeAccentColor(fxDefaults.homeAccentColor || '#00f5d4');
@@ -49,7 +49,7 @@ function setHomeIconColor(color, silent) {
   fx.homeIconColor = normalizeHexColor(color || fxDefaults.homeIconColor || '#f4d28a', '#f4d28a');
   updateIconAccentControls();
   saveLyricLayout({ user: true, reason: 'homeIconColor' });
-  if (!silent) showToast('主页图标: ' + fx.homeIconColor.toUpperCase());
+  if (!silent) showToast('Home icon: ' + fx.homeIconColor.toUpperCase());
 }
 function resetHomeIconColor() {
   setHomeIconColor(fxDefaults.homeIconColor || '#f4d28a');
@@ -58,7 +58,7 @@ function setVisualIconColor(color, silent) {
   fx.visualIconColor = normalizeHexColor(color || fxDefaults.visualIconColor || '#7fd8ff', '#7fd8ff');
   updateIconAccentControls();
   saveLyricLayout({ user: true, reason: 'visualIconColor' });
-  if (!silent) showToast('视觉图标: ' + fx.visualIconColor.toUpperCase());
+  if (!silent) showToast('Visual icon: ' + fx.visualIconColor.toUpperCase());
 }
 function resetVisualIconColor() {
   setVisualIconColor(fxDefaults.visualIconColor || '#7fd8ff');
@@ -262,7 +262,7 @@ function setCustomBackgroundColor(color, silent, customFlag) {
   fx.backgroundColorCustom = customFlag !== false;
   updateCustomBackgroundControls();
   saveLyricLayout({ user: true, reason: 'backgroundColor' });
-  if (!silent) showToast('背景颜色: ' + fx.backgroundColor.toUpperCase());
+  if (!silent) showToast('Background color: ' + fx.backgroundColor.toUpperCase());
 }
 function setCustomBackgroundCoverMode(silent) {
   fx.backgroundColorMode = 'cover';
@@ -270,7 +270,7 @@ function setCustomBackgroundCoverMode(silent) {
   fx.backgroundColor = normalizeHexColor(fx.backgroundColor || fxDefaults.backgroundColor || '#000000', '#000000');
   updateCustomBackgroundControls();
   saveLyricLayout({ user: true, reason: 'backgroundColorCover' });
-  if (!silent) showToast('\u80cc\u666f\u989c\u8272: \u5c01\u9762\u6e10\u53d8');
+  if (!silent) showToast('Background color: cover gradient');
 }
 function resetCustomBackgroundColor() {
   setCustomBackgroundCoverMode(false);
@@ -281,19 +281,19 @@ function setCustomBackgroundOpacity(value, silent) {
   fx.backgroundColorCustom = true;
   updateCustomBackgroundControls();
   saveLyricLayout({ user: true, reason: 'backgroundOpacity' });
-  if (!silent) showToast('背景透明度: ' + Math.round(fx.backgroundOpacity * 100) + '%');
+  if (!silent) showToast('Background opacity: ' + Math.round(fx.backgroundOpacity * 100) + '%');
 }
 function setWindowBackgroundOpacity(value, silent) {
   fx.windowBackgroundOpacity = clampRange(Number(value), 0, 1);
   updateCustomBackgroundControls();
   saveLyricLayout({ user: true, reason: 'windowBackgroundOpacity' });
-  if (!silent) showToast('\u7a97\u53e3\u80cc\u666f\u900f\u660e: ' + Math.round(fx.windowBackgroundOpacity * 100) + '%');
+  if (!silent) showToast('Window background opacity: ' + Math.round(fx.windowBackgroundOpacity * 100) + '%');
 }
 function setBackgroundGlassOpacity(value, silent) {
   fx.backgroundGlassOpacity = clampRange(Number(value), 0, 1);
   updateCustomBackgroundControls();
   saveLyricLayout({ user: true, reason: 'backgroundGlassOpacity' });
-  if (!silent) showToast('\u6bdb\u73bb\u7483\u900f\u660e: ' + Math.round(fx.backgroundGlassOpacity * 100) + '%');
+  if (!silent) showToast('Frosted glass opacity: ' + Math.round(fx.backgroundGlassOpacity * 100) + '%');
 }
 function setCustomBackgroundAlbumCover(enabled, silent) {
   fx.backgroundAlbumCover = enabled === true;
@@ -303,7 +303,7 @@ function setCustomBackgroundAlbumCover(enabled, silent) {
   }
   updateCustomBackgroundControls();
   saveLyricLayout({ user: true, reason: 'backgroundAlbumCover' });
-  if (!silent) showToast(fx.backgroundAlbumCover ? '\u80cc\u666f\u5a92\u4f53: \u5c01\u9762\u539f\u56fe' : '\u80cc\u666f\u5a92\u4f53: \u5df2\u5173\u95ed\u5c01\u9762');
+  if (!silent) showToast(fx.backgroundAlbumCover ? 'Background media: full cover' : 'Background media: cover off');
 }
 function toggleCustomBackgroundAlbumCover() {
   setCustomBackgroundAlbumCover(!(typeof customBackgroundUsesAlbumCover === 'function' && customBackgroundUsesAlbumCover()));
@@ -320,7 +320,7 @@ function setCustomBackgroundCrop(key, value, silent) {
   fx[key] = isFinite(next) ? next : meta[2];
   updateCustomBackgroundControls();
   saveLyricLayout({ user: true, reason: 'backgroundMediaCrop' });
-  if (!silent) showToast('\u80cc\u666f\u88c1\u5207\u5df2\u66f4\u65b0');
+  if (!silent) showToast('Background crop updated');
 }
 function resetCustomBackgroundCrop() {
   fx.backgroundMediaCropX = fxDefaults.backgroundMediaCropX == null ? 50 : fxDefaults.backgroundMediaCropX;
@@ -328,7 +328,7 @@ function resetCustomBackgroundCrop() {
   fx.backgroundMediaZoom = fxDefaults.backgroundMediaZoom == null ? 1 : fxDefaults.backgroundMediaZoom;
   updateCustomBackgroundControls();
   saveLyricLayout({ user: true, reason: 'backgroundMediaCrop' });
-  showToast('\u80cc\u666f\u88c1\u5207\u5df2\u590d\u4f4d');
+  showToast('Background crop reset');
 }
 function customBackgroundCropSnapshot() {
   return {
@@ -530,7 +530,7 @@ function setCustomBackgroundImage(src, silent) {
   fx.backgroundAlbumCover = false;
   updateCustomBackgroundControls();
   saveLyricLayout({ user: true, reason: 'backgroundImage' });
-  if (!silent) showToast(fx.backgroundImage ? '背景图片已应用' : '背景图片已清除');
+  if (!silent) showToast(fx.backgroundImage ? 'Background image applied' : 'Background image cleared');
 }
 function clearCustomBackgroundImage() {
   setCustomBackgroundImage('');
@@ -546,11 +546,11 @@ function setCustomBackgroundMedia(media, silent) {
   fx.backgroundAlbumCover = false;
   updateCustomBackgroundControls();
   saveLyricLayout({ user: true, reason: 'backgroundMedia' });
-  if (!silent) showToast(media ? (media.type === 'video' ? '背景视频已应用' : '背景图片已应用') : '背景媒体已清除');
+  if (!silent) showToast(media ? (media.type === 'video' ? 'Background video applied' : 'Background image applied') : 'Background media cleared');
 }
 function readBackgroundImageFile(file) {
   if (!file || !/^image\//i.test(file.type || '')) {
-    showToast('请选择图片文件');
+    showToast('Please choose an image file');
     return;
   }
   var reader = new FileReader();
@@ -575,15 +575,15 @@ function readBackgroundImageFile(file) {
       setCustomBackgroundImage(out);
       openCustomBackgroundCropModalSoon();
     };
-    img.onerror = function () { showToast('背景图片读取失败'); };
+    img.onerror = function () { showToast('Failed to read background image'); };
     img.src = e.target.result;
   };
-  reader.onerror = function () { showToast('背景图片读取失败'); };
+  reader.onerror = function () { showToast('Failed to read background image'); };
   reader.readAsDataURL(file);
 }
 function readBackgroundVideoFile(file) {
   if (!file || !/^video\//i.test(file.type || '')) {
-    showToast('请选择视频文件');
+    showToast('Please choose a video file');
     return;
   }
   var id = 'bg-video-' + Date.now() + '-' + Math.random().toString(16).slice(2);
@@ -593,7 +593,7 @@ function readBackgroundVideoFile(file) {
   }).catch(function (err) {
     console.warn('background video store failed:', err);
     if ((file.size || 0) > 18 * 1024 * 1024) {
-      showToast('视频较大，当前环境无法保存，请换小一点的视频');
+      showToast('Video is too large to save here — try a smaller one');
       return;
     }
     var reader = new FileReader();
@@ -601,7 +601,7 @@ function readBackgroundVideoFile(file) {
       setCustomBackgroundMedia({ type: 'video', src: String(e.target.result || ''), name: file.name || '', mime: file.type || '', size: file.size || 0 });
       openCustomBackgroundCropModalSoon();
     };
-    reader.onerror = function () { showToast('背景视频读取失败'); };
+    reader.onerror = function () { showToast('Failed to read background video'); };
     reader.readAsDataURL(file);
   });
 }
@@ -609,7 +609,7 @@ function readBackgroundMediaFile(file) {
   if (!file) return;
   if (/^image\//i.test(file.type || '')) readBackgroundImageFile(file);
   else if (/^video\//i.test(file.type || '')) readBackgroundVideoFile(file);
-  else showToast('请选择图片或视频文件');
+  else showToast('Please choose an image or video file');
 }
 function defaultUiAccentColor() {
   return normalizeHexColor(fxDefaults.uiAccentColor || '#ffffff', '#ffffff');
@@ -640,7 +640,7 @@ function setUiAccentColor(color, silent) {
   updateUiAccentControls();
   if (shelfManager && shelfManager.refreshTheme) shelfManager.refreshTheme();
   saveLyricLayout({ user: true, reason: 'uiAccentColor' });
-  if (!silent) showToast('界面高亮: ' + fx.uiAccentColor.toUpperCase());
+  if (!silent) showToast('UI accent: ' + fx.uiAccentColor.toUpperCase());
 }
 function resetUiAccentColor() {
   setUiAccentColor(defaultUiAccentColor());
@@ -652,7 +652,7 @@ function updateVisualTintControls() {
   var color = normalizeHexColor(fx.visualTintColor || '#9db8cf');
   document.documentElement.style.setProperty('--visual-tint', color);
   if (picker) picker.value = color;
-  if (value) value.textContent = fx.visualTintMode === 'custom' ? color.toUpperCase() : '封面取色';
+  if (value) value.textContent = fx.visualTintMode === 'custom' ? color.toUpperCase() : 'From cover';
   if (autoBtn) autoBtn.classList.toggle('active', fx.visualTintMode !== 'custom');
 }
 function setVisualTintAuto() {
@@ -660,7 +660,7 @@ function setVisualTintAuto() {
   updateVisualTintControls();
   syncFxUniforms();
   saveLyricLayout({ user: true, reason: 'visualTintAuto' });
-  showToast('视觉主色: 封面取色');
+  showToast('Visual tint: from cover');
 }
 function resetVisualTintColor() {
   fx.visualTintMode = 'auto';
@@ -668,7 +668,7 @@ function resetVisualTintColor() {
   updateVisualTintControls();
   syncFxUniforms();
   saveLyricLayout({ user: true, reason: 'visualTintReset' });
-  showToast('视觉主色已恢复默认');
+  showToast('Visual tint restored to default');
 }
 function setVisualTintCustom(color, silent) {
   fx.visualTintMode = 'custom';
@@ -676,14 +676,14 @@ function setVisualTintCustom(color, silent) {
   updateVisualTintControls();
   syncFxUniforms();
   saveLyricLayout({ user: true, reason: 'visualTintColor' });
-  if (!silent) showToast('视觉主色: ' + fx.visualTintColor.toUpperCase());
+  if (!silent) showToast('Visual tint: ' + fx.visualTintColor.toUpperCase());
 }
 
 var SONIC_GROUND_COLOR_CONTROLS = [
-  { key: 'sonicGroundBaseColor', picker: 'sonic-ground-base-picker', value: 'sonic-ground-base-value', label: '地形暗部' },
-  { key: 'sonicGroundCoolColor', picker: 'sonic-ground-cool-picker', value: 'sonic-ground-cool-value', label: '冷色峰值' },
-  { key: 'sonicGroundWarmColor', picker: 'sonic-ground-warm-picker', value: 'sonic-ground-warm-value', label: '暖色峰值' },
-  { key: 'sonicGroundAccentColor', picker: 'sonic-ground-accent-picker', value: 'sonic-ground-accent-value', label: '涟漪高光' }
+  { key: 'sonicGroundBaseColor', picker: 'sonic-ground-base-picker', value: 'sonic-ground-base-value', label: 'Ground shadow' },
+  { key: 'sonicGroundCoolColor', picker: 'sonic-ground-cool-picker', value: 'sonic-ground-cool-value', label: 'Cool peaks' },
+  { key: 'sonicGroundWarmColor', picker: 'sonic-ground-warm-picker', value: 'sonic-ground-warm-value', label: 'Warm peaks' },
+  { key: 'sonicGroundAccentColor', picker: 'sonic-ground-accent-picker', value: 'sonic-ground-accent-value', label: 'Ripple highlight' }
 ];
 function sonicGroundColorControl(key) {
   for (var i = 0; i < SONIC_GROUND_COLOR_CONTROLS.length; i++) {
@@ -742,15 +742,15 @@ function updateSonicGroundColorControls() {
     var picker = document.getElementById(item.picker);
     var value = document.getElementById(item.value);
     if (picker) picker.value = color;
-    if (value && !customMode) value.textContent = '封面 ' + color.toUpperCase();
-    if (value) value.textContent = customMode ? color.toUpperCase() : '封面取色';
+    if (value && !customMode) value.textContent = 'Cover ' + color.toUpperCase();
+    if (value) value.textContent = customMode ? color.toUpperCase() : 'From cover';
   });
   if (!customMode) {
     SONIC_GROUND_COLOR_CONTROLS.forEach(function (item) {
       var fallback = fxDefaults[item.key] || '#33e6ff';
       var color = normalizeHexColor((coverPreview && coverPreview[item.key]) || fallback, fallback);
       var value = document.getElementById(item.value);
-      if (value) value.textContent = '封面 ' + color.toUpperCase();
+      if (value) value.textContent = 'Cover ' + color.toUpperCase();
     });
   }
 }
@@ -775,7 +775,7 @@ function resetSonicGroundColor(key) {
   updateSonicGroundColorControls();
   syncFxUniforms();
   saveLyricLayout({ user: true, reason: 'sonicGroundColorAuto' });
-  showToast('音域回响颜色: 封面取色');
+  showToast('Sonic ground colors: from cover');
 }
 function setSonicGroundColorFromPicker(pickerId, color, silent) {
   var item = sonicGroundColorControl(pickerId);

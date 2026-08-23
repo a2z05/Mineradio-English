@@ -1,7 +1,7 @@
 function compactCount(n) {
   n = Number(n) || 0;
-  if (n >= 100000000) return (n / 100000000).toFixed(1) + '亿';
-  if (n >= 10000) return (n / 10000).toFixed(1) + '万';
+  if (n >= 100000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 10000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   return String(n);
 }
 function drawCanvasHeart(ctx, cx, cy, size, color) {
@@ -48,8 +48,8 @@ function requestPlaylistCover(url, cb) {
 }
 
 // ============================================================
-//  3D 卡片交互 - PSP 风格
-//   - 滚轮: 滚动 center 卡 (一级或二级)
-//   - 点击 center 卡: 打开内容框 (歌单) 或 播放 (队列)
-//   - 点击两侧卡: 滚到那张
-//   - ESC: 关闭内容框
+//  3D card interactions - PSP style
+//   - Wheel: scroll the center card (primary or secondary list)
+//   - Click center card: open content box (playlist) or play (queue)
+//   - Click side cards: scroll to that card
+//   - ESC: close the content box

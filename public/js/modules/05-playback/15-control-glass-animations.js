@@ -511,4 +511,4 @@ function clearPlayerControlFocusState(reason) {
 }
 
 // ============================================================
-//  歌词
+//  Lyrics

@@ -88,7 +88,7 @@ function setHomeArt(id, url, size) {
 }
 function compactHomeCount(n) {
   n = Number(n) || 0;
-  if (n >= 100000000) return (n / 100000000).toFixed(1).replace(/\.0$/, '') + '亿';
-  if (n >= 10000) return Math.round(n / 10000) + '万';
+  if (n >= 100000000) return (n / 100000000).toFixed(1).replace(/\.0$/, '') + 'B';
+  if (n >= 10000) return Math.round(n / 10000) + 'K';
   return n ? String(n) : '';
 }

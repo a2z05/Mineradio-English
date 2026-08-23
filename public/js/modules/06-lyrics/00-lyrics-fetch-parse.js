@@ -657,7 +657,7 @@ function renderLyrics(options) {
   if (!fallbackTitleOnly && typeof scheduleStageLyricFullTrackWarmup === 'function') {
     scheduleStageLyricFullTrackWarmup(restoreWarmup ? 'track-ready-fast' : 'lyrics-ready-preload', restoreWarmup ? 120 : 24);
   }
-  // v8: 歌词渲染由 stageLyrics 在每帧 tickLyricsParticles 里推动
+  // v8: lyric rendering is driven by stageLyrics each frame in tickLyricsParticles
 }
 function toggleLyricsPanel(force) {
   if (force === false) fx.particleLyrics = false;
@@ -668,14 +668,14 @@ function toggleLyricsPanel(force) {
     if (typeof requestStageLyricWarmup === 'function') requestStageLyricWarmup('toggleLyricsPanel', 150);
     if (typeof scheduleStageLyricPrewarm === 'function') scheduleStageLyricPrewarm('toggleLyricsPanel', 48);
     if (typeof scheduleStageLyricFullTrackWarmup === 'function') scheduleStageLyricFullTrackWarmup('track-ready', 220);
-    showToast('歌词已开启');
+    showToast('Lyrics on');
   } else {
     clearStageLyrics();
-    showToast('歌词已关闭');
+    showToast('Lyrics off');
   }
   lyricsVisible = fx.particleLyrics;
 }
-function updateLyricsHighlight() { /* v8: 由 tickLyricsParticles 接管 */ }
+function updateLyricsHighlight() { /* v8: handled by tickLyricsParticles */ }
 
 // ============================================================
-//  播放列表面板
+//  Playlist panel

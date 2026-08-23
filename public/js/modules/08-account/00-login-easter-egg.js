@@ -138,10 +138,10 @@ function handleLoginEasterEggTap() {
   }
   var hints = [
     '',
-    '它好像看了你一眼',
-    '再点几下',
-    '它开始有点紧张了',
-    '还差一下',
+    'It just glanced at you',
+    'Keep tapping',
+    "It's getting a little nervous",
+    'One more tap',
     ''
   ];
   if (hint) hint.textContent = hints[loginEasterEggState.clickCount] || '';
@@ -376,21 +376,21 @@ async function validateLoginEasterEggValue() {
     return;
   }
   if (result && result.error === 'LOGIN_EASTER_EGG_RESET_INCOMPLETE') {
-    setLoginEasterEggStatus('登录凭据清理未完成，请重启后再试', 'error');
+    setLoginEasterEggStatus('Credential cleanup incomplete. Restart and try again', 'error');
     loginEasterEggState.validating = false;
     return;
   }
   if (result && result.error === 'LOGIN_EASTER_EGG_STATE_WRITE_FAILED') {
-    setLoginEasterEggStatus('无法保存解锁状态，请释放系统盘空间后重试', 'error');
+    setLoginEasterEggStatus('Could not save unlock state. Free up disk space and try again', 'error');
     loginEasterEggState.validating = false;
     return;
   }
   loginEasterEggState.attempts += 1;
   if (loginEasterEggState.attempts === 3) {
     loginEasterEggState.prefixLocked = true;
-    setLoginEasterEggStatus('前两个字，已经替你想好了', 'hint');
+    setLoginEasterEggStatus("We've picked the first two characters for you", 'hint');
   } else {
-    setLoginEasterEggStatus(loginEasterEggState.attempts < 3 ? '愿望不太对' : '再想想后两个字', 'error');
+    setLoginEasterEggStatus(loginEasterEggState.attempts < 3 ? 'Not quite the wish' : 'Think about the last two characters', 'error');
   }
   replayLoginEasterEggClass(document.getElementById('login-easter-egg-wish'), 'error-shake');
   window.setTimeout(resetLoginEasterEggInputAfterError, 430);
@@ -436,7 +436,7 @@ function playLoginEasterEggUnlockCinematic() {
   loginEasterEggState.validating = false;
   loginEasterEggState.cinematicActive = true;
   loginEasterEggState.cinematicReady = false;
-  setLoginEasterEggStatus('愿望已收到', 'success');
+  setLoginEasterEggStatus('Wish received', 'success');
   var modal = document.getElementById('login-modal');
   var cinematic = document.getElementById('login-easter-unlock-cinematic');
   var phrase = document.getElementById('login-easter-unlock-phrase');

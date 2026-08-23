@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [english, main]
+  pull_request:
+    branches: [english]
+  workflow_dispatch:
+
+jobs:
+  syntax-and-han:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Syntax-check all first-party JS
+        run: |
+          fail=0
+          for f in *.js desktop/*.js public/js/*.js public/js/modules/*/*.js public/remote/*.js tests/*.js; do
+            [ -f "$f" ] || continue
+            node --check "$f" || { echo "SYNTAX FAIL: $f"; fail=1; }
+          done
+          exit $fail
+
+      - name: Han census gate (no unexplained Chinese in user-facing files)
+        run: node tests/check-no-han.js

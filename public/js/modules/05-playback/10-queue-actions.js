@@ -33,19 +33,19 @@ function queueSongNext(song) {
 function queueSearchResult(i) {
   var song = playlist[i]; if (!song) return;
   queueSongNext(song);
-  showToast('已设为下一首: ' + song.name);
+  showToast('Set as next up: ' + song.name);
 }
 function queueDetailSongNext(song) {
   if (!song || song.type === 'podcast-radio') return;
   queueSongNext(song);
-  showToast('已设为下一首: ' + (song.name || ''));
+  showToast('Set as next up: ' + (song.name || ''));
 }
 function queueIndexNext(i) {
   i = Number(i);
   if (!isFinite(i) || i < 0 || i >= playQueue.length) return;
   var song = playQueue[i];
   queueSongNext(song);
-  showToast('已设为下一首: ' + (song && song.name ? song.name : ''));
+  showToast('Set as next up: ' + (song && song.name ? song.name : ''));
 }
 function openQueueArtist(i) {
   var song = playQueue && playQueue[i];

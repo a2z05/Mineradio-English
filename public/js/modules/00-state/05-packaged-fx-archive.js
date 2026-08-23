@@ -1,4 +1,4 @@
-var PACKAGED_DEFAULT_USER_FX_ARCHIVE_NAME = '默认测试';
+var PACKAGED_DEFAULT_USER_FX_ARCHIVE_NAME = 'Default Test';
 var PACKAGED_DEFAULT_USER_FX_ARCHIVE_EXPORTED_AT = 1784607916226;
 var PACKAGED_DEFAULT_USER_FX_ARCHIVE_SAVED_AT = 1784607916226;
 // Keep the packaged first-launch snapshot sourced from the runtime defaults so

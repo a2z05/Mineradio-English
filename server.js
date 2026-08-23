@@ -58,6 +58,7 @@ const http = require('http');
 const https = require('https');
 const fs   = require('fs');
 const path = require('path');
+const os = require('os');
 const crypto = require('crypto');
 const tls = require('tls');
 const { fileURLToPath } = require('url');
@@ -133,6 +134,19 @@ const {
   readCuefieldFeedbackStats,
 } = require('./cuefield/feedback-log');
 const { planCuefieldTransitionFromCache } = require('./cuefield/mineradio-bridge');
+const { decryptQQMusicQrc } = require('./qq-lyric-codec');
+const { LyricCache } = require('./lyric-cache');
+const { spotifyWebApiProxyTarget } = require('./spotify-web-api-policy');
+
+// Spotify PKCE 登录会话（文件缺失时降级为不可用，不影响启动）
+let SpotifyAuthSession = null;
+let createMemorySpotifyAuthStore = null;
+try {
+  ({ SpotifyAuthSession } = require('./spotify-auth-session'));
+  ({ createMemorySpotifyAuthStore } = require('./spotify-secure-auth-store'));
+} catch (e) {
+  console.warn('[SpotifyAuth] session module unavailable, spotify login disabled:', e.message);
+}
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -165,6 +179,7 @@ const qishuiAudioDecryptor = new TrackDecryptor();
 const qishuiAudioDecryptCache = new Map();
 const QISHUI_AUDIO_DECRYPT_CACHE_MAX_BYTES = 96 * 1024 * 1024;
 let qishuiAudioDecryptCacheBytes = 0;
+const lyricCache = new LyricCache({ dir: path.join(__dirname, 'data', 'lyric-cache') });
 const UPDATE_FALLBACK_NOTES = [
   '修复多行歌词与 3D 歌单架的显示层级',
   '优化更新入口与安装包获取流程',
@@ -179,6 +194,128 @@ const WEATHER_DEFAULT_LOCATION = {
   longitude: 121.4737,
   timezone: 'Asia/Shanghai',
 };
+
+// ====================================================================
+//  Spotify PKCE 授权会话 + 手机遥控状态
+// ====================================================================
+const spotifyAuthState = SpotifyAuthSession && createMemorySpotifyAuthStore
+  ? new SpotifyAuthSession({
+    store: global.__mineradioSpotifyAuthStore || createMemorySpotifyAuthStore(),
+    redirectUri: `http://127.0.0.1:${PORT}/api/spotify/callback`,
+  })
+  : null;
+
+function escapeSpotifyCallbackText(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sendSpotifyCallbackPage(res, ok, message) {
+  const title = ok ? 'Spotify connected' : 'Spotify connection failed';
+  res.writeHead(ok ? 200 : 400, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Referrer-Policy': 'no-referrer',
+  });
+  res.end(`<!doctype html><meta charset="utf-8"><title>${title}</title><h1>${title}</h1><p>${escapeSpotifyCallbackText(message)}</p><script>setTimeout(()=>window.close(),${ok ? 1500 : 3000})</script>`);
+}
+
+function spotifyRequestHasExpectedOrigin(req) {
+  const origin = String(req.headers.origin || '').trim();
+  if (!origin) return false;
+  try {
+    const parsed = new URL(origin);
+    const hostname = String(parsed.hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+    const port = Number(parsed.port || (parsed.protocol === 'http:' ? 80 : parsed.protocol === 'https:' ? 443 : 0));
+    return parsed.protocol === 'http:' &&
+      port === Number(PORT) &&
+      (hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1');
+  } catch (error) {
+    return false;
+  }
+}
+
+async function proxySpotifyWebApi(req, res, url) {
+  if (!spotifyAuthState) {
+    sendJSON(res, { ok: false, error: 'SPOTIFY_AUTH_UNAVAILABLE', message: 'Spotify login module is not available.' }, 503);
+    return;
+  }
+  const target = spotifyWebApiProxyTarget(url, req.method);
+  if (!target) {
+    sendJSON(res, { ok: false, error: 'SPOTIFY_PROXY_ROUTE_NOT_ALLOWED' }, 404);
+    return;
+  }
+  if (req.method !== 'GET') {
+    if (!spotifyRequestHasExpectedOrigin(req)) {
+      sendJSON(res, { ok: false, error: 'SPOTIFY_PROXY_ORIGIN_REJECTED' }, 403);
+      return;
+    }
+  }
+  try {
+    const body = req.method === 'PUT' || req.method === 'POST' ? await readRequestBody(req) : null;
+    const upstream = await spotifyAuthState.requestWebApi(target, {
+      method: req.method,
+      headers: body && Object.keys(body).length ? { 'Content-Type': 'application/json' } : {},
+      body: body && Object.keys(body).length ? JSON.stringify(body) : undefined,
+    });
+    const responseText = upstream.status === 204 ? '' : await upstream.text();
+    res.writeHead(upstream.status, {
+      'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    res.end(responseText);
+  } catch (error) {
+    const credentialExpired = error && (error.code === 'invalid_grant' || error.code === 'SPOTIFY_AUTH_REQUIRED');
+    const status = credentialExpired ? 401 : Math.max(400, Math.min(599, Number(error && error.status) || 502));
+    sendJSON(res, { ok: false, error: error.code || 'SPOTIFY_PROXY_FAILED', message: error.message || 'Spotify request failed' }, status);
+  }
+}
+
+function generatePairingToken() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let token = '';
+  for (let i = 0; i < 6; i++) token += alphabet[crypto.randomBytes(1)[0] % alphabet.length];
+  return token;
+}
+
+function detectLanAddress() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    const addrs = nets[name] || [];
+    for (const addr of addrs) {
+      if (addr && addr.family === 'IPv4' && !addr.internal) return addr.address;
+    }
+  }
+  return '127.0.0.1';
+}
+
+const remotePairingToken = generatePairingToken();
+const remoteDeviceTokens = new Map();
+const remoteCommandQueue = [];
+const remoteSseClients = new Set();
+const remotePairAttemptsByIp = new Map();
+
+function remoteRequestToken(req) {
+  const header = String(req.headers.authorization || '').trim();
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : '';
+}
+
+function remoteRequestIsLocal(req) {
+  const address = req.socket && req.socket.remoteAddress || '';
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+
+function broadcastRemoteEvent(eventName, data) {
+  const frame = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of remoteSseClients) {
+    try { client.res.write(frame); } catch (_) {}
+  }
+}
 
 function loadListenSyncJournal() {
   try {
@@ -5045,6 +5182,84 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pn === '/api/spotify/login') {
+    if (!spotifyAuthState) {
+      sendJSON(res, { ok: false, error: 'SPOTIFY_AUTH_UNAVAILABLE', message: 'Spotify login module is not available.' }, 503);
+      return;
+    }
+    const clientId = url.searchParams.get('clientId');
+    try {
+      const authUrl = spotifyAuthState.beginAuthorization(clientId);
+      res.writeHead(302, {
+        Location: authUrl,
+        'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+      });
+      res.end();
+    } catch (error) {
+      sendJSON(res, { ok: false, error: error.code || 'SPOTIFY_LOGIN_FAILED', message: error.message }, error.status || 400);
+    }
+    return;
+  }
+
+  if (pn === '/api/spotify/callback') {
+    if (!spotifyAuthState) {
+      sendSpotifyCallbackPage(res, false, 'Spotify login module is not available.');
+      return;
+    }
+    const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
+    const error = url.searchParams.get('error');
+    if (error) {
+      sendSpotifyCallbackPage(res, false, error);
+      return;
+    }
+    try {
+      await spotifyAuthState.completeAuthorization({ code, state });
+      sendSpotifyCallbackPage(res, true, 'Spotify connected — you can close this window.');
+    } catch (err) {
+      sendSpotifyCallbackPage(res, false, err.message || 'Authorization failed');
+    }
+    return;
+  }
+
+  if (pn === '/api/spotify/auth/status') {
+    try {
+      const status = await handleSpotifyStatus();
+      const session = spotifyAuthState ? spotifyAuthState.status() : {
+        authorized: false,
+        expiresAt: 0,
+        authorizedAt: 0,
+        secureStorage: false,
+        available: false,
+      };
+      sendJSON(res, Object.assign({}, status, session));
+    } catch (err) {
+      console.error('[SpotifyAuthStatus]', err);
+      sendJSON(res, { provider: 'spotify', configured: false, loggedIn: false, authorized: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/spotify/session' && req.method === 'DELETE') {
+    if (!spotifyRequestHasExpectedOrigin(req)) {
+      sendJSON(res, { ok: false, error: 'SPOTIFY_PROXY_ORIGIN_REJECTED' }, 403);
+      return;
+    }
+    if (!spotifyAuthState) {
+      sendJSON(res, { ok: false, error: 'SPOTIFY_AUTH_UNAVAILABLE', message: 'Spotify login module is not available.' }, 503);
+      return;
+    }
+    spotifyAuthState.clear();
+    sendJSON(res, { ok: true, authorized: false });
+    return;
+  }
+
+  if (pn.startsWith('/api/spotify/web-api/')) {
+    await proxySpotifyWebApi(req, res, url);
+    return;
+  }
+
   if (pn === '/api/spotify/user/playlists') {
     try {
       const limit = Math.max(1, Math.min(500, parseInt(url.searchParams.get('limit') || '300', 10) || 300));
@@ -5538,7 +5753,14 @@ const server = http.createServer(async (req, res) => {
   if (pn === '/api/qishui/lyric') {
     try {
       const id = url.searchParams.get('id') || url.searchParams.get('trackId') || '';
-      sendJSON(res, await handleQishuiLyric(id, qishuiCookie));
+      const cacheKey = 'provider:qishui:id:' + String(id);
+      const cached = lyricCache.get(cacheKey);
+      if (cached) { sendJSON(res, cached.payload); return; }
+      const payload = await handleQishuiLyric(id, qishuiCookie);
+      try { if (payload && !payload.error) lyricCache.set(cacheKey, payload); } catch (e) {
+        console.warn('[QishuiLyric] cache store failed:', e.message);
+      }
+      sendJSON(res, payload);
     } catch (err) {
       console.error('[QishuiLyric]', err);
       sendJSON(res, { provider: 'qishui', error: err.message, lyric: '', tlyric: '' }, 500);
@@ -5722,11 +5944,40 @@ const server = http.createServer(async (req, res) => {
       const mid = url.searchParams.get('mid') || url.searchParams.get('songmid') || '';
       const id = url.searchParams.get('id') || url.searchParams.get('qqId') || '';
       if (!mid && !id) { sendJSON(res, { provider: 'qq', error: 'Missing QQ song mid or id', lyric: '' }, 400); return; }
+      const cacheKey = 'provider:qq:id:' + String(mid ? 'mid:' + mid : 'id:' + id);
+      const cached = lyricCache.get(cacheKey);
+      if (cached) { sendJSON(res, cached.payload); return; }
       const data = await handleQQLyric(mid, id);
+      try { if (data && !data.error) lyricCache.set(cacheKey, data); } catch (e) {
+        console.warn('[QQLyric] cache store failed:', e.message);
+      }
       sendJSON(res, data);
     } catch (err) {
       console.error('[QQLyric]', err);
       sendJSON(res, { provider: 'qq', error: err.message, lyric: '' }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/qq/lyric/decoded') {
+    try {
+      const mid = url.searchParams.get('mid') || url.searchParams.get('songmid') || '';
+      const id = url.searchParams.get('id') || url.searchParams.get('qqId') || '';
+      if (!mid && !id) { sendJSON(res, { provider: 'qq', error: 'Missing QQ song mid or id', qrc: '' }, 400); return; }
+      const data = await handleQQLyric(mid, id);
+      let qrcPayload = Object.assign({ provider: 'qq', id: (data && data.id) || id, mid: (data && data.mid) || mid }, data || {});
+      const encryptedHex = String(qrcPayload.qrc || '').trim();
+      if (encryptedHex && /^[0-9a-f]+$/i.test(encryptedHex)) {
+        try {
+          qrcPayload.qrc = decryptQQMusicQrc(encryptedHex);
+        } catch (e) {
+          console.warn('[QQLyricDecoded] qrc decode failed, returning original payload:', e.message);
+        }
+      }
+      sendJSON(res, qrcPayload);
+    } catch (err) {
+      console.error('[QQLyricDecoded]', err);
+      sendJSON(res, { provider: 'qq', error: err.message, qrc: '' }, 500);
     }
     return;
   }
@@ -6414,6 +6665,9 @@ const server = http.createServer(async (req, res) => {
     try {
       const id = url.searchParams.get('id');
       if (!id) { sendJSON(res, { error: 'Missing song id', lyric: '' }, 400); return; }
+      const cacheKey = 'provider:netease:id:' + String(id);
+      const cached = lyricCache.get(cacheKey);
+      if (cached) { sendJSON(res, cached.payload); return; }
       let body = {};
       let source = 'lyric';
       try {
@@ -6430,7 +6684,7 @@ const server = http.createServer(async (req, res) => {
         body = mergeLyricBodies(body, r.body || {});
         source = source === 'lyric_new' ? 'lyric_new+lyric' : 'lyric';
       }
-      sendJSON(res, {
+      const payload = {
         lyric: (body.lrc && body.lrc.lyric) || '',
         tlyric: (body.tlyric && body.tlyric.lyric) || '',
         yrc: (body.yrc && body.yrc.lyric) || '',
@@ -6438,7 +6692,11 @@ const server = http.createServer(async (req, res) => {
         romalrc: (body.romalrc && body.romalrc.lyric) || '',
         yromalrc: (body.yromalrc && body.yromalrc.lyric) || '',
         source,
-      });
+      };
+      try { if (payload.lyric) lyricCache.set(cacheKey, payload); } catch (e) {
+        console.warn('[Lyric] cache store failed:', e.message);
+      }
+      sendJSON(res, payload);
     } catch (err) {
       console.error('[Lyric]', err);
       sendJSON(res, { error: err.message, lyric: '' }, 500);
@@ -6679,6 +6937,140 @@ const server = http.createServer(async (req, res) => {
         res.end();
       }
     }
+    return;
+  }
+
+  // ---------- 手机遥控 ----------
+  if (pn === '/api/remote/pair') {
+    try {
+      const ip = (req.socket && req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+      const now = Date.now();
+      let bucket = remotePairAttemptsByIp.get(ip);
+      if (!bucket || now - bucket.start >= 60000) {
+        bucket = { start: now, count: 0 };
+        remotePairAttemptsByIp.set(ip, bucket);
+      }
+      bucket.count += 1;
+      if (bucket.count > 5) {
+        sendJSON(res, { ok: false, error: 'TOO_MANY_ATTEMPTS', message: 'Too many pairing attempts, try again in a minute.' }, 429);
+        return;
+      }
+      if (req.method !== 'POST') {
+        sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+        return;
+      }
+      const body = await readRequestBody(req);
+      const token = String(body.token || '').trim().toUpperCase();
+      if (!token || token !== remotePairingToken) {
+        sendJSON(res, { ok: false, error: 'INVALID_PAIRING_TOKEN' }, 403);
+        return;
+      }
+      const deviceToken = crypto.randomBytes(16).toString('hex');
+      remoteDeviceTokens.set(deviceToken, { pairedAt: Date.now(), ip });
+      sendJSON(res, { ok: true, deviceToken });
+    } catch (err) {
+      console.error('[RemotePair]', err);
+      sendJSON(res, { ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/remote/publish' && req.method === 'POST') {
+    if (!remoteRequestIsLocal(req) && !(remoteRequestToken(req) && remoteDeviceTokens.has(remoteRequestToken(req)))) {
+      sendJSON(res, { ok: false, error: 'REMOTE_FORBIDDEN' }, 403);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      global.__mineradioRemoteSnapshot = body.snapshot || {};
+      broadcastRemoteEvent('state', global.__mineradioRemoteSnapshot);
+      sendJSON(res, { ok: true });
+    } catch (err) {
+      console.error('[RemotePublish]', err);
+      sendJSON(res, { ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pn.startsWith('/api/remote/')) {
+    const deviceToken = remoteRequestToken(req);
+    if (!deviceToken || !remoteDeviceTokens.has(deviceToken)) {
+      sendJSON(res, { ok: false, error: 'REMOTE_UNAUTHORIZED' }, 401);
+      return;
+    }
+
+    if (pn === '/api/remote/state') {
+      sendJSON(res, global.__mineradioRemoteSnapshot || {});
+      return;
+    }
+
+    if (pn === '/api/remote/cmd') {
+      try {
+        if (req.method !== 'POST') {
+          sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+          return;
+        }
+        const body = await readRequestBody(req);
+        remoteCommandQueue.push({ type: String(body.type || ''), payload: body.payload != null ? body.payload : body, queuedAt: Date.now() });
+        if (remoteCommandQueue.length > 100) remoteCommandQueue.shift();
+        sendJSON(res, { ok: true, queued: true });
+      } catch (err) {
+        console.error('[RemoteCmd]', err);
+        sendJSON(res, { ok: false, error: err.message }, 500);
+      }
+      return;
+    }
+
+    if (pn === '/api/remote/events') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-store',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.write('retry: 3000\n\n');
+      const client = { res };
+      client.heartbeat = setInterval(() => {
+        try { client.res.write(': heartbeat\n\n'); } catch (_) {}
+      }, 15000);
+      remoteSseClients.add(client);
+      req.on('close', () => {
+        clearInterval(client.heartbeat);
+        remoteSseClients.delete(client);
+      });
+      return;
+    }
+
+    sendJSON(res, { ok: false, error: 'REMOTE_ROUTE_NOT_FOUND' }, 404);
+    return;
+  }
+
+  if (pn === '/remote/qr.svg') {
+    try {
+      const qr = require('qrcode');
+      const text = `http://${detectLanAddress()}:${PORT}/remote/#pair=${remotePairingToken}`;
+      const svg = await qr.toString(text, { type: 'svg', margin: 1 });
+      res.writeHead(200, {
+        'Content-Type': 'image/svg+xml',
+        'Cache-Control': 'no-store',
+      });
+      res.end(svg);
+    } catch (err) {
+      console.error('[RemoteQR]', err);
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('QR generation failed');
+    }
+    return;
+  }
+
+  if (pn === '/remote' || pn === '/remote/') {
+    serveStatic(res, path.join(__dirname, 'public', 'remote', 'index.html'));
+    return;
+  }
+
+  if (pn.startsWith('/remote/')) {
+    const relative = path.normalize(pn.replace(/^\/remote\//, '')).replace(/^(\.\.(\/|\\|$))+/, '');
+    serveStatic(res, path.join(__dirname, 'public', 'remote', relative));
     return;
   }
 

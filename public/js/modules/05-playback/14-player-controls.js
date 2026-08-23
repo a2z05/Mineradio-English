@@ -154,10 +154,10 @@ function showQishuiTrackStartStallNotice() {
   var now = performance.now();
   if (now - (playbackResumeRecovery.lastQishuiStartNoticeAt || 0) < 8000) return;
   playbackResumeRecovery.lastQishuiStartNoticeAt = now;
-  var title = '汽水播放未响应';
-  var body = '音频开头解码卡住，已尝试重新接入；如果仍不播放，请拖动一下进度或切换音质。';
+  var title = 'Soda Music playback not responding';
+  var body = 'Audio decoding stalled at the start; reconnected automatically. If it still will not play, scrub the progress bar or switch audio quality.';
   if (typeof showSourceFallbackNotice === 'function') showSourceFallbackNotice(title, body);
-  else if (typeof showToast === 'function') showToast(title + '：' + body);
+  else if (typeof showToast === 'function') showToast(title + ': ' + body);
 }
 
 function playbackFreshUrlRecoverySongKey(song) {
@@ -208,7 +208,7 @@ async function recoverCurrentTrackPlaybackFromFreshUrl(reason, opts) {
     return settleSourceFallbackTerminal(
       currentIdx,
       trackSwitchToken,
-      '当前歌曲重新取链后仍无法播放，已停止自动重试。',
+      'This track still cannot play after refreshing its URL; auto-retry stopped.',
       { silent: !!opts.silent, sourceFallbackRecovery: recovery }
     );
   }
@@ -221,7 +221,7 @@ async function recoverCurrentTrackPlaybackFromFreshUrl(reason, opts) {
   var resumeAt = currentResumeSeconds(opts.resumeAt);
   try {
     if (!opts.silent && typeof showSourceFallbackNotice === 'function') {
-      showSourceFallbackNotice('播放恢复保护', '旧播放链接可能已失效，正在重新取链并回到原进度。');
+      showSourceFallbackNotice('Playback Recovery', 'The previous playback URL may have expired; fetching a fresh one and restoring your position.');
     }
     var recovered = await playQueueAt(currentIdx, {
       manual: true,
@@ -236,7 +236,7 @@ async function recoverCurrentTrackPlaybackFromFreshUrl(reason, opts) {
       return settleSourceFallbackTerminal(
         currentIdx,
         trackSwitchToken,
-        '当前歌曲重新取链后仍无法播放，已停止自动重试。',
+        'This track still cannot play after refreshing its URL; auto-retry stopped.',
         { silent: !!opts.silent, sourceFallbackRecovery: recovery }
       );
     }
@@ -247,7 +247,7 @@ async function recoverCurrentTrackPlaybackFromFreshUrl(reason, opts) {
       settleSourceFallbackTerminal(
         currentIdx,
         trackSwitchToken,
-        '当前歌曲恢复失败，已停止自动重试。',
+        'Failed to recover this track; auto-retry stopped.',
         { silent: !!opts.silent, sourceFallbackRecovery: recovery }
       );
     }
@@ -528,7 +528,7 @@ async function attemptAudioPlay(opts) {
     playing = false; setPlayIcon(false);
     hideLoading();
     forcePlaybackControlsInteractive();
-    if (!opts.silent && !opts.trackSwitch) showToast(opts.manual ? '播放启动失败, 请重新选择歌曲' : '播放被系统拦截, 请点击播放按钮');
+    if (!opts.silent && !opts.trackSwitch) showToast(opts.manual ? 'Playback failed to start; pick another song' : 'Playback was blocked; click the Play button');
     return false;
   }
 }
@@ -550,7 +550,7 @@ async function togglePlay() {
       return;
     }
     if ((!audio || !audio.src) && currentLocalSong && (currentLocalSong.localMissing || !currentLocalSong.localUrl)) {
-      showToast('上次播放的是本地文件，请重新导入后继续');
+      showToast('Last played track was a local file; re-import it to continue');
       return;
     }
     if (!audio) return;
@@ -582,7 +582,7 @@ async function togglePlay() {
     setPlayIcon(playing);
     hideLoading();
     forcePlaybackControlsInteractive();
-    if (!audio || !audio.src) showToast('播放控制失败');
+    if (!audio || !audio.src) showToast('Playback control failed');
   } finally {
     playToggleBusy = false;
   }
@@ -633,7 +633,7 @@ function nextTrack(userInitiated) {
     var previousTail = currentIdx;
     Promise.resolve(hydratePlaylistQueueNextPage('queue-tail')).then(function () {
       if (playQueue.length <= previousTail + 1 && queueHydrationState && queueHydrationState.error) {
-        showToast('后续歌曲载入失败，当前歌曲保持不变');
+        showToast('Failed to load upcoming songs; keeping current track');
         return false;
       }
       currentIdx = playQueue.length > previousTail + 1 ? previousTail + 1 : 0;
@@ -660,7 +660,7 @@ function prevTrack(userInitiated) {
 }
 function shuffleQueue() {
   reorderQueueForShufflePlaybackOrder(currentIdx, { reason: 'shuffle-queue' });
-  showToast('队列已随机');
+  showToast('Queue shuffled');
 }
 function clearQueue() {
   if (typeof cancelPlaylistQueueHydration === 'function') cancelPlaylistQueueHydration('clear-queue');
@@ -687,7 +687,7 @@ function removeFromQueue(idx) {
   updateEmptyHomeVisibility({ forceLoad: false });
 }
 function playModeLabel(mode) {
-  return { loop: '顺序循环', shuffle: '随机播放', single: '单曲循环' }[mode] || '顺序循环';
+  return { loop: 'Repeat all', shuffle: 'Shuffle', single: 'Repeat one' }[mode] || 'Repeat all';
 }
 
 function playModeIconMarkup(mode) {
@@ -742,6 +742,6 @@ function cyclePlayMode() {
     reorderQueueForShufflePlaybackOrder(currentIdx, { reason: 'play-mode-shuffle' });
   }
   updatePlayModeButton(true);
-  showToast('播放模式: ' + playModeLabel(playMode));
+  showToast('Play mode: ' + playModeLabel(playMode));
 }
 updatePlayModeButton(false);

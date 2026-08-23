@@ -12,7 +12,7 @@ var particlePointerWorldHit = new THREE.Vector3();
 var particlePointerLocalHit = new THREE.Vector3();
 var particlePointerQuat = new THREE.Quaternion();
 var particlePointerFrame = { dirty: false, ndcX: 0, ndcY: 0 };
-var CLICK_THRESHOLD = 6;  // 像素, 拖动 > 6px 视为 drag
+var CLICK_THRESHOLD = 6;  // px, drag > 6px counts as a drag
 var UI_HIT_SELECTOR = '#search-area,#upload-panel,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#drop-overlay';
 
 function isPointerOverUi(e) {
@@ -129,7 +129,7 @@ window.addEventListener('mousemove', function (e) {
       particlePointerSpin.lastT = nowSpin;
     }
     orbit.last.x = e.clientX; orbit.last.y = e.clientY;
-    // drag 距离判断
+    // drag-distance check
     var totalDx = e.clientX - mouseDownAt.x, totalDy = e.clientY - mouseDownAt.y;
     if (Math.sqrt(totalDx * totalDx + totalDy * totalDy) > CLICK_THRESHOLD) mouseDownAt.hadDrag = true;
     if (orbit.recentering) orbit.recentering = false;
@@ -173,7 +173,7 @@ renderer.domElement.addEventListener('wheel', function (e) {
   if (orbit.recentering) orbit.recentering = false;
 }, { passive: false });
 
-// 双击屏幕回正 — 不命中卡片时
+// double-click to recenter — only when not hitting a card
 renderer.domElement.addEventListener('dblclick', function (e) {
   if (isPointerOverUi(e)) return;
   if (freeCamera && freeCamera.locked) {
@@ -192,7 +192,7 @@ renderer.domElement.addEventListener('dblclick', function (e) {
 });
 
 // ============================================================
-//  粒子点纹理 (干净圆点, 无 glow)
+//  particle dot texture (clean dot, no glow)
 // ============================================================
 function makeDotTexture() {
   var cv = document.createElement('canvas'); cv.width = cv.height = 64;
@@ -211,9 +211,9 @@ function makeDotTexture() {
 var dotTexture = makeDotTexture();
 
 // ============================================================
-//  主粒子系统
-//   - 5 个 preset, 每个预设走完全不同的 pos 计算
-//   - 共享: 封面色采样, 鼠标交互, 粒子大小限制
+//  main particle system
+//   - 5 presets, each computes pos completely differently
+//   - shared: cover color sampling, mouse interaction, particle size limits
 // ============================================================
 var PLANE_SIZE = 4.8;
 var RIPPLE_MAX = 12;
@@ -288,14 +288,14 @@ function scheduleCoverResolutionReload() {
   }, 260);
 }
 
-// 涟漪数据纹理 (1×N, RGBA: x, y, age, str)
+// ripple data texture (1×N, RGBA: x, y, age, str)
 var rippleData = new Float32Array(RIPPLE_MAX * 4);
 var rippleTex = new THREE.DataTexture(rippleData, 1, RIPPLE_MAX, THREE.RGBAFormat, THREE.FloatType);
 rippleTex.magFilter = THREE.NearestFilter; rippleTex.minFilter = THREE.NearestFilter;
 var ripples = [];
 for (var ri = 0; ri < RIPPLE_MAX; ri++) ripples.push({ x: 0, y: 0, age: -10, str: 0 });
 
-// 封面纹理 + 边缘/深度纹理
+// cover texture + edge/depth textures
 var coverTex = new THREE.Texture();
 coverTex.minFilter = THREE.LinearFilter; coverTex.magFilter = THREE.LinearFilter;
 coverTex.wrapS = THREE.ClampToEdgeWrapping; coverTex.wrapT = THREE.ClampToEdgeWrapping;
@@ -303,7 +303,7 @@ coverTex.wrapS = THREE.ClampToEdgeWrapping; coverTex.wrapT = THREE.ClampToEdgeWr
 var coverEdgeTex = new THREE.Texture();  // R=depth, G=edge, B=fg-mask, A=lum
 coverEdgeTex.minFilter = THREE.LinearFilter; coverEdgeTex.magFilter = THREE.LinearFilter;
 
-// 初始 1×1 像素
+// initial 1×1 pixel
 (function () {
   var c = document.createElement('canvas'); c.width = c.height = 4;
   var x = c.getContext('2d'); x.fillStyle = '#1c1c28'; x.fillRect(0, 0, 4, 4);
@@ -313,7 +313,7 @@ coverEdgeTex.minFilter = THREE.LinearFilter; coverEdgeTex.magFilter = THREE.Line
   coverEdgeTex.image = d; coverEdgeTex.needsUpdate = true;
 })();
 
-// 前一首封面纹理 (用于切歌渐变)
+// previous-track cover texture (for track-switch color blend)
 var prevCoverTex = new THREE.Texture();
 prevCoverTex.minFilter = THREE.LinearFilter; prevCoverTex.magFilter = THREE.LinearFilter;
 (function () {
@@ -329,7 +329,7 @@ var uniforms = {
   uTreble: { value: 0 },
   uBeat: { value: 0 },
   uEnergy: { value: 0 },
-  uBurstAmt: { value: 0 },          // 通用预设切换脉冲 0..1
+  uBurstAmt: { value: 0 },          // generic preset-switch pulse 0..1
   uVinylSpin: { value: 0 },
   uPreset: { value: 0 },
   uIntensity: { value: 0.85 },
@@ -347,7 +347,7 @@ var uniforms = {
   uTintStrength: { value: 0 },
   uCoverTex: { value: coverTex },
   uPrevCoverTex: { value: prevCoverTex },
-  uColorMixT: { value: 1.0 },        // 0=显示旧封面 → 1=显示新封面
+  uColorMixT: { value: 1.0 },        // 0=old cover → 1=new cover
   uEdgeTex: { value: coverEdgeTex },
   uRippleTex: { value: rippleTex },
   uRippleCount: { value: 0 },
@@ -355,23 +355,23 @@ var uniforms = {
   uHasCover: { value: 0 },
   uHasDepth: { value: 0 },
   uEdgeEnabled: { value: 1 },
-  uAiBoost: { value: 0 },          // AI 深度增益, 当 AI 接管时升至 1
+  uAiBoost: { value: 0 },          // AI depth boost, rises to 1 when AI takes over
   uMouseXY: { value: new THREE.Vector2(-999, -999) },
   uMouseActive: { value: 0 },
   uHandXY: { value: new THREE.Vector2(-999, -999) },
   uHandActive: { value: 0 },
   uGestureGrip: { value: 0 },
   uPixel: { value: renderer.getPixelRatio() },
-  uAlpha: { value: 0 },          // 整体粒子透明度 (启动 fade-in)
-  uParticleDim: { value: 1 },          // 覆盖层打开时只压低粒子背景, 不影响 3D 卡片
-  uFloatAlpha: { value: 0 },          // 空场/浮空粒子透明度
-  uLoading: { value: 0 },          // 加载动画混合度 0..1 (1 = 完全聚成圆环)
+  uAlpha: { value: 0 },          // overall particle alpha (startup fade-in)
+  uParticleDim: { value: 1 },          // dims only the particle background when an overlay opens, not the 3D card
+  uFloatAlpha: { value: 0 },          // empty-stage / floating particle alpha
+  uLoading: { value: 0 },          // loading animation blend 0..1 (1 = fully gathered into a ring)
 };
 installRenderPowerHooks();
 applyRendererPowerMode();
 
-// ----- 顶点 Shader -----
-//   v7.1: 律动幅度 ×2.5, Tunnel 自旋, 虚空预设, 切歌颜色渐变
+// ----- vertex shader -----
+//   v7.1: groove amplitude ×2.5, tunnel spin, void preset, track-switch color blend
 var vs = `
 precision highp float;
 uniform float uTime, uBass, uMid, uTreble, uBeat, uEnergy, uBurstAmt;
@@ -460,13 +460,13 @@ float lifeN = age / 2.0;
 float fadeIn  = smoothstep(0.0, 0.06, age);
 float fadeOut = 1.0 - smoothstep(0.7, 1.0, lifeN);
 float env = fadeIn * fadeOut;
-// v7.1: 把幅度放大 — 中心凸起更高更宽
+// v7.1: amplify — center bulge is taller and wider
 float bulgeW = 0.55 + age * 0.80;
 float bulge  = exp(-dist*dist / (2.0 * bulgeW * bulgeW)) * (1.0 - smoothstep(0.0, 0.55, lifeN));
 float waveR  = age * 2.10;
 float ringW  = 0.40 + age * 0.22;
 float ring   = exp(-pow((dist - waveR) / ringW, 2.0));
-// v7.1: 提升整体幅度 ×2
+// v7.1: overall amplitude ×2
 float local  = (bulge * 2.4 + ring * 1.30) * env * str;
 sum += local;
 maxAmp = max(maxAmp, abs(local));
@@ -478,7 +478,7 @@ void main(){
   float t = uTime * uSpeed;
   vec3 pos;
   vec2 sampleUv = safeCoverUv(aUv);
-  // 切歌颜色渐变: 在新旧封面间 mix
+  // track-switch color blend: mix between old and new covers
   vec3 newCol = sampleNewCoverColor(sampleUv);
   vec3 prevCol = samplePrevCoverColor(sampleUv);
   vec3 coverColor = mix(prevCol, newCol, clamp(uColorMixT, 0.0, 1.0));
@@ -498,12 +498,12 @@ aUv.y
   vColor = mix(defaultColor, coverColor, uHasCover);
   vAlpha = 1.0;
 
-  // 律动强度的真实倍数 (放大 intensity 滑块的影响)
-  float K = uIntensity * 1.6;   // 滑块 1.0 → K=1.6, 滑块 1.6 → K=2.56
+  // true multiplier of groove intensity (amplifies the intensity slider)
+  float K = uIntensity * 1.6;   // slider 1.0 → K=1.6, slider 1.6 → K=2.56
 
   // ====================================================
-  //  Preset 0: SILK — 丝绸 (xy 平面, z 涟漪)
-  //  v7.1: 全部位移 ×2.5
+  //  Preset 0: SILK — silk (xy plane, z ripples)
+  //  v7.1: all displacement ×2.5
   // ====================================================
   if (uPreset < 0.5) {
 pos = position;
@@ -517,23 +517,23 @@ float midDisp = midN * uMid * 0.55 * midMask * K;       // 0.20 → 0.55
 float trebleJ = snoise(vec3(pos.x*6.5, pos.y*6.5, t*3.5 + aRand*4.0)) * uTreble * 0.18 * K;  // 0.06→0.18
 float bassBreath = snoise(vec3(pos.x*0.35, pos.y*0.35, t*0.4)) * uBass * 0.42 * K;          // 0.14→0.42
 
-// AI 深度: 显著强化 (0.85 → 1.4)
+// AI depth: significantly strengthened (0.85 → 1.4)
 float depthZ = (depthVal - 0.5) * uAiBoost * uDepth * 1.40 * uHasDepth;
 
 pos.z = rippleZ * 1.30 + midDisp + trebleJ + bassBreath + depthZ;
   }
 
   // ====================================================
-  //  Preset 1: TUNNEL — 隧道 + 自旋
+  //  Preset 1: TUNNEL — tunnel + spin
   // ====================================================
   else if (uPreset < 1.5) {
-// v7.1: 整体自旋 — 整管缓慢绕 Z 轴
+// v7.1: whole-tube spin — entire tube slowly rotates around Z
 float spin = t * 0.12;
 float angle = aUv.x * 2.0 * PI + spin;
 float flow = aUv.y - t * 0.08 * (1.0 + uBass * 0.55);
 flow = fract(flow);
 float zPos = (flow - 0.5) * 9.0;
-float baseR = 2.0 - uBass * 0.28 * K;                  // bass 收缩更明显
+float baseR = 2.0 - uBass * 0.28 * K;                  // bass contraction is more visible
 float ripG  = sin(angle * 5.0 + zPos * 1.4 + t * 2.2) * 0.10 * (uMid + uTreble) * K;   // 0.04→0.10
 float r = baseR + ripG;
 pos.x = cos(angle) * r;
@@ -552,8 +552,8 @@ vColor *= 0.4 + depthFade * 0.7;
   }
 
   // ====================================================
-  //  Preset 2: ORBIT — 星球 (保留自转)
-  //  v7.1: 律动幅度加大
+  //  Preset 2: ORBIT — planet (keeps self-rotation)
+  //  v7.1: larger groove amplitude
   // ====================================================
   else if (uPreset < 2.5) {
 float theta = aUv.x * 2.0 * PI;
@@ -573,7 +573,7 @@ pos.xz = mat2(cy, -sy, sy, cy) * pos.xz;
   }
 
   // ====================================================
-  //  Preset 3: VOID — 虚空 (无粒子, 适合自定义背景)
+  //  Preset 3: VOID — empty space (no particles, good for custom backgrounds)
   // ====================================================
   else if (uPreset < 3.5) {
 pos = vec3((aUv.x - 0.5) * 0.01, (aUv.y - 0.5) * 0.01, -90.0);
@@ -722,7 +722,7 @@ if (transition > 0.001) {
   }
 
   // ====================================================
-  //  鼠标交互 (仅 SILK)
+  //  mouse interaction (SILK only)
   // ====================================================
   if (uMouseActive > 0.5 && uPreset < 0.5) {
 float mdx = pos.x - uMouseXY.x;
@@ -735,7 +735,7 @@ if (md < 1.0) {
   }
 
   // ====================================================
-  //  v8 手势遮挡 — uHandActive 是 0..1 平滑过渡, 大半径推开
+  //  v8 gesture occlusion — uHandActive is a smooth 0..1 transition with a large push-away radius
   // ====================================================
   if (uHandActive > 0.01) {
 float hdx = pos.x - uHandXY.x;
@@ -758,7 +758,7 @@ pos.z += grip * (0.18 + uBass * 0.22 + gripWave * 0.10);
   }
 
   // ====================================================
-  //  通用: 离散感 / 扭曲
+  //  shared: scatter / twist
   // ====================================================
   if (uScatter > 0.001) {
 vec2 jdir = vec2(cos(aRand * 6.2831), sin(aRand * 6.2831));
@@ -770,7 +770,7 @@ float cs = cos(ta), sn = sin(ta);
 pos.xy = mat2(cs, -sn, sn, cs) * pos.xy;
   }
 
-  // 颜色
+  // color
   float vinylHiResGuard = smoothstep(1.08, 1.55, uCoverRes) * step(3.5, uPreset) * (1.0 - step(4.5, uPreset));
   float edgeBoost = uEdgeEnabled * edgeVal * mix(1.0, 0.42, vinylHiResGuard);
   vSourceLum = dot(max(vColor, vec3(0.0)), vec3(0.299, 0.587, 0.114));
@@ -798,7 +798,7 @@ vBright *= bgMul;
   vBright += uGestureGrip * 0.22;
   float loadingMistSize = 1.0;
 
-  // 加载形态: 雾状微尘流，避免廉价旋转圆环
+  // loading form: misty dust stream, avoids a cheap spinning ring
   if (uLoading > 0.001) {
 float mistSeed = hash11(aRand * 931.7);
 float mistLayer = floor(mistSeed * 4.0);
@@ -838,14 +838,14 @@ sz = clamp(depthSize * (1.05 + flowDrive), 1.00, 5.45);
 float ringDrive = uBass * 0.30 + uMid * 0.18 + uTreble * 0.22 + uBeat * 0.30;
 sz = clamp(depthSize * (0.90 + ringDrive * 0.62), 1.05, 3.90);
   }
-  // 加载态下粒子稍大
+  // particles are slightly larger in loading state
   sz = mix(sz, sz * loadingMistSize, uLoading);
   gl_PointSize = sz * uPixel * uPointScale;
   gl_Position = projectionMatrix * mvPos;
 }
 `;
 
-// ----- 片元 Shader -----
+// ----- fragment shader -----
 var fs = `
 precision highp float;
 uniform sampler2D uDotTex;
@@ -1040,5 +1040,5 @@ function updateBackgroundStarRiverState(dt, immediate) {
 console.log('v7 shell loaded, JS pending');
 
 // ============================================================
-//  浮空粒子层 (独立 Points)
-//   v7.1: 速度大幅放慢, 改用 sin/cos 长周期漂移 (优雅而非乱飞)
+//  floating particle layer (separate Points)
+//   v7.1: speed greatly reduced, switched to sin/cos long-period drift (elegant, not chaotic)

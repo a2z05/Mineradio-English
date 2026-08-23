@@ -95,8 +95,8 @@ function formatLyricTimingOffset(offset) {
 
 function lyricTimingToastText(offset) {
   offset = normalizeLyricTimingOffsetSeconds(offset);
-  if (!offset) return '歌词校准已重置';
-  return offset > 0 ? ('歌词提前 ' + Math.abs(offset).toFixed(1) + 's') : ('歌词延后 ' + Math.abs(offset).toFixed(1) + 's');
+  if (!offset) return 'Lyric sync reset';
+  return offset > 0 ? ('Lyrics ' + Math.abs(offset).toFixed(1) + 's earlier') : ('Lyrics ' + Math.abs(offset).toFixed(1) + 's later');
 }
 
 function releaseLyricTimingPopoverFocus(root) {
@@ -157,7 +157,7 @@ function updateLyricTimingOffsetUi(songOverride) {
   var songEl = document.getElementById('lyric-timing-song');
   if (root) root.classList.toggle('has-offset', !!offset);
   if (value) value.textContent = formatLyricTimingOffset(offset);
-  if (songEl) songEl.textContent = song ? (song.name || song.title || '当前歌曲') : '未选择歌曲';
+  if (songEl) songEl.textContent = song ? (song.name || song.title || 'Current song') : 'No song selected';
   document.querySelectorAll('[data-lyric-offset-step],[data-lyric-offset-reset]').forEach(function (btn) {
     btn.disabled = !key;
   });
@@ -177,7 +177,7 @@ function setCurrentLyricTimingOffset(offset, opts) {
   var key = lyricTimingSongKey(song);
   if (!key || !song) {
     updateLyricTimingOffsetUi(song);
-    if (!opts.silent) showToast('请先播放歌曲');
+    if (!opts.silent) showToast('Play a song first');
     return 0;
   }
   offset = normalizeLyricTimingOffsetSeconds(offset);

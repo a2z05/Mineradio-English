@@ -414,13 +414,13 @@ async function buildPodcastDjLowOnlyBeatMap(buffer, token) {
 async function analyzePodcastDjBeats(audioUrl, token, durationSec) {
   try {
     djBeatMapBusy = true;
-    showBeatChip('DJ 离线锁拍…');
+    showBeatChip('DJ offline beat lock…');
     await yieldToIdle(520);
     if (token !== djBeatMapToken || !djMode.active) { hideBeatChip(); return null; }
     durationSec = Math.max(0, Number(durationSec) || 0);
     var preferServerAnalysis = /^https?:\/\//i.test(audioUrl || '') && (durationSec <= 0 || durationSec > 3300);
     if (preferServerAnalysis) {
-      showBeatChip('DJ 长播客后端锁拍...');
+      showBeatChip('DJ long-podcast server beat lock...');
       var serverResp = await fetch('/api/podcast/dj-beatmap?url=' + encodeURIComponent(audioUrl) + '&duration=' + encodeURIComponent(durationSec));
       if (token !== djBeatMapToken || !djMode.active) { hideBeatChip(); return null; }
       var serverData = await serverResp.json().catch(function () { return null; });
@@ -435,7 +435,7 @@ async function analyzePodcastDjBeats(audioUrl, token, durationSec) {
     var ab = await resp.arrayBuffer();
     if (token !== djBeatMapToken || !djMode.active) { hideBeatChip(); return null; }
 
-    showBeatChip('DJ 解码音频…');
+    showBeatChip('DJ decoding audio…');
     var TmpCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     var DecodeCtx = window.AudioContext || window.webkitAudioContext;
     if (!DecodeCtx) { hideBeatChip(); return null; }
@@ -450,7 +450,7 @@ async function analyzePodcastDjBeats(audioUrl, token, durationSec) {
 
     var sr = buffer.sampleRate;
     async function renderDjBand(hpFreq, lpFreq, label) {
-      showBeatChip('DJ 分离' + label + '…');
+      showBeatChip('DJ separating ' + label + '…');
       var off = new TmpCtx(1, buffer.length, sr);
       var src = off.createBufferSource();
       src.buffer = buffer;
@@ -479,17 +479,17 @@ async function analyzePodcastDjBeats(audioUrl, token, durationSec) {
       return rendered.getChannelData(0);
     }
 
-    var lowPcm = await renderDjBand(34, 170, '低频');
+    var lowPcm = await renderDjBand(34, 170, 'low end');
     if (!lowPcm) { hideBeatChip(); return null; }
-    var bodyPcm = await renderDjBand(150, 560, '鼓身');
+    var bodyPcm = await renderDjBand(150, 560, 'drum body');
     if (!bodyPcm) { hideBeatChip(); return null; }
-    var snapPcm = await renderDjBand(1700, 9200, '高频');
+    var snapPcm = await renderDjBand(1700, 9200, 'high end');
     if (!snapPcm) { hideBeatChip(); return null; }
 
     var hopSec = 0.012;
     var hopSize = Math.max(256, Math.floor(sr * hopSec));
     async function makeEnergy(pcm, label) {
-      showBeatChip('DJ 读取' + label + '…');
+      showBeatChip('DJ reading ' + label + '…');
       var frames = Math.floor(pcm.length / hopSize);
       var out = new Float32Array(frames);
       for (var f = 0; f < frames; f++) {
@@ -508,9 +508,9 @@ async function analyzePodcastDjBeats(audioUrl, token, durationSec) {
       return out;
     }
 
-    var lowEnergy = await makeEnergy(lowPcm, '低频');
-    var bodyEnergy = await makeEnergy(bodyPcm, '鼓身');
-    var snapEnergy = await makeEnergy(snapPcm, '高频');
+    var lowEnergy = await makeEnergy(lowPcm, 'low end');
+    var bodyEnergy = await makeEnergy(bodyPcm, 'drum body');
+    var snapEnergy = await makeEnergy(snapPcm, 'high end');
     if (!lowEnergy || !bodyEnergy || !snapEnergy || token !== djBeatMapToken || !djMode.active) { hideBeatChip(); return null; }
 
     var nFrames = Math.min(lowEnergy.length, bodyEnergy.length, snapEnergy.length);
@@ -532,7 +532,7 @@ async function analyzePodcastDjBeats(audioUrl, token, durationSec) {
     var bodyRef = Math.max(0.0008, percentile(bodyEnergy, 0.84));
     var snapRef = Math.max(0.0008, percentile(snapEnergy, 0.84));
 
-    showBeatChip('DJ 计算主拍…');
+    showBeatChip('DJ computing main beats…');
     var onset = new Float32Array(nFrames);
     for (var oi = 2; oi < nFrames; oi++) {
       var lowRise = Math.max(0, lowEnergy[oi] - lowEnergy[oi - 1]);
@@ -783,7 +783,7 @@ function applyPodcastDjProfileFromMap(map) {
 
 function smoothPodcastDjMapHandoff(songKey, map, token) {
   if (!map) return;
-  showBeatChip('DJ 锁拍完成…');
+  showBeatChip('DJ beat lock complete…');
   var apply = function () {
     if (token !== djBeatMapToken || !djMode.active || djMode.songKey !== songKey) return;
     djBeatMapCache[songKey] = map;
@@ -792,7 +792,7 @@ function smoothPodcastDjMapHandoff(songKey, map, token) {
     syncPodcastDjMapCursor(audio ? audio.currentTime : 0, true);
     notifyDesktopLyricsBeatMapReady();
     hideBeatChip();
-    showToast('DJ 离线锁拍完成: ' + (map.visualBeatCount || 0) + ' 个主拍');
+    showToast('DJ offline beat lock done: ' + (map.visualBeatCount || 0) + ' main beats');
   };
   scheduleVisualApply(apply, 260, 360);
 }
@@ -807,7 +807,7 @@ function smoothPodcastDjIntroHandoff(songKey, map, token) {
     applyPodcastDjProfileFromMap(map);
     syncPodcastDjMapCursor(audio ? audio.currentTime : 0, true);
     notifyDesktopLyricsBeatMapReady();
-    showBeatChip('DJ 开头已锁拍，全曲继续分析…');
+    showBeatChip('DJ intro locked, analyzing rest of track…');
   };
   scheduleVisualApply(apply, 0, 240);
 }

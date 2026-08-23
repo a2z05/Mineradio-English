@@ -2,11 +2,11 @@ var firstPlayDone = false;
 
 function playbackProviderLabel(song) {
   var provider = songProviderKey(song);
-  if (provider === 'qq') return 'QQ 音乐';
-  if (provider === 'kugou') return '酷狗音乐';
-  if (provider === 'qishui') return '汽水音乐';
+  if (provider === 'qq') return 'QQ Music';
+  if (provider === 'kugou') return 'Kugou Music';
+  if (provider === 'qishui') return 'Soda Music';
   if (provider === 'spotify') return 'Spotify';
-  return '网易云';
+  return 'NetEase Cloud Music';
 }
 function playbackLoginProvider(song) {
   return normalizePlaybackProvider(songProviderKey(song));
@@ -82,8 +82,8 @@ function playbackProviderMembershipText(provider, data) {
       || status.authorizationIncomplete
       || status.vipSyncState === 'unknown'
     )
-  ) return '会员待同步';
-  return '普通账号';
+  ) return 'Membership pending sync';
+  return 'Standard account';
 }
 function playbackRestrictionNotice(song, data) {
   data = data || {};
@@ -106,54 +106,54 @@ function playbackRestrictionNotice(song, data) {
   var membership = playbackProviderMembershipText(providerKey, data);
   var message = data.message || restriction.message || '';
   if (category === 'vip_required' || category === 'paid_required' || category === 'trial_only') {
-    var needText = category === 'paid_required' ? '购买、数字专辑或更高权限' : (category === 'trial_only' ? '完整播放权限' : '会员权限');
-    var title = membershipPending ? 'QQ 会员状态待同步' : (loggedIn ? '当前平台没有会员状态' : '当前平台未登录会员');
-    var body = message || (provider + ' 已识别为会员/付费曲目，当前状态是 ' + membership + '，缺少' + needText + '。');
-    if (loggedIn && body.indexOf('当前状态') < 0) body += ' 当前状态是 ' + membership + '。';
-    return { category: category, title: title, body: body + ' 可以登录会员账号、降低音质或切换到其它音源。', action: 'upgrade', toast: title };
+    var needText = category === 'paid_required' ? 'a purchase or higher tier' : (category === 'trial_only' ? 'full playback rights' : 'VIP access');
+    var title = membershipPending ? 'QQ membership status pending sync' : (loggedIn ? 'No membership on this platform' : 'Not signed in to this platform');
+    var body = message || (provider + ' identified this as a VIP/paid track; current status is ' + membership + ', missing ' + needText + '.');
+    if (loggedIn && body.indexOf('current status') < 0) body += ' Current status is ' + membership + '.';
+    return { category: category, title: title, body: body + ' Sign in to a VIP account, lower the quality, or switch to another source.', action: 'upgrade', toast: title };
   }
   if (category === 'login_required') {
     if (loggedIn && playbackRestrictionMissingPlaybackKey(data)) {
       return {
         category: category,
-        title: '平台播放授权未完成',
-        body: message || (provider + ' 已登录，但还缺少播放授权，请重新打开官方登录窗口完成授权。'),
+        title: 'Platform playback authorization incomplete',
+        body: message || (provider + ' is signed in but playback authorization is missing; reopen the official sign-in window to finish authorizing.'),
         action: 'login',
-        toast: '播放授权未完成'
+        toast: 'Playback authorization incomplete'
       };
     }
     return {
       category: category,
-      title: '当前平台未登录',
-      body: (message || (provider + ' 需要登录后才能获取播放地址。')) + ' 正在打开对应登录入口。',
+      title: 'Not signed in to this platform',
+      body: (message || (provider + ' requires sign-in before playback URLs can be fetched.')) + ' Opening the sign-in window.',
       action: 'login',
-      toast: '当前平台未登录'
+      toast: 'Not signed in to this platform'
     };
   }
   if (category === 'provider_limited') {
     return {
       category: category,
-      title: '平台仅作为匹配源',
-      body: message || (provider + ' 当前只提供搜索/匹配信息，播放会自动寻找其它可播版本。'),
+      title: 'Platform is match-only',
+      body: message || (provider + ' currently only provides search/match info; playback will automatically find another playable version.'),
       action: 'switch_source',
-      toast: '正在自动换源'
+      toast: 'Switching source automatically'
     };
   }
   if (category === 'copyright_unavailable') {
     return {
       category: category,
-      title: '当前平台版权不可播',
-      body: (message || (provider + ' 当前版权暂不可播。')) + ' 可以换一个平台版本。',
+      title: 'Not playable on this platform',
+      body: (message || (provider + ' cannot play this track due to rights restrictions.')) + ' Try a version from another platform.',
       action: 'switch_source',
-      toast: '版权不可播'
+      toast: 'Rights unavailable'
     };
   }
   return {
     category: category,
-    title: '当前平台没有可用音源',
-    body: (message || (provider + ' 没有返回可播放地址。')) + ' 可能是版权、地区、会员或网络限制，可以换源或稍后重试。',
+    title: 'No available source on this platform',
+    body: (message || (provider + ' did not return a playable URL.')) + ' This may be due to rights, region, membership, or network restrictions; switch sources or retry later.',
     action: 'switch_source',
-    toast: '当前平台没有可用音源'
+    toast: 'No available source on this platform'
   };
 }
 function playbackRestrictionMessage(song, data) {
@@ -165,17 +165,17 @@ function playbackRestrictionMessage(song, data) {
   var provider = playbackProviderLabel(song);
   var message = data.message || restriction.message || '';
   if (!message) {
-    if (category === 'login_required') message = provider + '需要登录后再尝试播放';
-    else if (category === 'vip_required') message = provider + '歌曲需要会员权限';
-    else if (category === 'paid_required') message = provider + '歌曲需要购买或更高权限';
-    else if (category === 'trial_only') message = provider + '仅返回试听片段';
-    else if (category === 'copyright_unavailable') message = provider + '版权暂不可播';
-    else if (category === 'provider_limited') message = provider + '当前只作为匹配源，正在寻找其它可播版本';
-    else message = provider + '没有返回可播放地址';
+    if (category === 'login_required') message = provider + ' requires sign-in before playback';
+    else if (category === 'vip_required') message = provider + ' songs require VIP access';
+    else if (category === 'paid_required') message = provider + ' songs require a purchase or higher tier';
+    else if (category === 'trial_only') message = provider + ' returned a preview clip only';
+    else if (category === 'copyright_unavailable') message = provider + ' cannot play this track due to rights restrictions';
+    else if (category === 'provider_limited') message = provider + ' is match-only; looking for another playable version';
+    else message = provider + ' did not return a playable URL';
   }
-  if (category === 'login_required') return message + ' · 正在打开登录';
-  if (category === 'provider_limited') return message + ' · 可以自动换源';
-  if (category === 'copyright_unavailable' || category === 'url_unavailable') return message + ' · 可以试试另一个平台版本';
+  if (category === 'login_required') return message + ' · Opening sign-in';
+  if (category === 'provider_limited') return message + ' · Can switch source automatically';
+  if (category === 'copyright_unavailable' || category === 'url_unavailable') return message + ' · Try another platform version';
   return message;
 }
 function qqPlaybackRetryQualities(requestedQuality, resolvedLevel) {
@@ -202,7 +202,7 @@ async function retryQQPlaybackWithCompatibleQuality(song, idx, token, opts, data
   var nextQuality = candidates[0];
   var resolvedQuality = normalizePlaybackQuality(data && data.level);
   markPlaybackQualityRuntimeCap(song, 'qq', nextQuality, 'qq-url-unavailable');
-  if (!opts.startupAutoplay) showSourceFallbackNotice('QQ 音质自动兼容', '当前音质启动失败，正在切到 ' + playbackQualityLabel(nextQuality, 'qq') + '。');
+  if (!opts.startupAutoplay) showSourceFallbackNotice('QQ Music quality auto-adjusted', 'This quality failed to start; switching to ' + playbackQualityLabel(nextQuality, 'qq') + '.');
   var retryResumeAt = opts.resumeAt;
   if (retryResumeAt == null && opts.startupAutoplay && pendingPlaybackResumeAt > 0) retryResumeAt = pendingPlaybackResumeAt;
   var retryStarted = await playQueueAt(idx, Object.assign({}, opts, {
@@ -245,7 +245,7 @@ function showSourceFallbackNotice(title, body) {
     head.className = 'source-fallback-head';
     var titleElNew = document.createElement('div');
     titleElNew.className = 'source-fallback-title';
-    titleElNew.textContent = title || '自动换源';
+    titleElNew.textContent = title || 'Auto source switch';
     var close = document.createElement('button');
     close.className = 'source-fallback-close';
     close.type = 'button';
@@ -268,7 +268,7 @@ function showSourceFallbackNotice(title, body) {
   var titleEl = document.getElementById('source-fallback-title');
   var bodyEl = document.getElementById('source-fallback-body');
   if (!notice || !titleEl || !bodyEl) return;
-  titleEl.textContent = title || '自动换源';
+  titleEl.textContent = title || 'Auto source switch';
   bodyEl.textContent = body || '';
   notice.classList.add('show');
   if (sourceFallbackNoticeTimer) clearTimeout(sourceFallbackNoticeTimer);
@@ -413,7 +413,7 @@ function settleExpiredSourceFallbackPlayback(idx, token, opts, message) {
   return settleSourceFallbackTerminal(
     currentIdx,
     trackSwitchToken,
-    message || '自动恢复已达到时间上限，请稍后手动重试。',
+    message || 'Auto recovery reached its time limit; please retry manually later.',
     sourceFallbackRecoveryFailureOptions(opts) || { sourceFallbackRecovery: recovery }
   );
 }
@@ -455,9 +455,9 @@ function awaitSourceFallbackBudget(promise, recovery) {
 }
 
 function sourceFallbackProviderTitle(provider) {
-  if (provider === 'qq') return 'QQ 音乐';
-  if (provider === 'kugou') return '酷狗音乐';
-  return '网易云';
+  if (provider === 'qq') return 'QQ Music';
+  if (provider === 'kugou') return 'Kugou Music';
+  return 'NetEase Cloud Music';
 }
 function sourceFallbackProviderReady(provider) {
   provider = normalizePlaybackProvider(provider);
@@ -564,7 +564,7 @@ function settleSourceFallbackTerminal(idx, token, message, opts) {
   playing = false;
   setPlayIcon(false);
   if (typeof syncPlaybackStateFromAudioEvent === 'function') syncPlaybackStateFromAudioEvent('source-fallback-terminal');
-  if (!opts.silent) showSourceFallbackNotice('当前没有可用音源', message || '当前歌曲不可播放，并且没有其它已登录、已授权的音源可接管。');
+  if (!opts.silent) showSourceFallbackNotice('No available source', message || 'This track cannot be played and no other signed-in, authorized source can take over.');
   return false;
 }
 function markQueueItemPlaybackFailed(idx, recovery) {
@@ -610,26 +610,26 @@ async function skipFailedQueueItem(idx, token, message, opts) {
   if (!recovery) return false;
   var terminalOpts = Object.assign({}, opts, { sourceFallbackRecovery: recovery });
   if (!sourceFallbackRecoveryCanContinue(recovery)) {
-    return settleSourceFallbackTerminal(idx, token, '自动恢复已达到时间上限，请稍后手动重试。', terminalOpts);
+    return settleSourceFallbackTerminal(idx, token, 'Auto recovery reached its time limit; please retry manually later.', terminalOpts);
   }
   hideLoading();
   markQueueItemPlaybackFailed(idx, recovery);
   var currentRecoveryKey = sourceFallbackRecoveryContentKey(playQueue[idx]);
   if (currentRecoveryKey) recovery.visitedSongKeys[currentRecoveryKey] = true;
   if (playQueue.length <= 1) {
-    return settleSourceFallbackTerminal(idx, token, message || '当前歌曲不可播放，队列里没有其他歌曲。', terminalOpts);
+    return settleSourceFallbackTerminal(idx, token, message || 'This track cannot be played and there are no other songs in the queue.', terminalOpts);
   }
   if (recentQueuePlaybackFailureCount(recovery) >= Math.min(MAX_RECENT_AUTO_QUEUE_FAILURES, playQueue.length)) {
     return settleSourceFallbackTerminal(idx, token, '', terminalOpts);
   }
   if (recovery.queueAdvances >= SOURCE_FALLBACK_MAX_QUEUE_ADVANCES) {
-    return settleSourceFallbackTerminal(idx, token, '已停止自动切换，避免无可用音源时反复扫描整条队列。', terminalOpts);
+    return settleSourceFallbackTerminal(idx, token, 'Stopped auto-switching to avoid repeatedly scanning a queue with no playable sources.', terminalOpts);
   }
   var nextIdx = nextUnblockedQueueIndex(idx, recovery);
   if (nextIdx < 0) {
-    return settleSourceFallbackTerminal(idx, token, '已尝试绕开受限歌曲，当前队列没有新的可播放项。', terminalOpts);
+    return settleSourceFallbackTerminal(idx, token, 'Skipped restricted tracks; no new playable items remain in the queue.', terminalOpts);
   }
-  if (!opts.silent) showSourceFallbackNotice('已跳过受限歌曲', message || '未找到同名同歌手的另一个平台版本，正在播放下一首。');
+  if (!opts.silent) showSourceFallbackNotice('Skipped restricted track', message || 'No matching version by the same artist found on other platforms; playing the next song.');
   recovery.queueAdvances++;
   var nextRecoveryKey = sourceFallbackRecoveryContentKey(playQueue[nextIdx]);
   if (nextRecoveryKey) recovery.visitedSongKeys[nextRecoveryKey] = true;
@@ -641,7 +641,7 @@ async function skipFailedQueueItem(idx, token, message, opts) {
   var nextStarted = await playQueueAt(nextIdx, nextPlaybackOpts);
   if (nextStarted === true) completeSourceFallbackRecovery(recovery);
   else if (sourceFallbackRecoveryIdentityActive(recovery) && !sourceFallbackRecoveryCanContinue(recovery)) {
-    return settleSourceFallbackTerminal(currentIdx, trackSwitchToken, '自动恢复已达到时间上限，请稍后手动重试。', terminalOpts);
+    return settleSourceFallbackTerminal(currentIdx, trackSwitchToken, 'Auto recovery reached its time limit; please retry manually later.', terminalOpts);
   }
   return nextStarted === true;
 }
@@ -670,19 +670,19 @@ async function tryAutoPlaybackFallback(song, data, idx, token, opts) {
     sourceFallbackRecovery: recovery
   };
   if (!sourceFallbackRecoveryCanContinue(recovery)) {
-    return settleSourceFallbackTerminal(idx, token, '自动恢复已达到时间上限，请稍后手动重试。', skipOpts);
+    return settleSourceFallbackTerminal(idx, token, 'Auto recovery reached its time limit; please retry manually later.', skipOpts);
   }
   if (!alternateProviders.length) {
-    return await skipFailedQueueItem(idx, token, '当前歌曲不可播放，且没有其它已登录、已授权的音乐平台可接管。', skipOpts);
+    return await skipFailedQueueItem(idx, token, 'This track cannot be played and no other signed-in, authorized music platform can take over.', skipOpts);
   }
   if (!opts.startupAutoplay) {
-    showSourceFallbackNotice('正在自动换源', fromLabel + ' 当前不可播，正在检查 ' + alternateProviders.map(sourceFallbackProviderTitle).join('、') + ' 的同名同歌手版本。');
+    showSourceFallbackNotice('Switching source automatically', fromLabel + ' cannot play this track right now; checking same-song versions on ' + alternateProviders.map(sourceFallbackProviderTitle).join(', ') + '.');
   }
   for (var providerIndex = 0; providerIndex < alternateProviders.length; providerIndex++) {
     var alternateProvider = alternateProviders[providerIndex];
     if (!beginSourceFallbackProviderAttempt(recovery, song, alternateProvider)) {
       if (!sourceFallbackRecoveryCanContinue(recovery)) {
-        return settleSourceFallbackTerminal(idx, token, '自动恢复已达到时间上限，请稍后手动重试。', skipOpts);
+        return settleSourceFallbackTerminal(idx, token, 'Auto recovery reached its time limit; please retry manually later.', skipOpts);
       }
       continue;
     }
@@ -691,7 +691,7 @@ async function tryAutoPlaybackFallback(song, data, idx, token, opts) {
       var alternate = await searchAlternatePlatformSong(song, alternateProvider, recovery);
       if (token !== trackSwitchToken) return false;
       if (!sourceFallbackRecoveryCanContinue(recovery)) {
-        return settleSourceFallbackTerminal(idx, token, '自动恢复已达到时间上限，请稍后手动重试。', skipOpts);
+        return settleSourceFallbackTerminal(idx, token, 'Auto recovery reached its time limit; please retry manually later.', skipOpts);
       }
       if (!alternate) continue;
       var alternateData = typeof resolveAlbumGaplessPlaybackData === 'function'
@@ -699,7 +699,7 @@ async function tryAutoPlaybackFallback(song, data, idx, token, opts) {
         : null;
       if (token !== trackSwitchToken) return false;
       if (alternateData === sourceFallbackBudgetTimeoutResult || !sourceFallbackRecoveryCanContinue(recovery)) {
-        return settleSourceFallbackTerminal(idx, token, '自动恢复已达到时间上限，请稍后手动重试。', skipOpts);
+        return settleSourceFallbackTerminal(idx, token, 'Auto recovery reached its time limit; please retry manually later.', skipOpts);
       }
       if (!alternateData || !alternateData.url) continue;
       var originalSong = playQueue[idx];
@@ -726,23 +726,23 @@ async function tryAutoPlaybackFallback(song, data, idx, token, opts) {
       if (fallbackToken !== trackSwitchToken) return false;
       if (fallbackStarted === true) {
         completeSourceFallbackRecovery(recovery);
-        if (!opts.startupAutoplay) showSourceFallbackNotice('已自动切换音源', (song.name || '当前歌曲') + ' 已从 ' + fromLabel + ' 切到 ' + targetLabel + '。');
+        if (!opts.startupAutoplay) showSourceFallbackNotice('Source switched automatically', (song.name || 'This track') + ' switched from ' + fromLabel + ' to ' + targetLabel + '.');
         return true;
       }
       restoreSourceFallbackQueueItem(idx, originalSong, committedCandidate, fallbackToken);
       token = fallbackToken;
       if (!sourceFallbackRecoveryCanContinue(recovery)) {
-        return settleSourceFallbackTerminal(idx, token, '自动恢复已达到时间上限，请稍后手动重试。', skipOpts);
+        return settleSourceFallbackTerminal(idx, token, 'Auto recovery reached its time limit; please retry manually later.', skipOpts);
       }
     } catch (e) {
       if (token !== trackSwitchToken) return false;
       if (!sourceFallbackRecoveryCanContinue(recovery)) {
-        return settleSourceFallbackTerminal(idx, token, '自动恢复已达到时间上限，请稍后手动重试。', skipOpts);
+        return settleSourceFallbackTerminal(idx, token, 'Auto recovery reached its time limit; please retry manually later.', skipOpts);
       }
       console.warn('[SourceFallback]', alternateProvider, e && (e.message || e));
     }
   }
-  return await skipFailedQueueItem(idx, token, '没有找到可播放的已登录平台版本，正在播放下一首。', skipOpts);
+  return await skipFailedQueueItem(idx, token, 'No playable signed-in platform version found; playing the next song.', skipOpts);
 }
 function handlePlaybackUnavailable(song, data) {
   hideLoading();

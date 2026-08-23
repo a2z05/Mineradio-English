@@ -61,7 +61,7 @@ function updateCamera() {
     }
   }
 
-  // v8: focus 优先, 否则用 user + cine 复合姿态
+  // v8: focus first, else combined user + cine pose
   var fa = orbit.focus.active;
   var fa = orbit.focus.active;
   var targetTheta, targetPhi, targetRadius, tLookAt;
@@ -81,7 +81,7 @@ function updateCamera() {
     targetRadius = Math.max(orbit.minRadius, Math.min(orbit.maxRadius, orbit.userRadius + orbit.cineRadius));
     tLookAt = ZERO_VEC;
   }
-  // 丝滑变速: 线性 lerp 自然给出 "快→慢" 缓出曲线
+  // smooth easing: linear lerp naturally gives a fast-to-slow ease-out curve
   var focusEase = fa ? 0.16 : 0.10;
   var radiusEase = fa ? 0.12 : 0.07;
   var shelfFocusType = /^shelf-/.test(String(orbit.focus.type || ''));
@@ -142,7 +142,7 @@ function updateCamera() {
   camPunch *= 0.86;
 }
 
-// 焦点跟拍 (hover 0.5s 后镜头移到目标)
+// focus tracking (camera moves to target after 0.5s hover)
 var focusHover = { wantType: null, pendingTimer: null, exitTimer: null };
 function shouldUseWallpaperSafeShelfCamera() {
   return !!(fx && Number(fx.preset) === 5);
@@ -188,7 +188,7 @@ function activateFocusZone(type) {
       camPunch = Math.max(camPunch, 0.28);
       requestStageLyricCameraSnap(10);
     } else {
-      // 侧栏 (右): 近一点、侧一点，让歌单架打开时有明确的镜头推近。
+      // side panel (right): closer and off-axis so opening the shelf gives a clear camera push-in.
       orbit.focus.theta = shelfProfile.portrait ? 0.24 : 0.42;
       orbit.focus.phi = shelfProfile.portrait ? -0.06 : -0.12;
       orbit.focus.radius = shelfProfile.portrait ? 5.28 : 4.20;
@@ -211,13 +211,13 @@ function activateFocusZone(type) {
       camPunch = Math.max(camPunch, 0.38);
     }
   } else if (type === 'shelf-stage') {
-    // 舞台: 居中仰拍
+    // stage: centered low-angle shot
     orbit.focus.theta = 0.0;
     orbit.focus.phi = shelfProfile.portrait ? -0.24 : -0.32;
     orbit.focus.radius = shelfProfile.portrait ? 4.8 : 3.8;
     orbit.focus.lookAt.set(0, shelfProfile.portrait ? -1.86 : -1.7, 0.8);
   } else if (type === 'queue') {
-    // 队列在左侧 HTML 面板, 相机微微左移 + 抬升
+    // queue is the left HTML panel, camera drifts slightly left + up
     orbit.focus.theta = 0.40;
     orbit.focus.phi = 0.05;
     orbit.focus.radius = 5.8;
@@ -241,7 +241,7 @@ function setFocusZone(type, immediate) {
   if (focusHover.pendingTimer) { clearTimeout(focusHover.pendingTimer); focusHover.pendingTimer = null; }
   if (focusHover.exitTimer) { clearTimeout(focusHover.exitTimer); focusHover.exitTimer = null; }
   if (!type) {
-    // 立刻退出 focus, 让相机回主姿态 (但插值是平滑的)
+    // exit focus immediately, camera returns to main pose (interpolation stays smooth)
     var exitDelay = orbit.focus.type === 'queue' ? PEEK_HIDE_DELAY : 120;
     focusHover.exitTimer = setTimeout(function () {
       focusHover.exitTimer = null;
@@ -253,7 +253,7 @@ function setFocusZone(type, immediate) {
     activateFocusZone(type);
     return;
   }
-  // 延迟 500ms 激活
+  // activate after a 500ms delay
   focusHover.pendingTimer = setTimeout(function () {
     focusHover.pendingTimer = null;
     if (focusHover.wantType !== type) return;
@@ -261,12 +261,12 @@ function setFocusZone(type, immediate) {
   }, 260);
 }
 
-// 电影镜头 v8: 振幅大幅减小, 节拍 punch 加冷却 + 强度门槛
-//   - cineTheta/Phi 是非常缓慢的低频漂移, 不再让人 motion sick
-//   - punch zoom 只在 真·强主拍 触发, 至少间隔 0.45s, 振幅 ×0.5
+// cinema camera v8: amplitude greatly reduced, beat punch gets cooldown + intensity gate
+//   - cineTheta/Phi is a very slow low-frequency drift, no more motion sickness
+//   - punch zoom only triggers on genuinely strong downbeats, min 0.45s apart, amplitude ×0.5
 var lastCamPunchAt = -10;
-var CAM_PUNCH_MIN_INTERVAL = 0.45;     // 秒
-var CAM_PUNCH_BEAT_THRESHOLD = 0.55;   // 必须够强才触发
+var CAM_PUNCH_MIN_INTERVAL = 0.45;     // seconds
+var CAM_PUNCH_BEAT_THRESHOLD = 0.55;   // must be strong enough to trigger
 function updateCinema(dt) {
   cinemaT += dt;
   updateBeatCamera(dt);
@@ -277,7 +277,7 @@ function updateCinema(dt) {
     return;
   }
   var damp = orbit.rotating ? 0.25 : 1.0;
-  // v8: 振幅减半, 周期更长 (更优雅)
+  // v8: half amplitude, longer period (more elegant)
   var dj = djMode.active;
   var shake = clampRange(Number(fx.cinemaShake) || 0, 0, 1.8);
   var beatDamp = (orbit.focus.active ? (dj ? 0.66 : 0.55) : (dj ? 1.12 : 1.0)) * shake;
@@ -298,7 +298,7 @@ function recenterCamera() {
     skullWheelZoomTarget = 0;
     if (!(fx && fx.preset === SKULL_PRESET_INDEX)) skullWheelZoom = 0;
   }
-  // 同时解除任何镜头跟拍
+  // also release any focus tracking
   if (focusHover) {
     focusHover.wantType = null;
     if (focusHover.pendingTimer) { clearTimeout(focusHover.pendingTimer); focusHover.pendingTimer = null; }
@@ -311,5 +311,5 @@ function recenterCamera() {
     resetSkullPresetView(true);
   }
   if (!(fx && fx.preset === SKULL_PRESET_INDEX) && ((fx && fx.lyricCameraLock) || shouldUseWallpaperLyricCameraLock())) requestStageLyricCameraSnap(14);
-  showToast('视角回正');
+  showToast('Camera view recentered');
 }

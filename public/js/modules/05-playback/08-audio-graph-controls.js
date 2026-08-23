@@ -599,7 +599,7 @@ function setAudioFadeSetting(kind, seconds, silent) {
   else AUDIO_FADE_OUT_MS = ms;
   saveAudioFadePreference();
   updateAudioFadeUi();
-  if (!silent) showToast((kind === 'in' ? '淡入 ' : '淡出 ') + audioFadeSecondsLabel(ms));
+  if (!silent) showToast((kind === 'in' ? 'Fade in ' : 'Fade out ') + audioFadeSecondsLabel(ms));
 }
 
 function setVolume(value, silent) {
@@ -612,7 +612,7 @@ function setVolume(value, silent) {
   if (shouldRestoreAudibleEnvelope) cancelAudioElementFadeFrame();
   applyVolumeToAudio({ restoreEnvelope: shouldRestoreAudibleEnvelope });
   updateVolumeUi();
-  if (!silent) showToast('音量 ' + Math.round(next * 100) + '%');
+  if (!silent) showToast('Volume ' + Math.round(next * 100) + '%');
 }
 function adjustVolumeByKeyboard(delta) {
   var step = Number(delta) || 0;
@@ -710,7 +710,7 @@ function bindVolumeControls() {
     slider.addEventListener('input', function () { setVolume(slider.value, true); });
     slider.addEventListener('focus', keepVolumePanelOpen);
     slider.addEventListener('blur', closeVolumePanelSoon);
-    slider.addEventListener('change', function () { showToast('音量 ' + Math.round(targetVolume * 100) + '%'); });
+    slider.addEventListener('change', function () { showToast('Volume ' + Math.round(targetVolume * 100) + '%'); });
   }
   if (fadeInSlider) {
     fadeInSlider.addEventListener('input', function () { setAudioFadeSetting('in', fadeInSlider.value, true); });
@@ -743,4 +743,4 @@ function bindVolumeControls() {
 }
 
 // ============================================================
-//  播放队列
+//  Playback Queue

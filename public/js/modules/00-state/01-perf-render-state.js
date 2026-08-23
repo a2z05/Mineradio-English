@@ -70,9 +70,9 @@ var updatePreviewState = {
   selectedDownloadPageIndex: 0,
   errorReason: '',
   message: '',
-  hero: '当前版本已是最新。',
+  hero: 'You are on the latest version.',
   notes: [
-    '修复多行歌词与 3D 歌单架的显示层级',
-    '优化更新入口与安装包获取流程'
+    'Fixed layering of multiline lyrics and the 3D playlist shelf',
+    'Improved update entry point and installer download flow'
   ]
 };

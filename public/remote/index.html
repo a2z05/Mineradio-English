@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d12">
+  <title>Mineradio Remote</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --surface: #151a26;
+      --surface-2: #1c2333;
+      --line: #27304a;
+      --text: #eef1f8;
+      --muted: #8a93a6;
+      --accent: #5b8cff;
+      --accent-2: #7c5bff;
+      --danger: #ff5b6e;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.45;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      user-select: none;
+      overscroll-behavior-y: contain;
+    }
+    .wrap { max-width: 480px; margin: 0 auto; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); }
+
+    header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0 6px;
+    }
+    header h1 { font-size: 17px; font-weight: 700; letter-spacing: .02em; flex: 1; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+    .dot.on { background: #35d07f; box-shadow: 0 0 8px rgba(53,208,127,.7); }
+    .dot.off { background: var(--danger); }
+
+    /* Connection banner */
+    #conn-banner {
+      display: none;
+      margin: 4px 0 10px;
+      padding: 9px 12px;
+      border-radius: 12px;
+      background: rgba(255,91,110,.12);
+      border: 1px solid rgba(255,91,110,.35);
+      color: #ffb3bd;
+      font-size: 13px;
+    }
+    #conn-banner.show { display: block; }
+
+    /* Pair view */
+    #view-pair { padding-top: 18vh; text-align: center; }
+    #view-pair .logo {
+      width: 96px; height: 96px; margin: 0 auto 22px;
+      border-radius: 28px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 46px; color: #fff;
+    }
+    #view-pair h2 { font-size: 22px; margin-bottom: 6px; }
+    #pair-status { color: var(--muted); font-size: 14px; max-width: 300px; margin: 0 auto; }
+    #pair-status.busy::after { content: "…"; }
+
+    /* Player view */
+    .cover-box { position: relative; width: min(72vw, 270px); margin: 8px auto 14px; aspect-ratio: 1; }
+    .cover-box img, .cover-ph {
+      width: 100%; height: 100%; border-radius: var(--radius);
+      object-fit: cover; box-shadow: 0 14px 34px rgba(0,0,0,.55);
+    }
+    .cover-ph {
+      display: none;
+      background: linear-gradient(135deg, var(--surface-2), var(--surface));
+      border: 1px solid var(--line);
+      align-items: center; justify-content: center;
+      font-size: 64px; color: var(--muted);
+    }
+    .meta { text-align: center; padding: 0 8px; min-height: 52px; }
+    #track-title { font-size: 19px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #track-artists { color: var(--muted); font-size: 14px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Progress */
+    .progress-row { margin: 16px 2px 2px; }
+    .times { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    input[type="range"] {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 26px; background: transparent; touch-action: none;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 5px; border-radius: 3px;
+      background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--surface-2) var(--fill, 0%));
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 17px; height: 17px; margin-top: -6px;
+      border-radius: 50%; background: #fff; border: none;
+      box-shadow: 0 1px 5px rgba(0,0,0,.5);
+    }
+    input[type="range"]::-moz-range-track { height: 5px; border-radius: 3px; background: var(--surface-2); }
+    input[type="range"]::-moz-range-progress { height: 5px; border-radius: 3px; background: var(--accent); }
+    input[type="range"]::-moz-range-thumb {
+      width: 17px; height: 17px; border: none; border-radius: 50%; background: #fff;
+    }
+
+    /* Transport */
+    .transport {
+      display: flex; align-items: center; justify-content: center; gap: 30px;
+      margin: 10px 0 4px;
+    }
+    .transport button {
+      border: none; cursor: pointer; color: var(--text);
+      background: transparent; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .08s ease, opacity .15s ease;
+    }
+    .transport button:active { transform: scale(.9); opacity: .8; }
+    .btn-side { width: 54px; height: 54px; }
+    .btn-main {
+      width: 72px; height: 72px; color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 8px 22px rgba(91,140,255,.35);
+    }
+    .transport svg { width: 26px; height: 26px; fill: currentColor; }
+    .btn-main svg { width: 32px; height: 32px; }
+
+    /* Volume */
+    .volume-row { display: flex; align-items: center; gap: 10px; margin: 8px 2px 18px; color: var(--muted); }
+    .volume-row input { flex: 1; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+    .tabs button {
+      flex: 1; border: none; background: transparent; color: var(--muted);
+      font-size: 14px; font-weight: 600; padding: 8px 0; border-radius: 9px; cursor: pointer;
+    }
+    .tabs button.active { background: var(--surface-2); color: var(--text); }
+
+    section.panel { margin-top: 12px; }
+    .rowlist { list-style: none; margin-top: 8px; }
+    .rowlist li {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface); border: 1px solid transparent;
+      border-radius: 12px; padding: 10px 12px; margin-bottom: 6px;
+      min-height: 48px;
+    }
+    .rowlist li.active { border-color: var(--accent); }
+    .rowlist li.tap { cursor: pointer; }
+    .rowlist li.tap:active { background: var(--surface-2); }
+    .idx { width: 22px; text-align: right; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; flex: none; }
+    .rmain { flex: 1; min-width: 0; }
+    .rt { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ra { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ract {
+      flex: none; border: none; cursor: pointer; color: var(--accent);
+      background: var(--surface-2); border-radius: 50%;
+      width: 36px; height: 36px; font-size: 15px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .ract:active { opacity: .7; }
+    .empty { color: var(--muted); font-size: 13px; text-align: center; padding: 18px 0; }
+
+    /* Search */
+    #search-form { display: flex; gap: 8px; margin-top: 10px; }
+    #search-input {
+      flex: 1; background: var(--surface); border: 1px solid var(--line);
+      color: var(--text); border-radius: 12px; padding: 11px 14px; font-size: 15px; outline: none;
+    }
+    #search-input:focus { border-color: var(--accent); }
+    #search-form button {
+      border: none; cursor: pointer; color: #fff; font-weight: 700; font-size: 14px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 12px; padding: 0 18px;
+    }
+    #search-status { color: var(--muted); font-size: 12px; margin: 8px 2px 0; min-height: 15px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <span id="conn-dot" class="dot"></span>
+      <h1>Mineradio Remote</h1>
+    </header>
+
+    <div id="conn-banner"><span id="conn-text"></span></div>
+
+    <!-- Pair screen -->
+    <div id="view-pair" hidden>
+      <div class="logo">&#9834;</div>
+      <h2>Pair this phone</h2>
+      <p id="pair-status">Scan the QR code shown in the PC app to pair.</p>
+    </div>
+
+    <!-- Player -->
+    <div id="view-player" hidden>
+      <div class="cover-box">
+        <img id="cover-img" alt="" hidden>
+        <div class="cover-ph" id="cover-ph">&#9835;</div>
+      </div>
+
+      <div class="meta">
+        <div id="track-title">Not playing</div>
+        <div id="track-artists">&nbsp;</div>
+      </div>
+
+      <div class="progress-row">
+        <input id="progress" type="range" min="0" max="0" step="1" value="0" aria-label="Seek">
+        <div class="times">
+          <span id="time-cur">0:00</span>
+          <span id="time-dur">0:00</span>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button id="btn-prev" class="btn-side" aria-label="Previous">
+          <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14l-11-7z"/></svg>
+        </button>
+        <button id="btn-toggle" class="btn-main" aria-label="Play or pause">
+          <svg id="ic-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <svg id="ic-pause" viewBox="0 0 24 24" hidden><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+        </button>
+        <button id="btn-next" class="btn-side" aria-label="Next">
+          <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg>
+        </button>
+      </div>
+
+      <div class="volume-row">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
+        <input id="volume" type="range" min="0" max="100" step="1" value="80" aria-label="Volume">
+      </div>
+
+      <div class="tabs">
+        <button id="tab-queue" class="active" type="button">Queue</button>
+        <button id="tab-search" type="button">Search</button>
+      </div>
+
+      <section id="sec-queue" class="panel">
+        <ul id="queue-list" class="rowlist"></ul>
+        <p id="queue-empty" class="empty">Queue is empty.</p>
+      </section>
+
+      <section id="sec-search" class="panel" hidden>
+        <form id="search-form">
+          <input id="search-input" type="search" placeholder="Search songs…" autocomplete="off" enterkeyhint="search">
+          <button type="submit">Go</button>
+        </form>
+        <p id="search-status"></p>
+        <ul id="search-results" class="rowlist"></ul>
+      </section>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

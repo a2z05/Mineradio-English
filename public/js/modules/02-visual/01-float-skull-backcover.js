@@ -11,11 +11,11 @@ function createFloatLayer() {
   if (floatGroup) return;
   var fgeo = new THREE.BufferGeometry();
   floatPositionsArr = new Float32Array(FLOAT_COUNT * 3);
-  floatBaseArr = new Float32Array(FLOAT_COUNT * 3);  // 基准位置
-  floatPhaseArr = new Float32Array(FLOAT_COUNT * 3);  // 每粒子相位 (0..2π)
+  floatBaseArr = new Float32Array(FLOAT_COUNT * 3);  // base positions
+  floatPhaseArr = new Float32Array(FLOAT_COUNT * 3);  // per-particle phase (0..2π)
   floatColorArr = new Float32Array(FLOAT_COUNT * 3);
   var floatRandArr = new Float32Array(FLOAT_COUNT);
-  var floatAmpArr = new Float32Array(FLOAT_COUNT);      // 漂移幅度 (0.15-0.45)
+  var floatAmpArr = new Float32Array(FLOAT_COUNT);      // drift amplitude (0.15-0.45)
   for (var i = 0; i < FLOAT_COUNT; i++) {
     var halo = i < FLOAT_COUNT * 0.76;
     var bx, by, bz;
@@ -49,7 +49,7 @@ function createFloatLayer() {
   fgeo.setAttribute('aColor', new THREE.BufferAttribute(floatColorArr, 3));
   fgeo.setAttribute('aRand', new THREE.BufferAttribute(floatRandArr, 1));
 
-  // 把 amp + phase 存到 attribute 让 shader 端做漂移 (避免 JS 每帧改 buffer)
+  // store amp + phase in attributes so the shader does the drift (avoids JS touching the buffer every frame)
   fgeo.setAttribute('aAmp', new THREE.BufferAttribute(floatAmpArr, 1));
   fgeo.setAttribute('aPhase', new THREE.BufferAttribute(floatPhaseArr, 3));
 
@@ -116,7 +116,7 @@ function destroyFloatLayer() {
 }
 
 // ============================================================
-//  安魂 — 3D 粒子建模层
+//  Requiem — 3D particle model layer
 // ============================================================
 var SKULL_PRESET_INDEX = 6;
 var SKULL_MODEL_BASE_ROTATION_X = -0.26;
@@ -681,12 +681,12 @@ function updateSkullParticleLayer(dt) {
 }
 
 // ============================================================
-//  封面背面粒子层 (v7.2)
-//   - 独立 Points, 放在 z=-1.5 (主封面平面背面)
-//   - 颜色取自封面镜像 UV
-//   - 慢呼吸 + 小幅 noise 漂移
-//   - 跟主粒子同步旋转 (在主循环里赋值)
-//   - 视角转到背面才能看到 — 不需要手动控制 visible
+//  back-of-cover particle layer (v7.2)
+//   - separate Points placed at z=-1.5 (behind the main cover plane)
+//   - colors sampled from mirrored cover UVs
+//   - slow breathing + small noise drift
+//   - rotates in sync with the main particles (assigned in the main loop)
+//   - only visible when the camera goes behind — no manual visible control needed
 // ============================================================
 var BACK_COVER_COUNT = 3000;
 var backCoverGroup = null;
@@ -698,18 +698,18 @@ function createBackCoverLayer() {
   var bp = new Float32Array(BACK_COVER_COUNT * 3);
   var bc = new Float32Array(BACK_COVER_COUNT * 3);
   var br = new Float32Array(BACK_COVER_COUNT);
-  var bu = new Float32Array(BACK_COVER_COUNT * 2);  // 镜像 UV 用于采样封面
+  var bu = new Float32Array(BACK_COVER_COUNT * 2);  // mirrored UVs for cover sampling
   for (var i = 0; i < BACK_COVER_COUNT; i++) {
     var u = Math.random();
     var v = Math.random();
     // 在 PLANE_SIZE 范围内分布
     bp[i * 3] = (u - 0.5) * PLANE_SIZE;
     bp[i * 3 + 1] = (v - 0.5) * PLANE_SIZE;
-    bp[i * 3 + 2] = -1.5 - Math.random() * 0.4;  // 在主平面后方
-    bu[i * 2] = 1.0 - u;  // 镜像 X
+    bp[i * 3 + 2] = -1.5 - Math.random() * 0.4;  // behind the main plane
+    bu[i * 2] = 1.0 - u;  // mirror X
     bu[i * 2 + 1] = v;
     br[i] = Math.random();
-    bc[i * 3] = 0.7; bc[i * 3 + 1] = 0.6; bc[i * 3 + 2] = 0.8;  // 占位
+    bc[i * 3] = 0.7; bc[i * 3 + 1] = 0.6; bc[i * 3 + 2] = 0.8;  // placeholder
   }
   bg.setAttribute('position', new THREE.BufferAttribute(bp, 3));
   bg.setAttribute('aColor', new THREE.BufferAttribute(bc, 3));
@@ -726,7 +726,7 @@ varying vec3 vC;
 varying float vA;
 void main(){
   vec3 pos = position;
-  // 缓慢呼吸
+  // slow breathing
   pos.x += sin(uTime * 0.20 + aRand * 8.0) * 0.20;
   pos.y += cos(uTime * 0.18 + aRand * 6.0) * 0.22;
   pos.z += sin(uTime * 0.12 + aRand * 5.0) * 0.18 + uBass * 0.12 * sin(aRand * 11.0);
@@ -794,7 +794,7 @@ function refreshBackCoverColorsFromCanvas(coverCanvas) {
   attr.aColor.needsUpdate = true;
 }
 function updateFloatLayer(dt) {
-  // 漂移已在 shader 中完成, JS 不需要每帧改 buffer
+  // drift is handled entirely in the shader; JS doesn't need to touch the buffer per frame
 }
 function refreshFloatColorsFromCover(coverCanvas) {
   if (!floatGroup || !coverCanvas) return;
@@ -823,4 +823,4 @@ function resetFloatColorsToIdle() {
 }
 
 // ============================================================
-//  舞台歌词系统 v9 — Three.js 文字平面, 跟随专辑粒子 3D 运动
+//  stage lyrics system v9 — Three.js text planes moving in 3D with the album particles

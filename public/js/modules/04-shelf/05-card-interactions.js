@@ -78,7 +78,7 @@ renderer.domElement.addEventListener('click', function (e) {
   var mode = shelfManager.getMode();
   var canInteract = shelfManager.canInteract && shelfManager.canInteract();
 
-  // 优先二级内容框
+  // Secondary content box takes priority
   if (shelfManager.hasOpenContent()) {
     var cl = shelfManager.getContentList && shelfManager.getContentList();
     if (cl) {
@@ -97,7 +97,7 @@ renderer.domElement.addEventListener('click', function (e) {
         hitCollectButton = hitCollectButton || screenAction === 'collect';
         hitNextButton = hitNextButton || screenAction === 'next';
         hitPlayButton = hitPlayButton || screenAction === 'play';
-        // 详情页支持直接点歌曲播放；红心/收藏按钮仍然保留原动作。
+        // Detail view supports clicking a song to play it directly; heart/save buttons keep their original actions.
         if (selectedRow && !rowIsPodcastRadio && hitLikeButton) {
           toggleLikeDetailSong(rowHit.row.song);
         } else if (selectedRow && !rowIsPodcastRadio && hitCollectButton) {
@@ -107,7 +107,7 @@ renderer.domElement.addEventListener('click', function (e) {
         } else if ((rowHit.row.song && rowHit.row.song.id) || rowIsPodcastRadio || (selectedRow && hitPlayButton)) {
           cl.playRow(rowHit.row);
         } else {
-          // 滚到这行
+          // Scroll to this row
           cl.scrollBy(rowHit.row.index - cl.getCenterIdx());
         }
         return;
@@ -122,7 +122,7 @@ renderer.domElement.addEventListener('click', function (e) {
     }
   }
 
-  // 一级卡片
+  // Primary cards
   var hit = pointerCardHit(rc, e, mode === 'side' && !shelfPinnedOpen && shelfAlwaysVisible() ? 18 : undefined);
   if (mode === 'side' && !shelfPinnedOpen && !canUseSideShelfWithoutPinnedOpen()) return;
 
@@ -171,10 +171,10 @@ renderer.domElement.addEventListener('contextmenu', function (e) {
   if (!shelfPinnedOpen && typeof setFocusZone === 'function') setFocusZone(null, true);
 });
 
-// 滚轮: 在真实卡片或右侧窄热区内滚卡片; 否则保留给封面粒子/视角
-//   side 模式: 常驻不再用半屏预览区接管滚轮
-//   stage 模式: 鼠标 y > 60% 屏幕高
-//   shift + wheel: 强制滚卡片
+// Wheel: scroll cards when over a real card or the narrow hot zone on the right; otherwise left to cover particles/camera
+//   side mode: always-on no longer takes over the wheel via a half-screen preview area
+//   stage mode: mouse y > 60% of screen height
+//   shift + wheel: force card scrolling
 var wheelOverShelf = false;
 renderer.domElement.addEventListener('wheel', function (e) {
   if (isPointerOverUi(e)) return;
@@ -182,7 +182,7 @@ renderer.domElement.addEventListener('wheel', function (e) {
   if (typeof shelfPlaybackSwitchGuardActive === 'function' && shelfPlaybackSwitchGuardActive()) return;
   markRenderInteraction('shelf-wheel', 900);
   var rc = raycasterFromPointerEvent(e);
-  // 二级框打开时, 只有真正命中详情行才接管滚轮
+  // When the secondary box is open, only take over the wheel when actually hitting a detail row
   if (shelfManager.hasOpenContent()) {
     var cl = shelfManager.getContentList();
     if (cl) {
@@ -214,4 +214,4 @@ renderer.domElement.addEventListener('wheel', function (e) {
   }
 }, { passive: false, capture: true });
 
-// 键盘 / 全局事件
+// Keyboard / global events

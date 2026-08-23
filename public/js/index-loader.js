@@ -15,6 +15,7 @@
     'js/modules/00-state/09-performance-probe.js',
     'js/modules/00-state/10-frame-scheduler.js',
     'js/modules/00-state/11-system-memory-controls.js',
+    'js/modules/00-state/12-i18n.js',
     'js/modules/01-scene/00-renderer-quality.js',
     'js/modules/01-scene/01-orbit-free-camera.js',
     'js/modules/01-scene/02-beat-camera-runtime.js',
@@ -90,6 +91,7 @@
     'js/modules/07-fx/07-bindings-shelf-immersive.js',
     'js/modules/07-fx/08-cache-storage-settings.js',
     'js/modules/07-fx/09-console-workspace.js',
+    'js/modules/07-fx/10-remote-settings.js',
     'js/modules/08-account/00-update-preview.js',
     'js/modules/08-account/00-login-easter-egg.js',
     'js/modules/08-account/01-login-modal-utils.js',
@@ -104,6 +106,7 @@
     'js/modules/10-shell/03-splash.js',
     'js/modules/10-shell/04-desktop-overlay-fullscreen.js',
     'js/modules/10-shell/05-startup-bindings.js',
+    'js/modules/12-remote/00-remote-server-bridge.js',
     'js/modules/11-main-loop.js',
   ];
 
