@@ -33,10 +33,10 @@ function appleMusicAssetUrl(html) {
 
 function errorForStatus(status) {
   status = Number(status) || 0;
-  if (status === 401) return new AppleMusicLyricsError('APPLE_MUSIC_AUTH_EXPIRED', 'Apple Music User Token 已失效', status, true);
-  if (status === 403) return new AppleMusicLyricsError('APPLE_MUSIC_AUTH_EXPIRED', 'Apple Music User Token 已失效', status, true);
-  if (status === 404) return new AppleMusicLyricsError('APPLE_MUSIC_LYRIC_NOT_FOUND', 'Apple Music 没有可用歌词', status, false);
-  if (status === 429) return new AppleMusicLyricsError('APPLE_MUSIC_RATE_LIMITED', 'Apple Music 请求过于频繁', status, true);
+  if (status === 401) return new AppleMusicLyricsError('APPLE_MUSIC_AUTH_EXPIRED', 'Apple Music user token has expired', status, true);
+  if (status === 403) return new AppleMusicLyricsError('APPLE_MUSIC_AUTH_EXPIRED', 'Apple Music user token has expired', status, true);
+  if (status === 404) return new AppleMusicLyricsError('APPLE_MUSIC_LYRIC_NOT_FOUND', 'No lyrics available on Apple Music', status, false);
+  if (status === 429) return new AppleMusicLyricsError('APPLE_MUSIC_RATE_LIMITED', 'Apple Music rate limit hit — try again shortly', status, true);
   return new AppleMusicLyricsError('APPLE_MUSIC_REQUEST_FAILED', `Apple Music request failed (${status || 'network'})`, status, status >= 500);
 }
 
@@ -151,7 +151,7 @@ class AppleMusicLyricsProvider {
     let token = extractAppleMusicBearerToken(home.text);
     if (!token) {
       const asset = appleMusicAssetUrl(home.text);
-      if (!asset) throw new AppleMusicLyricsError('APPLE_MUSIC_BEARER_UNAVAILABLE', 'Apple Music 网页令牌不可用', 502, true);
+      if (!asset) throw new AppleMusicLyricsError('APPLE_MUSIC_BEARER_UNAVAILABLE', 'Apple Music web token is unavailable', 502, true);
       const script = await this.fetchText(asset, {
         headers: { 'User-Agent':'Mozilla/5.0', Referer:`${APPLE_MUSIC_ORIGIN}/` },
         maxBytes:16 * 1024 * 1024,
@@ -159,7 +159,7 @@ class AppleMusicLyricsProvider {
       if (!script.response.ok) throw errorForStatus(script.response.status);
       token = extractAppleMusicBearerToken(script.text);
     }
-    if (!token) throw new AppleMusicLyricsError('APPLE_MUSIC_BEARER_UNAVAILABLE', 'Apple Music 网页令牌不可用', 502, true);
+    if (!token) throw new AppleMusicLyricsError('APPLE_MUSIC_BEARER_UNAVAILABLE', 'Apple Music web token is unavailable', 502, true);
     this.bearerToken = token;
     this.bearerExpiresAt = this.now() + 30 * 60 * 1000;
     return token;
@@ -167,7 +167,7 @@ class AppleMusicLyricsProvider {
 
   async requestJson(pathname, options = {}) {
     const auth = options.auth || this.auth();
-    if (!auth || !auth.mediaUserToken) throw new AppleMusicLyricsError('APPLE_MUSIC_AUTH_REQUIRED', '请先配置 Apple Music User Token', 401, false);
+    if (!auth || !auth.mediaUserToken) throw new AppleMusicLyricsError('APPLE_MUSIC_AUTH_REQUIRED', 'Configure an Apple Music user token first', 401, false);
     let lastError = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -202,15 +202,15 @@ class AppleMusicLyricsProvider {
     const existing = this.auth();
     const mediaUserToken = String(input.mediaUserToken || existing && existing.mediaUserToken || '').trim();
     const storefrontOverride = normalizeStorefront(input.storefrontOverride);
-    if (mediaUserToken.length < 50) throw new AppleMusicLyricsError('APPLE_MUSIC_TOKEN_INVALID', 'User Token 格式无效', 400, false);
+    if (mediaUserToken.length < 50) throw new AppleMusicLyricsError('APPLE_MUSIC_TOKEN_INVALID', 'Apple Music user token format is invalid', 400, false);
     if (!this.store || typeof this.store.save !== 'function' ||
         typeof this.store.isAvailable !== 'function' || !this.store.isAvailable()) {
-      throw new AppleMusicLyricsError('APPLE_MUSIC_SECURE_STORAGE_UNAVAILABLE', '安全本地存储不可用', 503, false);
+      throw new AppleMusicLyricsError('APPLE_MUSIC_SECURE_STORAGE_UNAVAILABLE', 'Secure local storage is unavailable', 503, false);
     }
     const provisional = { mediaUserToken, storefrontOverride, validatedStorefront:'', validatedAt:0 };
     const body = await this.requestJson('/v1/me/storefront', { auth: provisional });
     const detected = normalizeStorefront(body && body.data && body.data[0] && body.data[0].id);
-    if (!detected && !storefrontOverride) throw new AppleMusicLyricsError('APPLE_MUSIC_STOREFRONT_UNAVAILABLE', '无法识别 Apple Music Storefront', 502, false);
+    if (!detected && !storefrontOverride) throw new AppleMusicLyricsError('APPLE_MUSIC_STOREFRONT_UNAVAILABLE', 'Could not detect the Apple Music storefront', 502, false);
     const next = {
       mediaUserToken,
       storefrontOverride,
@@ -218,7 +218,7 @@ class AppleMusicLyricsProvider {
       validatedAt: this.now(),
     };
     if (this.store.save(next) !== true) {
-      throw new AppleMusicLyricsError('APPLE_MUSIC_SECURE_STORAGE_UNAVAILABLE', '安全本地存储不可用', 503, false);
+      throw new AppleMusicLyricsError('APPLE_MUSIC_SECURE_STORAGE_UNAVAILABLE', 'Secure local storage is unavailable', 503, false);
     }
     this.lastFailure = null;
     return this.status();
@@ -226,7 +226,7 @@ class AppleMusicLyricsProvider {
 
   async validateStored() {
     const auth = this.auth();
-    if (!auth) throw new AppleMusicLyricsError('APPLE_MUSIC_AUTH_REQUIRED', '请先配置 Apple Music User Token', 401, false);
+    if (!auth) throw new AppleMusicLyricsError('APPLE_MUSIC_AUTH_REQUIRED', 'Configure an Apple Music user token first', 401, false);
     return this.validateAndSave(auth);
   }
 
@@ -237,7 +237,7 @@ class AppleMusicLyricsProvider {
   async search(options = {}) {
     const auth = this.auth();
     const storefront = this.storefront(auth);
-    if (!storefront) throw new AppleMusicLyricsError('APPLE_MUSIC_STOREFRONT_UNAVAILABLE', '请先验证 Apple Music User Token', 400, false);
+    if (!storefront) throw new AppleMusicLyricsError('APPLE_MUSIC_STOREFRONT_UNAVAILABLE', 'Validate your Apple Music user token first', 400, false);
     const term = String(options.term || '').trim().slice(0, 300);
     if (!term) return [];
     const limit = Math.max(1, Math.min(20, Number(options.limit) || 12));

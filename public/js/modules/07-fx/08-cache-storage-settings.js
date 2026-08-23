@@ -21,14 +21,14 @@ function setMineradioCacheStorageText(id, value) {
 
 function applyMineradioCacheSettings(snapshot) {
   if (!snapshot || !snapshot.ok) {
-    setMineradioCacheStorageText('cache-storage-total', '读取失败');
-    setMineradioCacheStorageText('cache-storage-note', snapshot && snapshot.error ? ('缓存设置不可用：' + snapshot.error) : '缓存设置不可用');
+    setMineradioCacheStorageText('cache-storage-total', 'Failed to read');
+    setMineradioCacheStorageText('cache-storage-note', snapshot && snapshot.error ? ('Cache settings unavailable: ' + snapshot.error) : 'Cache settings unavailable');
     return;
   }
   var settings = snapshot.settings || {};
   var usage = snapshot.usage || {};
   setMineradioCacheStorageText('cache-storage-root', settings.rootPath);
-  setMineradioCacheStorageText('cache-storage-total', '已占用 ' + formatMineradioCacheBytes(usage.totalManagedBytes));
+  setMineradioCacheStorageText('cache-storage-total', 'Using ' + formatMineradioCacheBytes(usage.totalManagedBytes));
   setMineradioCacheStorageText('cache-storage-lyrics-path', settings.lyricsPath);
   setMineradioCacheStorageText('cache-storage-lyrics-size', formatMineradioCacheBytes(usage.lyricsBytes));
   setMineradioCacheStorageText('cache-storage-chromium-path', settings.activeChromiumPath || settings.chromiumPath);
@@ -37,26 +37,26 @@ function applyMineradioCacheSettings(snapshot) {
   setMineradioCacheStorageText('cache-storage-beatmaps-size', formatMineradioCacheBytes(usage.beatmapsBytes));
   setMineradioCacheStorageText('cache-storage-wallpaper-path', settings.activeWallpaperEnginePath || settings.wallpaperEnginePath);
   setMineradioCacheStorageText('cache-storage-wallpaper-size', formatMineradioCacheBytes(usage.wallpaperEngineBytes));
-  setMineradioCacheStorageText('cache-storage-userdata-path', settings.userDataPath || '系统安全数据目录');
+  setMineradioCacheStorageText('cache-storage-userdata-path', settings.userDataPath || 'System safe data directory');
   setMineradioCacheStorageText('cache-storage-userdata-size', formatMineradioCacheBytes(usage.userDataBytes));
   var restartButton = mineradioCacheStorageNode('cache-storage-restart');
   if (restartButton) restartButton.hidden = !settings.restartRequired;
   setMineradioCacheStorageText(
     'cache-storage-note',
     settings.restartRequired
-      ? '歌词缓存已切换；封面、网络、音频分片、节奏分析与 WE 静音场景将在重启后改用新目录。'
-      : '歌词缓存立即生效；封面、网络、音频分片、节奏分析与 WE 静音场景已使用此目录。'
+      ? 'Lyric cache switched; covers, network cache, audio segments, beat analysis and WE muted scenes will move to the new directory after a restart.'
+      : 'Lyric cache applies immediately; covers, network cache, audio segments, beat analysis and WE muted scenes already use this directory.'
   );
 }
 
 function refreshMineradioCacheSettings() {
   if (!window.desktopWindow || typeof window.desktopWindow.getCacheSettings !== 'function') {
-    applyMineradioCacheSettings({ ok: false, error: '仅桌面版支持本地缓存路径设置' });
+    applyMineradioCacheSettings({ ok: false, error: 'Local cache path settings are only available in the desktop app' });
     return Promise.resolve();
   }
-  setMineradioCacheStorageText('cache-storage-total', '正在统计...');
+  setMineradioCacheStorageText('cache-storage-total', 'Calculating...');
   return window.desktopWindow.getCacheSettings().then(applyMineradioCacheSettings).catch(function (error) {
-    applyMineradioCacheSettings({ ok: false, error: error && error.message || '读取失败' });
+    applyMineradioCacheSettings({ ok: false, error: error && error.message || 'Failed to read' });
   });
 }
 
@@ -68,7 +68,7 @@ function chooseMineradioCacheRoot() {
   }).then(function (snapshot) {
     if (snapshot) applyMineradioCacheSettings(snapshot);
   }).catch(function (error) {
-    applyMineradioCacheSettings({ ok: false, error: error && error.message || '保存失败' });
+    applyMineradioCacheSettings({ ok: false, error: error && error.message || 'Failed to save' });
   });
 }
 

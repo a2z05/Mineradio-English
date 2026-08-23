@@ -2,7 +2,7 @@
   "name": "mineradio",
   "productName": "Mineradio English",
   "version": "2.1.0-en.1",
-  "description": "Windows 沉浸式音乐播放器，融合桌面模式、歌词舞台、粒子视觉和 3D 歌单架。",
+  "description": "Immersive Windows music player blending desktop mode, a lyrics stage, particle visuals and a 3D playlist shelf — full English edition.",
   "author": "Mineradio",
   "license": "GPL-3.0-only",
   "main": "desktop/main.js",
@@ -31,8 +31,18 @@
       "cuefield/**/*",
       "server.js",
       "*-api.js",
+      "spotify-auth-session.js",
+      "spotify-secure-auth-store.js",
+      "spotify-web-api-policy.js",
+      "apple-music-ttml.js",
+      "apple-music-secure-auth-store.js",
+      "apple-music-lyrics-provider.js",
+      "lyric-cache.js",
+      "qq-lyric-codec.js",
+      "romanization-engine.js",
       "qishui-auth-v6.js",
       "qishui-qr-login.js",
+      "spotify-proxy.js",
       "qishui-auth-v6/**/*",
       "qishui-audio-decryptor/**/*",
       "dj-analyzer.js",
@@ -77,16 +87,16 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "XxHuberrr",
-        "repo": "Mineradio"
+        "owner": "a2z05",
+        "repo": "Mineradio-English"
       }
     ]
   },
   "mineradio": {
     "update": {
       "provider": "github",
-      "owner": "XxHuberrr",
-      "repo": "Mineradio",
+      "owner": "a2z05",
+      "repo": "Mineradio-English",
       "preview": false,
       "preferMirrors": true,
       "mirrors": [

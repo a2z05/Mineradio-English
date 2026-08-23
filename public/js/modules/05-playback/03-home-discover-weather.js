@@ -145,9 +145,9 @@ function renderHomeDiscover() {
     setHomeArt('home-library-art', '', 280);
   } else {
     if (dailyTitle) dailyTitle.textContent = daily ? daily.name : 'Daily Mix';
-    if (dailySub) dailySub.textContent = daily ? ((daily.artist || songSourceLabel(daily) || "Today's Song") + ' · Click to play today's queue') : 'Sync your daily songs';
+    if (dailySub) dailySub.textContent = daily ? ((daily.artist || songSourceLabel(daily) || "Today's Song") + ' · Click to play today’s queue') : 'Sync your daily songs';
     if (privateTitle) privateTitle.textContent = cardSongB ? cardSongB.name : 'Private Radar';
-    if (privateSub) privateSub.textContent = cardSongB ? (cardSongB.artist || songSourceLabel(cardSongB) || 'Recommended songs') : (homeDiscoverState.songs.length + ' tracks · Based on today's picks and listening habits');
+    if (privateSub) privateSub.textContent = cardSongB ? (cardSongB.artist || songSourceLabel(cardSongB) || 'Recommended songs') : (homeDiscoverState.songs.length + ' tracks · Based on today’s picks and listening habits');
     if (libTitle) libTitle.textContent = cardSongC ? cardSongC.name : (summary.topArtist ? summary.topArtist.name : 'More Songs');
     if (libSub) libSub.textContent = cardSongC ? (cardSongC.artist || songSourceLabel(cardSongC) || 'Recommended songs') : (summary.topArtist ? ('Artist affinity · ' + summary.topArtist.plays + ' plays') : 'Play a few songs to build your taste profile');
     setHomeArt('home-weather-art', (userPlaylists[0] && userPlaylists[0].cover) || (playlistItem && playlistItem.cover) || daily && daily.cover, 280);

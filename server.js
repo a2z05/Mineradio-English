@@ -181,14 +181,14 @@ const QISHUI_AUDIO_DECRYPT_CACHE_MAX_BYTES = 96 * 1024 * 1024;
 let qishuiAudioDecryptCacheBytes = 0;
 const lyricCache = new LyricCache({ dir: path.join(__dirname, 'data', 'lyric-cache') });
 const UPDATE_FALLBACK_NOTES = [
-  '修复多行歌词与 3D 歌单架的显示层级',
-  '优化更新入口与安装包获取流程',
+  'Fixed multi-line lyrics and the 3D playlist shelf',
+  'Improved the update entry and installer download flow',
 ];
 const OPEN_METEO_FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const OPEN_METEO_GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const WEATHER_IP_LOCATION_URL = 'http://ip-api.com/json/';
 const WEATHER_DEFAULT_LOCATION = {
-  name: '上海',
+  name: 'Shanghai',
   country: 'China',
   latitude: 31.2304,
   longitude: 121.4737,
@@ -673,14 +673,14 @@ function uniqueDownloadCandidates(urls, opts) {
       const url = buildMirrorUrl(source, mirror);
       if (url) mirrored.push({
         url,
-        label: '国内加速线路 ' + (index + 1),
+        label: 'China Mirror ' + (index + 1),
         mirrored: true,
       });
     });
   });
   const direct = directUrls.map(url => ({
     url,
-    label: directSet.has(url.toLowerCase()) ? 'GitHub 直连' : '下载线路',
+    label: directSet.has(url.toLowerCase()) ? 'GitHub Direct' : 'Download Line',
     mirrored: false,
   }));
   const ordered = UPDATE_CONFIG.preferMirrors === false ? direct.concat(mirrored) : mirrored.concat(direct);
@@ -749,10 +749,10 @@ function normalizeUpdateDownloadPages(values, fallbackLabel) {
     const item = value && typeof value === 'object' ? value : { url: value };
     const url = safeExternalUpdateUrl(item.url || item.href || item.downloadPageUrl || item.externalUrl || '');
     if (!url || seen.has(url)) return;
-    const label = cleanReleaseLine(item.label || item.name || fallbackLabel || `下载线路 ${index + 1}`)
+    const label = cleanReleaseLine(item.label || item.name || fallbackLabel || `Download Line ${index + 1}`)
       .replace(/[<>|]/g, '')
       .slice(0, 24)
-      .trim() || `下载线路 ${index + 1}`;
+      .trim() || `Download Line ${index + 1}`;
     seen.add(url);
     pages.push({ label, url });
   });
@@ -805,10 +805,10 @@ function normalizeManifestUpdateInfo(data) {
   );
   const downloadPages = normalizeUpdateDownloadPages(
     release.downloadPages || data.downloadPages || [],
-    '网盘下载'
+    'Cloud Drive'
   );
   if (legacyExternalUrl && !downloadPages.some(page => page.url === legacyExternalUrl)) {
-    downloadPages.unshift({ label: '网盘下载', url: legacyExternalUrl });
+    downloadPages.unshift({ label: 'Cloud Drive', url: legacyExternalUrl });
   }
   const externalUrl = downloadPages.length ? downloadPages[0].url : legacyExternalUrl;
   const downloadPageUrl = externalUrl || htmlUrl;
@@ -834,7 +834,7 @@ function normalizeManifestUpdateInfo(data) {
       asset: null,
       patch: null,
       patchAvailable: false,
-      summary: release.summary || data.summary || notes[0] || '发现新版本，建议更新。',
+      summary: release.summary || data.summary || notes[0] || 'New version available — updating is recommended.',
       notes,
     },
     source: 'manifest',
@@ -947,7 +947,7 @@ function localUpdateFallback(reason, opts) {
       asset: null,
       patch: null,
       patchAvailable: false,
-      summary: '当前版本，更新检测已就绪。',
+      summary: 'You are on the current version; update check is ready.',
       notes: UPDATE_FALLBACK_NOTES,
     },
     reason: reason || '',
@@ -962,31 +962,31 @@ function updateError(code, message, cause) {
 function classifyUpdateError(err) {
   const code = String(err && err.code || '').trim();
   const message = String(err && err.message || err || '').trim();
-  const detail = message || code || '未知错误';
+  const detail = message || code || 'Unknown error';
   if (/HASH|DIGEST|CHECKSUM/i.test(code + ' ' + message)) {
-    return { code: code || 'UPDATE_HASH_MISMATCH', reason: '文件校验失败，可能是线路缓存异常，已拦截该安装包。', detail };
+    return { code: code || 'UPDATE_HASH_MISMATCH', reason: 'File verification failed, possibly a mirror cache issue. The installer was blocked.', detail };
   }
   if (/SIZE_MISMATCH|content length/i.test(code + ' ' + message)) {
-    return { code: code || 'UPDATE_SIZE_MISMATCH', reason: '下载文件大小不一致，可能是网络中断或线路缓存不完整。', detail };
+    return { code: code || 'UPDATE_SIZE_MISMATCH', reason: 'Downloaded file size mismatch — the download may have been interrupted or the line cache is incomplete.', detail };
   }
   if (/AbortError|TIMEOUT|ETIMEDOUT|timeout/i.test(code + ' ' + message)) {
-    return { code: code || 'UPDATE_TIMEOUT', reason: '连接超时，当前网络到更新线路不稳定。', detail };
+    return { code: code || 'UPDATE_TIMEOUT', reason: 'Connection timed out; the network route to this update line is unstable.', detail };
   }
   if (/ENOTFOUND|EAI_AGAIN|DNS|fetch failed|getaddrinfo/i.test(code + ' ' + message)) {
-    return { code: code || 'UPDATE_DNS_FAILED', reason: '域名解析失败，可能是当前网络无法连接该更新线路。', detail };
+    return { code: code || 'UPDATE_DNS_FAILED', reason: 'DNS resolution failed — this network may not reach the update line.', detail };
   }
   if (/ECONNRESET|ECONNREFUSED|socket|network/i.test(code + ' ' + message)) {
-    return { code: code || 'UPDATE_NETWORK_FAILED', reason: '网络连接被中断，已尝试切换更新线路。', detail };
+    return { code: code || 'UPDATE_NETWORK_FAILED', reason: 'The network connection was interrupted; other update lines were tried.', detail };
   }
   const http = message.match(/\bHTTP[_\s-]?(\d{3})\b/i) || message.match(/\b(\d{3})\b/);
   if (http) {
     const status = Number(http[1]);
-    if (status === 403) return { code: code || 'UPDATE_HTTP_403', reason: '更新线路返回 403，可能被限流或拦截。', detail };
-    if (status === 404) return { code: code || 'UPDATE_HTTP_404', reason: '更新文件不存在，可能 release 资源还没有同步完成。', detail };
-    if (status >= 500) return { code: code || 'UPDATE_HTTP_5XX', reason: '更新线路服务器异常，请稍后重试。', detail };
-    return { code: code || ('UPDATE_HTTP_' + status), reason: '更新线路返回 HTTP ' + status + '。', detail };
+    if (status === 403) return { code: code || 'UPDATE_HTTP_403', reason: 'The update line returned 403 — it may be rate limited or blocked.', detail };
+    if (status === 404) return { code: code || 'UPDATE_HTTP_404', reason: 'Update file not found; the release assets may not be synced yet.', detail };
+    if (status >= 500) return { code: code || 'UPDATE_HTTP_5XX', reason: 'The update line server has issues. Please try again later.', detail };
+    return { code: code || ('UPDATE_HTTP_' + status), reason: 'The update line returned HTTP ' + status + '.', detail };
   }
-  return { code: code || 'UPDATE_FAILED', reason: '更新失败：' + detail, detail };
+  return { code: code || 'UPDATE_FAILED', reason: 'Update failed: ' + detail, detail };
 }
 async function fetchWithTimeout(url, opts, timeoutMs) {
   const controller = new AbortController();
@@ -1045,7 +1045,7 @@ async function fetchTextFromCandidates(candidates, timeoutMs) {
       failures.push(candidate.label + ': ' + info.reason);
     }
   }
-  throw updateError('UPDATE_ALL_LINES_FAILED', failures.join('；') || 'All update lines failed');
+  throw updateError('UPDATE_ALL_LINES_FAILED', failures.join('; ') || 'All update lines failed');
 }
 function yamlScalar(text, key) {
   const pattern = new RegExp('^\\s*' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*:\\s*(.+?)\\s*$', 'm');
@@ -1076,8 +1076,8 @@ function parseLatestYmlUpdateInfo(text, reason) {
       asset: null,
       patch: null,
       patchAvailable: false,
-      summary: '发现新版本，请前往发布页面获取安装包。',
-      notes: ['更新入口已改为浏览器外部下载', 'Mineradio 不再在本地下载或应用补丁'],
+      summary: 'New version available — visit the release page to get the installer.',
+      notes: ['Updates now download externally in your browser', 'Mineradio no longer downloads or patches locally'],
     },
     source: 'latest-yml',
     reason: reason || '',
@@ -1134,7 +1134,7 @@ async function fetchLatestUpdateInfo() {
         asset: null,
         patch: null,
         patchAvailable: false,
-        summary: notes[0] || '发现新版本，建议更新。',
+        summary: notes[0] || 'New version available — updating is recommended.',
         notes,
       },
     };
@@ -1324,27 +1324,27 @@ function classifyNeteasePlaybackRestriction(lastData, loginInfo) {
   const code = Number(lastData && lastData.code);
   const freeTrial = lastData && lastData.freeTrialInfo;
   if (!loggedIn) {
-    return playbackRestriction('netease', 'login_required', '网易云需要登录后尝试获取完整播放地址', 'login', { code, fee });
+    return playbackRestriction('netease', 'login_required', 'NetEase requires login before a full playback URL can be fetched', 'login', { code, fee });
   }
   if (freeTrial) {
-    return playbackRestriction('netease', 'trial_only', '网易云仅返回试听片段，完整播放需要会员或购买', 'upgrade', { code, fee });
+    return playbackRestriction('netease', 'trial_only', 'NetEase only returned a trial clip; full playback requires VIP or purchase', 'upgrade', { code, fee });
   }
   if (fee === 1) {
     if (vipReady) {
-      return playbackRestriction('netease', 'copyright_unavailable', '当前会员状态下仍未取得可播放地址，已尝试在网易云内匹配同一录音版本', 'switch_source', { code, fee });
+      return playbackRestriction('netease', 'copyright_unavailable', 'No playable URL even with membership; tried matching the same recording on NetEase', 'switch_source', { code, fee });
     }
-    return playbackRestriction('netease', 'vip_required', '网易云歌曲需要 VIP 权限，当前无法获取完整播放地址', 'upgrade', { code, fee });
+    return playbackRestriction('netease', 'vip_required', 'This NetEase track needs VIP; a full playback URL is unavailable right now', 'upgrade', { code, fee });
   }
   if (fee === 4) {
-    return playbackRestriction('netease', 'paid_required', '网易云歌曲需要单曲、专辑购买或更高权限', 'purchase', { code, fee });
+    return playbackRestriction('netease', 'paid_required', 'This NetEase track requires a single/album purchase or higher access', 'purchase', { code, fee });
   }
   if (fee === 8) {
-    return playbackRestriction('netease', 'copyright_unavailable', '当前网易云版本没有返回完整音源，已尝试匹配站内同一录音版本', 'switch_source', { code, fee });
+    return playbackRestriction('netease', 'copyright_unavailable', 'NetEase did not return full audio for this version; tried matching the same recording on-site', 'switch_source', { code, fee });
   }
   if (code === 404 || code === 403) {
-    return playbackRestriction('netease', 'copyright_unavailable', '网易云版权暂不可播，换源或稍后重试会更稳', 'switch_source', { code, fee });
+    return playbackRestriction('netease', 'copyright_unavailable', 'NetEase copyright is not playable right now; switching source or retrying later may work better', 'switch_source', { code, fee });
   }
-  return playbackRestriction('netease', 'url_unavailable', '网易云没有返回可播放地址，可能是版权、会员或地区限制', loggedIn ? 'switch_source' : 'login', { code, fee });
+  return playbackRestriction('netease', 'url_unavailable', 'NetEase returned no playable URL — possibly copyright, VIP, or region restrictions', loggedIn ? 'switch_source' : 'login', { code, fee });
 }
 function classifyQQPlaybackRestriction(info, session) {
   const hasSession = typeof session === 'object' ? !!session.hasSession : !!session;
@@ -1353,28 +1353,28 @@ function classifyQQPlaybackRestriction(info, session) {
   const code = Number((info && (info.result || info.code || info.errtype)) || 0);
   const lower = rawMsg.toLowerCase();
   if (!hasSession) {
-    return playbackRestriction('qq', 'login_required', 'QQ 音乐需要登录或授权后才能获取播放地址', 'login', { code, rawMessage: rawMsg });
+    return playbackRestriction('qq', 'login_required', 'QQ Music requires login or authorization before a playback URL can be fetched', 'login', { code, rawMessage: rawMsg });
   }
   if (!hasPlaybackKey && code === 104003) {
-    return playbackRestriction('qq', 'login_required', 'QQ 音乐当前只拿到了网页登录状态，还缺少播放授权，请重新打开官方 QQ 音乐登录窗口完成授权', 'login', { code, rawMessage: rawMsg, missingPlaybackKey: true });
+    return playbackRestriction('qq', 'login_required', 'Only a web login is active; playback authorization is missing. Reopen the official QQ Music login window to complete authorization', 'login', { code, rawMessage: rawMsg, missingPlaybackKey: true });
   }
   if (code === 104003) {
-    return playbackRestriction('qq', 'copyright_unavailable', 'QQ 音乐没有给当前版本返回播放地址，通常是版权、会员或官方版本限制，可以换一个搜索结果或切到网易云源', 'switch_source', { code, rawMessage: rawMsg });
+    return playbackRestriction('qq', 'copyright_unavailable', 'QQ Music returned no URL for this version — usually copyright, membership, or official-client limits. Try another result or switch to the NetEase source', 'switch_source', { code, rawMessage: rawMsg });
   }
   if (/vip|会员|付费|购买|数字专辑|专辑|pay/.test(lower + rawMsg)) {
-    return playbackRestriction('qq', 'paid_required', 'QQ 音乐歌曲需要会员、购买或数字专辑权限', 'upgrade', { code, rawMessage: rawMsg });
+    return playbackRestriction('qq', 'paid_required', 'This QQ Music track needs VIP, a purchase, or digital album rights', 'upgrade', { code, rawMessage: rawMsg });
   }
   if (code && code !== 0) {
-    return playbackRestriction('qq', 'copyright_unavailable', rawMsg || 'QQ 音乐版权暂不可播或仅官方客户端可播', 'switch_source', { code, rawMessage: rawMsg });
+    return playbackRestriction('qq', 'copyright_unavailable', rawMsg || 'QQ Music copyright not playable right now, or official client only', 'switch_source', { code, rawMessage: rawMsg });
   }
-  return playbackRestriction('qq', 'url_unavailable', 'QQ 音乐没有返回播放地址，可能受版权、会员或官方客户端限制', 'switch_source', { code, rawMessage: rawMsg });
+  return playbackRestriction('qq', 'url_unavailable', 'QQ Music returned no playback URL — possibly copyright, VIP, or official-client limits', 'switch_source', { code, rawMessage: rawMsg });
 }
 const NETEASE_QUALITY_CANDIDATES = [
-  { level: 'jymaster', br: 1999000, label: '超清母带', svip: true },
-  { level: 'hires',    br: 1999000, label: '高清臻音' },
-  { level: 'lossless', br: 1411000, label: '无损' },
-  { level: 'exhigh',   br: 999000,  label: '极高' },
-  { level: 'standard', br: 128000,  label: '标准' },
+  { level: 'jymaster', br: 1999000, label: 'Ultra Master', svip: true },
+  { level: 'hires',    br: 1999000, label: 'Hi-Res' },
+  { level: 'lossless', br: 1411000, label: 'Lossless' },
+  { level: 'exhigh',   br: 999000,  label: 'High (320k)' },
+  { level: 'standard', br: 128000,  label: 'Standard (128k)' },
 ];
 const NETEASE_DIRECT_RESOLVE_BUDGET_MS = 4800;
 const NETEASE_SOURCE_MATCH_TOTAL_BUDGET_MS = 8000;
@@ -1382,7 +1382,7 @@ const NETEASE_SOURCE_MATCH_LOOKUP_BUDGET_MS = 4800;
 const NETEASE_SONG_URL_TOTAL_BUDGET_MS = 12000;
 const QQ_QUALITY_CANDIDATE_TEMPLATES = [
   { prefix: 'RS01', ext: '.flac', level: 'hires', label: 'Hi-Res FLAC' },
-  { prefix: 'F000', ext: '.flac', level: 'lossless', label: '无损 FLAC' },
+  { prefix: 'F000', ext: '.flac', level: 'lossless', label: 'Lossless FLAC' },
   { prefix: 'M800', ext: '.mp3', level: 'exhigh', label: '320k MP3' },
   { prefix: 'M500', ext: '.mp3', level: 'standard', label: '128k MP3' },
   { prefix: 'C400', ext: '.m4a', level: 'aac', label: 'AAC/M4A' },
@@ -1463,9 +1463,9 @@ function isLowSignalPodcastItem(item) {
 
 const QQ_LIKED_PLAYLIST_ID = 'liked';
 const QQ_LIKED_DIRID = 201;
-const QQ_LIKED_PLAYLIST_NAME = 'QQ 音乐·我的喜欢';
+const QQ_LIKED_PLAYLIST_NAME = 'QQ Music Liked Songs';
 const QQ_LIKED_PLAYLIST_COVER = 'https://y.gtimg.cn/mediastyle/global/img/cover_like.png';
-const QQ_LIKED_AUTH_MESSAGE = 'QQ 音乐“我的喜欢”需要完整 QQ 音乐授权。请重新打开官方 QQ 音乐登录窗口，等待进入播放器页后再关闭。';
+const QQ_LIKED_AUTH_MESSAGE = 'QQ Music "Liked Songs" requires full QQ Music authorization. Reopen the official QQ Music login window and wait until you reach the player page before closing it.';
 const qqLikedPlaylistCoverByUser = new Map();
 
 function qqLikedPlaylistUserKey(info) {
@@ -1876,7 +1876,7 @@ async function handleDiscoverHome() {
 
   const personalizedBody = result[0].status === 'fulfilled' && result[0].value && result[0].value.body || {};
   const publicPlaylists = (personalizedBody.result || personalizedBody.data || [])
-    .map(pl => mapDiscoverPlaylist(pl, '推荐歌单'))
+    .map(pl => mapDiscoverPlaylist(pl, 'Recommended Playlists'))
     .filter(pl => pl.id && pl.name)
     .slice(0, 8);
 
@@ -1885,7 +1885,7 @@ async function handleDiscoverHome() {
     const body = result[1].value.body || {};
     const raw = body.recommend || body.data || [];
     privatePlaylists = (Array.isArray(raw) ? raw : [])
-      .map(pl => mapDiscoverPlaylist(pl, '私人推荐'))
+      .map(pl => mapDiscoverPlaylist(pl, 'Personal Picks'))
       .filter(pl => pl.id && pl.name)
       .slice(0, 6);
   }
@@ -1968,19 +1968,19 @@ function clampNumber(value, min, max, fallback) {
 
 function openMeteoWeatherLabel(code) {
   code = Number(code);
-  if (code === 0) return '晴';
-  if (code === 1 || code === 2) return '少云';
-  if (code === 3) return '阴';
-  if (code === 45 || code === 48) return '雾';
-  if (code === 51 || code === 53 || code === 55) return '毛毛雨';
-  if (code === 56 || code === 57) return '冻雨';
-  if (code === 61 || code === 63 || code === 65) return '雨';
-  if (code === 66 || code === 67) return '冻雨';
-  if (code === 71 || code === 73 || code === 75 || code === 77) return '雪';
-  if (code === 80 || code === 81 || code === 82) return '阵雨';
-  if (code === 85 || code === 86) return '阵雪';
-  if (code === 95 || code === 96 || code === 99) return '雷雨';
-  return '天气';
+  if (code === 0) return 'Clear';
+  if (code === 1 || code === 2) return 'Partly Cloudy';
+  if (code === 3) return 'Overcast';
+  if (code === 45 || code === 48) return 'Fog';
+  if (code === 51 || code === 53 || code === 55) return 'Drizzle';
+  if (code === 56 || code === 57) return 'Freezing Rain';
+  if (code === 61 || code === 63 || code === 65) return 'Rain';
+  if (code === 66 || code === 67) return 'Freezing Rain';
+  if (code === 71 || code === 73 || code === 75 || code === 77) return 'Snow';
+  if (code === 80 || code === 81 || code === 82) return 'Showers';
+  if (code === 85 || code === 86) return 'Snow Showers';
+  if (code === 95 || code === 96 || code === 99) return 'Thunderstorm';
+  return 'Weather';
 }
 
 function buildWeatherMood(weather, date) {
@@ -2003,92 +2003,92 @@ function buildWeatherMood(weather, date) {
 
   let mood = {
     key: 'clear',
-    title: '晴朗电台',
-    tagline: '让节奏亮一点，像窗边的光',
+    title: 'Sunny Radio',
+    tagline: 'Brighter beats, like light by the window',
     energy: 0.62,
     warmth: 0.58,
     focus: 0.48,
     melancholy: 0.24,
-    keywords: ['轻快 华语', 'city pop', 'indie pop', 'chill pop', '阳光 歌单'],
+    keywords: ['upbeat mandopop', 'city pop', 'indie pop', 'chill pop', 'sunny playlist'],
   };
   if (isStorm) {
     mood = {
       key: 'storm',
-      title: '雷雨电台',
-      tagline: '低频更厚，适合把世界关小一点',
+      title: 'Thunderstorm Radio',
+      tagline: 'Thicker low end — turn the world down a little',
       energy: 0.46,
       warmth: 0.34,
       focus: 0.66,
       melancholy: 0.62,
-      keywords: ['暗色 R&B', 'trip hop', '夜晚 电子', '氛围 摇滚', '雨夜 歌单'],
+      keywords: ['dark R&B', 'trip hop', 'night electronic', 'atmospheric rock', 'rainy night playlist'],
     };
   } else if (isRain) {
     mood = {
       key: 'rain',
-      title: '雨天电台',
-      tagline: '留一点潮湿的空间给旋律',
+      title: 'Rainy Day Radio',
+      tagline: 'Leave a little damp space for the melody',
       energy: 0.38,
       warmth: 0.42,
       focus: 0.64,
       melancholy: 0.66,
-      keywords: ['雨天 R&B', 'lofi rainy', '华语 慢歌', 'dream pop', '雨夜 歌单'],
+      keywords: ['rainy R&B', 'lofi rainy', 'mandopop ballads', 'dream pop', 'rainy night playlist'],
     };
   } else if (isSnow || feels <= 3) {
     mood = {
       key: 'snow',
-      title: '冷空气电台',
-      tagline: '干净、慢速、带一点冬天的颗粒感',
+      title: 'Cold Air Radio',
+      tagline: 'Clean and slow, with a wintry grain',
       energy: 0.34,
       warmth: 0.28,
       focus: 0.72,
       melancholy: 0.54,
-      keywords: ['冬天 民谣', 'ambient piano', '日系 冬天', 'indie folk', '安静 歌单'],
+      keywords: ['winter folk', 'ambient piano', 'japanese winter', 'indie folk', 'quiet playlist'],
     };
   } else if (feels >= 31 || humidity >= 78) {
     mood = {
       key: 'humid',
-      title: '闷热电台',
-      tagline: '降低密度，留出一点呼吸',
+      title: 'Muggy Radio',
+      tagline: 'Lower the density, leave room to breathe',
       energy: 0.48,
       warmth: 0.76,
       focus: 0.46,
       melancholy: 0.30,
-      keywords: ['夏日 chill', 'bossa nova', 'city pop 夏天', '轻电子', '海边 歌单'],
+      keywords: ['summer chill', 'bossa nova', 'summer city pop', 'light electronic', 'seaside playlist'],
     };
   } else if (isCloud) {
     mood = {
       key: 'cloudy',
-      title: '阴天电台',
-      tagline: '不急着明亮，先让声音变软',
+      title: 'Overcast Radio',
+      tagline: 'No rush to brighten — let the sound soften first',
       energy: 0.40,
       warmth: 0.46,
       focus: 0.58,
       melancholy: 0.52,
-      keywords: ['阴天 华语', 'indie rock mellow', 'neo soul', 'chillhop', '独立 民谣'],
+      keywords: ['cloudy mandopop', 'indie rock mellow', 'neo soul', 'chillhop', 'indie folk'],
     };
   }
 
   if (isNight) {
     mood.key += '-night';
-    mood.title = mood.key.startsWith('clear') ? '夜色电台' : mood.title.replace('电台', '夜听');
-    mood.tagline = '音量放低一点，让夜色参与编曲';
+    mood.title = mood.key.startsWith('clear') ? 'Nightfall Radio' : mood.title.replace('Radio', 'After Dark');
+    mood.tagline = 'Turn the volume down and let the night join the arrangement';
     mood.energy = Math.min(mood.energy, 0.42);
     mood.focus = Math.max(mood.focus, 0.68);
     mood.melancholy = Math.max(mood.melancholy, 0.52);
-    mood.keywords = ['夜晚 R&B', 'late night jazz', 'ambient', 'lofi sleep', '夜跑 歌单'].concat(mood.keywords.slice(0, 3));
+    mood.keywords = ['night R&B', 'late night jazz', 'ambient', 'lofi sleep', 'night run playlist'].concat(mood.keywords.slice(0, 3));
   } else if (isMorning) {
-    mood.title = mood.key.startsWith('rain') ? '雨晨电台' : '早晨电台';
+    mood.title = mood.key.startsWith('rain') ? 'Rainy Morning Radio' : 'Morning Radio';
     mood.energy = Math.max(mood.energy, 0.52);
-    mood.keywords = ['早晨 通勤', 'morning acoustic', '清晨 indie', '轻快 华语'].concat(mood.keywords.slice(0, 3));
+    mood.keywords = ['morning commute', 'morning acoustic', 'early indie', 'upbeat mandopop'].concat(mood.keywords.slice(0, 3));
   } else if (isDusk) {
-    mood.title = mood.key.startsWith('rain') ? '黄昏雨声' : '黄昏电台';
+    mood.title = mood.key.startsWith('rain') ? 'Dusk Rain' : 'Dusk Radio';
     mood.melancholy = Math.max(mood.melancholy, 0.48);
-    mood.keywords = ['黄昏 city pop', '日落 歌单', '落日飞车', 'soul pop'].concat(mood.keywords.slice(0, 3));
+    mood.keywords = ['dusk city pop', 'sunset playlist', 'sunset drive', 'soul pop'].concat(mood.keywords.slice(0, 3));
   }
 
   if (wind >= 28) {
     mood.energy = Math.max(mood.energy, 0.56);
-    mood.keywords = ['公路 摇滚', 'windy day playlist'].concat(mood.keywords.slice(0, 4));
+    mood.keywords = ['highway rock', 'windy day playlist'].concat(mood.keywords.slice(0, 4));
   }
   mood.keywords = Array.from(new Set(mood.keywords)).slice(0, 7);
   return mood;
@@ -2122,7 +2122,7 @@ async function fetchOpenMeteoWeather(params) {
   const lon = clampNumber(params.lon, -180, 180, NaN);
   if (Number.isFinite(lat) && Number.isFinite(lon)) {
     location = {
-      name: String(params.city || params.name || '当前位置').trim() || '当前位置',
+      name: String(params.city || params.name || 'Current Location').trim() || 'Current Location',
       country: '',
       latitude: lat,
       longitude: lon,
@@ -2213,7 +2213,7 @@ function fallbackWeatherForRadio(params, err) {
       timezone: params.timezone || WEATHER_DEFAULT_LOCATION.timezone,
       fallback: true,
     },
-    label: '天气暂不可用',
+    label: 'Weather Unavailable',
     weatherCode: null,
     temperature: null,
     apparentTemperature: null,
@@ -2228,13 +2228,13 @@ function fallbackWeatherForRadio(params, err) {
     error: err && err.message || '',
     mood: {
       key: 'fallback',
-      title: '临时电台',
-      tagline: '天气暂时没有回来，先放一组稳妥的歌',
+      title: 'Standby Radio',
+      tagline: "Weather isn't back yet — here's a reliable set",
       energy: 0.54,
       warmth: 0.55,
       focus: 0.55,
       melancholy: 0.35,
-      keywords: ['华语 流行', 'indie pop', 'city pop', '轻快 歌单', 'chill pop'],
+      keywords: ['mandopop hits', 'indie pop', 'city pop', 'upbeat playlist', 'chill pop'],
     },
   };
 }
@@ -2784,7 +2784,7 @@ function mergeQQVipStatus(info, vip, source) {
     vipLevel: vip.vipLevel || 'none',
     isVip: !!vip.isVip,
     isSvip: !!vip.isSvip,
-    vipLabel: vip.vipLabel || (vip.isVip ? 'VIP' : '无VIP'),
+    vipLabel: vip.vipLabel || (vip.isVip ? 'VIP' : 'No VIP'),
     membershipKnown: true,
     membershipStale: !!vip.membershipStale,
     vipEvidenceConflict: !!vip.vipEvidenceConflict,
@@ -2905,14 +2905,14 @@ function normalizeQQProfile(body, cookieObj) {
     loggedIn: !!(uin && qqCookieMusicKey(cookieObj)),
     preview: false,
     userId: uin,
-    nickname: nick || (uin ? ('QQ ' + uin) : 'QQ 音乐'),
+    nickname: nick || (uin ? ('QQ ' + uin) : 'QQ Music'),
     avatar,
     vipType: profileVip.vipType || 0,
     svipType: profileVip.svipType || 0,
     vipLevel: profileVip.vipLevel || 'none',
     isVip: !!profileVip.isVip,
     isSvip: !!profileVip.isSvip,
-    vipLabel: profileVip.vipLabel || '无VIP',
+    vipLabel: profileVip.vipLabel || 'No VIP',
     membershipKnown: !!profileVip.membershipKnown,
     expiresAt: Number(profileVip.expiresAt) || 0,
     hasCookie: !!qqCookie,
@@ -3098,7 +3098,7 @@ function mapQQPlaylist(pl, kind) {
     cover: liked ? QQ_LIKED_PLAYLIST_COVER : (pl.diss_cover || pl.logo || pl.picurl || pl.cover || ''),
     trackCount: pl.song_cnt || pl.songnum || pl.total_song_num || pl.song_count || 0,
     playCount: pl.listen_num || pl.visitnum || pl.play_count || 0,
-    creator: pl.hostname || pl.nick || pl.creator || 'QQ 音乐',
+    creator: pl.hostname || pl.nick || pl.creator || 'QQ Music',
     subscribed: kind === 'collect',
     specialType: liked ? 5 : 0,
     requiresPlaybackKey: false,
@@ -3248,7 +3248,7 @@ function buildQQLikedPlaylistCard(info, likedPage, warning) {
     cover: stableCover || (pageOffset === 0 && firstTrack && firstTrack.cover) || QQ_LIKED_PLAYLIST_COVER,
     trackCount: count,
     playCount: 0,
-    creator: info && (info.nickname || info.userId) || 'QQ 音乐',
+    creator: info && (info.nickname || info.userId) || 'QQ Music',
     subscribed: false,
     specialType: 5,
     requiresPlaybackKey: warning === 'QQ_LIKED_REQUIRES_PLAYBACK_LOGIN',
@@ -3297,7 +3297,7 @@ async function handleQQLikedPlaylistTracks(info, opts) {
       playlist: buildQQLikedPlaylistCard(info, null, err.code || err.message || 'QQ_LIKED_UNAVAILABLE'),
       tracks: [],
       error: err.code || err.message || 'QQ_LIKED_UNAVAILABLE',
-      message: requiresPlaybackKey ? QQ_LIKED_AUTH_MESSAGE : 'QQ 音乐“我的喜欢”同步失败，请稍后刷新重试。',
+      message: requiresPlaybackKey ? QQ_LIKED_AUTH_MESSAGE : 'QQ Music "Liked Songs" sync failed. Please refresh and try again.',
       requiresPlaybackKey,
     };
   }
@@ -3885,7 +3885,7 @@ async function handleQQSongUrl(mid, mediaMid, qualityPreference, playbackHints) 
 function mapQQComment(raw) {
   raw = raw || {};
   const user = raw.user || raw.uin || {};
-  const nickname = raw.nick || raw.nickname || raw.encrypt_uin || user.nick || user.nickname || user.name || 'QQ 音乐用户';
+  const nickname = raw.nick || raw.nickname || raw.encrypt_uin || user.nick || user.nickname || user.name || 'QQ Music User';
   const avatar = raw.avatarurl || raw.avatar || user.avatarurl || user.avatar || '';
   const timeRaw = Number(raw.time || raw.commenttime || raw.createTime || 0) || 0;
   return {
@@ -4143,9 +4143,9 @@ function mapPodcastCollectionRadio(r, key) {
 
 function podcastCollectionMeta(key, items) {
   const meta = {
-    collect: { key: 'collect', title: '收藏播客', sub: '你收藏的播客', itemType: 'radio' },
-    created: { key: 'created', title: '创建播客', sub: '你创建的播客', itemType: 'radio' },
-    liked: { key: 'liked', title: '喜欢的声音', sub: '收藏或最近喜欢的声音', itemType: 'voice' },
+    collect: { key: 'collect', title: 'Subscribed Podcasts', sub: 'Podcasts you follow', itemType: 'radio' },
+    created: { key: 'created', title: 'Created Podcasts', sub: 'Podcasts you created', itemType: 'radio' },
+    liked: { key: 'liked', title: 'Liked Episodes', sub: 'Saved or recently liked episodes', itemType: 'voice' },
   }[key] || { key, title: key, sub: '', itemType: 'radio' };
   const first = (items || [])[0] || {};
   return {
@@ -4360,7 +4360,7 @@ async function handleSongUrl(id, loginInfo, qualityPreference, matchHints) {
         'NETEASE_DIRECT_RESOLVE_TIMEOUT'
       );
     } catch (err) {
-      const restriction = playbackRestriction('netease', 'url_unavailable', '网易云音源请求超时，已继续尝试站内同一录音版本', 'retry', { code: err.code || 'NETEASE_DIRECT_RESOLVE_TIMEOUT' });
+      const restriction = playbackRestriction('netease', 'url_unavailable', 'NetEase source request timed out; kept trying the same recording on-site', 'retry', { code: err.code || 'NETEASE_DIRECT_RESOLVE_TIMEOUT' });
       direct = {
         provider: 'netease',
         source: 'netease',
@@ -4374,7 +4374,7 @@ async function handleSongUrl(id, loginInfo, qualityPreference, matchHints) {
       };
     }
   } else {
-    const restriction = playbackRestriction('netease', 'url_unavailable', '正在继续尝试网易云站内的其它同曲版本', 'retry', { code: 'NETEASE_DIRECT_SKIPPED_AFTER_MATCH_FAILURE' });
+    const restriction = playbackRestriction('netease', 'url_unavailable', 'Trying other on-site versions of the same NetEase track', 'retry', { code: 'NETEASE_DIRECT_SKIPPED_AFTER_MATCH_FAILURE' });
     direct = {
       provider: 'netease',
       source: 'netease',
@@ -4532,7 +4532,7 @@ function normalizeNeteaseVip(profile, account, extra) {
     vipLevel,
     isVip,
     isSvip,
-    vipLabel: vipLevel === 'svip' ? 'SVIP' : (vipLevel === 'vip' ? 'VIP' : '无VIP'),
+    vipLabel: vipLevel === 'svip' ? 'SVIP' : (vipLevel === 'vip' ? 'VIP' : 'No VIP'),
   };
 }
 function normalizeLoginInfo(profile, account, extra) {
@@ -4544,7 +4544,7 @@ function normalizeLoginInfo(profile, account, extra) {
   return {
     loggedIn: true,
     userId,
-    nickname: profile.nickname || profile.userName || '网易云用户',
+    nickname: profile.nickname || profile.userName || 'NetEase User',
     avatar: profile.avatarUrl || profile.avatar || '',
     ...vip,
   };
@@ -4568,7 +4568,7 @@ function isNeteaseAuthInvalidPayload(payload) {
   return /未登录|需要登录|请先登录|login/i.test(msg) && code >= 300;
 }
 async function fetchNeteaseLoginInfo() {
-  if (!userCookie) return { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '无VIP' };
+  if (!userCookie) return { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: 'No VIP' };
 
   // login_status 对二维码 cookie 的资料刷新通常更及时；失败时再降级到 user_account。
   try {
@@ -4589,10 +4589,10 @@ async function fetchNeteaseLoginInfo() {
     const info = normalizeLoginInfo(body.profile, body.account, body);
     if (info.loggedIn) return await enrichNeteaseLoginInfo(info, body.profile, body.account, body);
     if (isNeteaseAuthInvalidPayload(acc)) saveCookie('');
-    return { loggedIn: false, hasCookie: !!userCookie, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '无VIP' };
+    return { loggedIn: false, hasCookie: !!userCookie, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: 'No VIP' };
   } catch (e) {
     console.warn('[Login] account check failed:', e.message);
-    return { loggedIn: false, hasCookie: !!userCookie, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '无VIP' };
+    return { loggedIn: false, hasCookie: !!userCookie, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: 'No VIP' };
   }
 }
 const NETEASE_LOGIN_INFO_CACHE_TTL_MS = 30 * 1000;
@@ -4601,7 +4601,7 @@ function clearNeteaseLoginInfoCache() {
   neteaseLoginInfoCache = { cookie: '', at: 0, value: null, promise: null };
 }
 async function getLoginInfo() {
-  if (!userCookie) return { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '无VIP' };
+  if (!userCookie) return { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: 'No VIP' };
   const cookieKey = userCookie;
   if (neteaseLoginInfoCache.cookie === cookieKey && neteaseLoginInfoCache.value && Date.now() - neteaseLoginInfoCache.at < NETEASE_LOGIN_INFO_CACHE_TTL_MS) {
     return neteaseLoginInfoCache.value;
@@ -4627,7 +4627,7 @@ async function getPlaybackLoginInfo() {
   } catch (err) {
     const stale = neteaseLoginInfoCache.cookie === userCookie && neteaseLoginInfoCache.value;
     if (stale) return stale;
-    return { loggedIn: !!userCookie, hasCookie: !!userCookie, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '无VIP', statusPending: true };
+    return { loggedIn: !!userCookie, hasCookie: !!userCookie, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: 'No VIP', statusPending: true };
   }
 }
 
@@ -4797,7 +4797,7 @@ const server = http.createServer(async (req, res) => {
       ok: false,
       unlocked: false,
       error: 'LOGIN_EASTER_EGG_LOCKED',
-      message: '请先完成登录彩蛋解锁。',
+      message: 'Unlock the login easter egg first.',
     }, 423);
     return;
   }
@@ -4921,7 +4921,7 @@ const server = http.createServer(async (req, res) => {
       ok: false,
       externalOnly: true,
       error: 'UPDATE_EXTERNAL_ONLY',
-      message: 'Mineradio 已停用客户端本地下载与快速补丁，请使用外部下载页面。',
+      message: 'Mineradio no longer supports local client downloads or quick patches — please use the external download page.',
     }, 410);
     return;
   }
@@ -5060,7 +5060,7 @@ const server = http.createServer(async (req, res) => {
         ok: false,
         error: err.message,
         weather: null,
-        radio: { title: '天气电台', subtitle: '天气暂时没有回来，可以先听今日推荐。', seedQueries: [], songs: [] },
+        radio: { title: 'Weather Radio', subtitle: "Weather isn't back yet — try today's picks for now.", seedQueries: [], songs: [] },
       }, 500);
     }
     return;
@@ -5152,7 +5152,7 @@ const server = http.createServer(async (req, res) => {
         oauthConfigured: true,
         message: status.loggedIn
           ? status.message
-          : 'Spotify Client ID 已保存，可打开官方 OAuth 授权。'
+          : 'Spotify Client ID saved — official OAuth can now be opened.'
       }));
     } catch (err) {
       console.error('[SpotifyConfig]', err);
@@ -5164,7 +5164,7 @@ const server = http.createServer(async (req, res) => {
         loggedIn: false,
         error: err.code || err.message,
         message: err.code === 'SPOTIFY_CLIENT_ID_REQUIRED' || err.message === 'SPOTIFY_CLIENT_ID_REQUIRED'
-          ? '请先粘贴 Spotify Client ID。'
+          ? 'Paste a Spotify Client ID first.'
           : err.message,
         missing,
       }, err && err.code === 'SPOTIFY_CLIENT_ID_REQUIRED' ? 400 : 500);
@@ -5301,7 +5301,7 @@ const server = http.createServer(async (req, res) => {
         success: false,
         error: err.code || err.message,
         message: err.code === 'SPOTIFY_WRITE_SCOPE_REQUIRED'
-          ? '请在账号面板重新连接 Spotify，授予资料库写入权限。'
+          ? 'Reconnect Spotify in the account panel to grant library write access.'
           : err.message,
         missingScopes: err.missingScopes || [],
       }, Number(err.statusCode) || 500);
@@ -5353,7 +5353,7 @@ const server = http.createServer(async (req, res) => {
         success: false,
         error: err.code || err.message,
         message: err.code === 'SPOTIFY_WRITE_SCOPE_REQUIRED'
-          ? '请重新连接 Spotify，授予歌单写入权限。'
+          ? 'Reconnect Spotify to grant playlist write access.'
           : err.message,
         missingScopes: err.missingScopes || [],
       }, Number(err.statusCode) || 500);
@@ -5484,7 +5484,7 @@ const server = http.createServer(async (req, res) => {
         qrcode: String(data.qrcode || ''),
         qrcodeIndexUrl: String(data.qrcode_index_url || ''),
         expireTime: Number(data.expire_time || 0),
-        message: '请使用抖音 App 扫码并确认登录',
+        message: 'Scan the code with the Douyin app and confirm to log in',
       });
     } catch (err) {
       console.error('[QishuiQRCode]', err);
@@ -5493,7 +5493,7 @@ const server = http.createServer(async (req, res) => {
         token: '',
         qrcode: '',
         error: err && err.code || 'QISHUI_QR_CREATE_FAILED',
-        message: err && err.message || '汽水音乐二维码生成失败',
+        message: err && err.message || 'Failed to generate the Soda Music QR code',
       }, 500);
     }
     return;
@@ -5508,7 +5508,7 @@ const server = http.createServer(async (req, res) => {
           loggedIn: false,
           status: 'missing_token',
           error: 'QISHUI_QR_TOKEN_REQUIRED',
-          message: '二维码登录 token 缺失',
+          message: 'QR login token is missing',
         }, 400);
         return;
       }
@@ -5531,7 +5531,7 @@ const server = http.createServer(async (req, res) => {
           status: 'confirmed',
           errorCode: 0,
           error_code: 0,
-          message: '登录成功',
+          message: 'Login successful',
         });
         return;
       }
@@ -5557,7 +5557,7 @@ const server = http.createServer(async (req, res) => {
         loggedIn: false,
         status: cancelled ? 'mfa_cancelled' : 'error',
         error: err && err.code || 'QISHUI_QR_CHECK_FAILED',
-        message: err && err.message || '汽水音乐登录状态检查失败',
+        message: err && err.message || 'Failed to check Soda Music login status',
       }, cancelled ? 409 : 500);
     }
     return;
@@ -5825,7 +5825,7 @@ const server = http.createServer(async (req, res) => {
       const normalized = normalizeKugouCookieInput(raw);
       const auth = extractKugouAuth(normalized);
       if (!auth.loggedIn && !parseCookieString(normalized).kg_mid) {
-        sendJSON(res, { provider: 'kugou', loggedIn: false, error: 'INVALID_KUGOU_COOKIE', message: '酷狗 cookie 无效或缺少登录标识' }, 400);
+        sendJSON(res, { provider: 'kugou', loggedIn: false, error: 'INVALID_KUGOU_COOKIE', message: 'Kugou cookie is invalid or missing a login identifier' }, 400);
         return;
       }
       saveKugouCookie(normalized);
@@ -6009,8 +6009,8 @@ const server = http.createServer(async (req, res) => {
           partial: hasWebSession,
           error: hasWebSession ? 'QQ_PLAYBACK_AUTH_INCOMPLETE' : 'INVALID_QQ_COOKIE',
           message: hasWebSession
-            ? 'QQ 账号验证已完成，但 QQ 音乐播放授权尚未生成，请重新打开官方登录窗口完成授权'
-            : 'QQ cookie 缺少 uin 或有效 QQ 音乐播放票据',
+            ? 'QQ account verification is complete, but QQ Music playback authorization was not issued yet. Reopen the official login window to finish authorization'
+            : 'QQ cookie is missing the uin or a valid QQ Music playback ticket',
         }, 400);
         return;
       }
@@ -6322,7 +6322,7 @@ const server = http.createServer(async (req, res) => {
         vipLevel: loginInfo.vipLevel || 'none',
         isVip: !!loginInfo.isVip,
         isSvip: !!loginInfo.isSvip,
-        vipLabel: loginInfo.vipLabel || '无VIP',
+        vipLabel: loginInfo.vipLabel || 'No VIP',
       });
     } catch (err) { console.error('[SongUrl]', err); sendJSON(res, { error: err.message }, 500); }
     return;
@@ -6335,7 +6335,7 @@ const server = http.createServer(async (req, res) => {
       const normalized = normalizeCookieHeader(raw);
       const obj = parseCookieString(normalized);
       if (!obj.MUSIC_U) {
-        sendJSON(res, { loggedIn: false, error: 'INVALID_NETEASE_COOKIE', message: '网易云 cookie 缺少 MUSIC_U' }, 400);
+        sendJSON(res, { loggedIn: false, error: 'INVALID_NETEASE_COOKIE', message: 'NetEase cookie is missing MUSIC_U' }, 400);
         return;
       }
       saveCookie(normalized);
@@ -6344,13 +6344,13 @@ const server = http.createServer(async (req, res) => {
         info = {
           loggedIn: true,
           pendingProfile: true,
-          nickname: '网易云用户',
+          nickname: 'NetEase User',
           avatar: '',
           vipType: 0,
           vipLevel: 'none',
           isVip: false,
           isSvip: false,
-          vipLabel: '无VIP',
+          vipLabel: 'No VIP',
         };
       }
       sendJSON(res, { ...info, saved: true, hasCookie: !!userCookie });
@@ -6445,13 +6445,13 @@ const server = http.createServer(async (req, res) => {
           info = {
             loggedIn: true,
             pendingProfile: true,
-            nickname: (body.nickname || (body.profile && body.profile.nickname) || '网易云用户'),
+            nickname: (body.nickname || (body.profile && body.profile.nickname) || 'NetEase User'),
             avatar: body.avatarUrl || (body.profile && body.profile.avatarUrl) || '',
             vipType: 0,
             vipLevel: 'none',
             isVip: false,
             isSvip: false,
-            vipLabel: '无VIP',
+            vipLabel: 'No VIP',
           };
         }
         sendJSON(res, { code, message: msg, ...info, hasCookie: !!cookie });

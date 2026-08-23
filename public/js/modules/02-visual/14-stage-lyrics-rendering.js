@@ -3204,4 +3204,4 @@ function disposeLyricsParticles() {
 }
 
 // ============================================================
-//  涟漪触发系统 — 3×3 九宫格 + bass 上升沿
+//  ripple trigger system — 3×3 grid + bass rising edge

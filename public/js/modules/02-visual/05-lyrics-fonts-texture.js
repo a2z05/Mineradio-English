@@ -19,7 +19,7 @@ function customLyricFontRecordForKey(key) {
 }
 function normalizeCustomLyricFontName(name) {
   name = String(name || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-  return (name || '自定义字体').slice(0, 18);
+  return (name || 'Custom Font').slice(0, 18);
 }
 function normalizeCustomLyricFontRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -155,7 +155,7 @@ function warmLyricTextMeasureCache() {
   var ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.font = lyricFontCss(128);
-  measureTextWithLetterSpacing(ctx, '歌词 Lyrics 0123456789', lyricLetterSpacingPx(128));
+  measureTextWithLetterSpacing(ctx, 'Lyrics 歌词 0123456789', lyricLetterSpacingPx(128));
 }
 function scheduleLyricTextMeasureWarmup(delay) {
   if (lyricTextMeasureWarmupTimer) clearTimeout(lyricTextMeasureWarmupTimer);

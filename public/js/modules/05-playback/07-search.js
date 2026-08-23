@@ -1145,17 +1145,17 @@ function searchSongResultHtml(s, i) {
       '<div class="search-result-meta">' + searchResultMetaHtml(s, i) + '</div>' +
       '</div>' +
       '</div>' +
-      '<button class="song-action-btn' + (isSongLiked(s) ? ' liked' : '') + '" data-like-index="' + i + '" title="' + (isSongLiked(s) ? '取消红心' : '红心喜欢') + '" onclick="event.stopPropagation();toggleLikeSearchResult(' + i + ')">' + heartIconSvg() + '</button>' +
-      '<button class="song-action-btn" title="收藏到歌单" onclick="event.stopPropagation();collectSearchResult(' + i + ')">' + playlistPlusIconSvg() + '</button>' +
-      '<button class="add-btn" title="下一首播放" onclick="event.stopPropagation();queueSearchResult(' + i + ')">+</button>' +
+      '<button class="song-action-btn' + (isSongLiked(s) ? ' liked' : '') + '" data-like-index="' + i + '" title="' + (isSongLiked(s) ? 'Unlike' : 'Like') + '" onclick="event.stopPropagation();toggleLikeSearchResult(' + i + ')">' + heartIconSvg() + '</button>' +
+      '<button class="song-action-btn" title="Save to playlist" onclick="event.stopPropagation();collectSearchResult(' + i + ')">' + playlistPlusIconSvg() + '</button>' +
+      '<button class="add-btn" title="Play next" onclick="event.stopPropagation();queueSearchResult(' + i + ')">+</button>' +
       '</div>';
 }
 function searchLoadMoreSentinelHtml() {
   var remaining = Math.max(0, searchMusicRenderState.songs.length - searchMusicRenderState.visibleCount);
   if (!remaining && !searchMusicRenderState.remoteHasMore && !searchMusicRenderState.loadingMore) return '';
   var label = searchMusicRenderState.loadingMore
-    ? '正在加载更多歌曲…'
-    : (remaining ? ('继续滚动加载 · 当前还有 ' + remaining + ' 首') : '继续滚动加载更多歌曲');
+    ? 'Loading more songs…'
+    : (remaining ? ('Keep scrolling · ' + remaining + ' more') : 'Keep scrolling to load more songs');
   return '<div class="search-empty search-load-more" data-search-load-more="1" role="status">' + label + '</div>';
 }
 function refreshSearchLoadMoreSentinel() {
@@ -1290,7 +1290,7 @@ async function doSearch(q, opts) {
       resetSearchMusicRenderState();
       playlist = [];
       searchLastResultQuery = '';
-      $results.innerHTML = '<div class="search-empty">' + escHtml(searchProviderNotice || '没有找到相关歌曲') + '</div>';
+      $results.innerHTML = '<div class="search-empty">' + escHtml(searchProviderNotice || 'No matching songs found') + '</div>';
       $results.classList.add('show');
       return;
     }
@@ -1311,11 +1311,11 @@ async function doSearch(q, opts) {
       resetSearchMusicRenderState();
       playlist = [];
       searchLastResultQuery = '';
-      $results.innerHTML = '<div class="search-empty">搜索暂时失败，请稍后重试</div>';
+      $results.innerHTML = '<div class="search-empty">Search failed; please try again later</div>';
       $results.classList.add('show');
     }
   }
 }
 
 // ============================================================
-//  音频上下文 & 频谱分析
+//  Audio Context & Spectrum Analysis

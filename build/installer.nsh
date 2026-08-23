@@ -53,7 +53,7 @@
   !define MINERADIO_INSTALL_BRAND "MINERADIO"
 !endif
 !ifndef MINERADIO_INSTALL_TITLE
-  !define MINERADIO_INSTALL_TITLE "Mineradio 安装"
+  !define MINERADIO_INSTALL_TITLE "Mineradio Setup"
 !endif
 !ifndef MINERADIO_INSTALL_NOTICE
   !define MINERADIO_INSTALL_NOTICE ""
@@ -764,7 +764,11 @@ Function MineradioValidateInstallDir
       ${If} $2 == "1"
       ${AndIf} $3 != "1"
       ${AndIf} $4 != "1"
-        MessageBox MB_ICONSTOP|MB_OK "检测到这台电脑还有 D-Z 盘，Mineradio 不安装到 C 盘。请改选 D 盘或其它非 C 盘的 Mineradio 文件夹。$\r$\n$\r$\n如果电脑只有 C 盘，安装器会自动放行 C:\Mineradio。"
+        MessageBox MB_ICONSTOP|MB_OK "This PC has a D-Z drive. Mineradio will not install to C:. Please pick the Mineradio folder on D: or another non-C: drive.$
+$
+$
+$
+If this PC only has C:, setup will automatically allow C:\Mineradio."
         Abort
       ${EndIf}
     ${EndIf}
@@ -777,7 +781,7 @@ Function MineradioValidateInstallDir
   ${If} $0 < $2
   ${OrIf} $1 != "\${MINERADIO_INSTALL_DIR_NAME}"
   ${AndIf} $1 != "\${MINERADIO_INSTALL_DIR_NAME_LOWER}"
-    MessageBox MB_ICONSTOP|MB_OK "安装目录必须是独立的 Mineradio 文件夹。请选择一个上级目录，安装器会自动创建 Mineradio 子文件夹。"
+    MessageBox MB_ICONSTOP|MB_OK "The install folder must be a dedicated Mineradio folder. Pick a parent folder and setup will create the Mineradio subfolder automatically."
     Abort
   ${EndIf}
 
@@ -805,7 +809,11 @@ Function MineradioValidateInstallDir
     Goto valid
   ${EndIf}
 
-  MessageBox MB_ICONSTOP|MB_OK "为避免卸载时误删其它文件，Mineradio 不能安装到已有文件的非专属目录。请新建或选择一个空的 Mineradio 文件夹。$\r$\n$\r$\n当前路径：$INSTDIR"
+  MessageBox MB_ICONSTOP|MB_OK "To avoid deleting unrelated files during uninstall, Mineradio cannot install into a non-dedicated folder with existing files. Please create or choose an empty Mineradio folder.$
+$
+$
+$
+Current path: $INSTDIR"
   Abort
 
   valid:
@@ -839,12 +847,12 @@ Function MineradioWelcomeShow
   Pop $0
   SetCtlColors $0 "" "3257F7"
 
-  ${NSD_CreateLabel} 22u 96u 238u 24u "为这台电脑安装 ${PRODUCT_NAME}。默认安装到 D:\${MINERADIO_INSTALL_DIR_NAME}，下一步可以自由选择其它位置。"
+  ${NSD_CreateLabel} 22u 96u 238u 24u "Install ${PRODUCT_NAME} for this computer. Default location is D:\${MINERADIO_INSTALL_DIR_NAME} — you can pick a different one on the next step."
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioBodyFont 1
   SetCtlColors $0 "4B5263" "FFFFFF"
 
-  ${NSD_CreateLabel} 22u 130u 238u 12u "默认位置：$INSTDIR"
+  ${NSD_CreateLabel} 22u 130u 238u 12u "Default location: $INSTDIR"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioTitleFont 1
   SetCtlColors $0 "3257F7" "FFFFFF"
@@ -860,7 +868,7 @@ Function MineradioWelcomeShow
 FunctionEnd
 
 Function MineradioDirectoryBrowse
-  nsDialogs::SelectFolderDialog "选择 ${PRODUCT_NAME} 安装文件夹" "$INSTDIR"
+  nsDialogs::SelectFolderDialog "Select ${PRODUCT_NAME} install folder" "$INSTDIR"
   Pop $0
   ${If} $0 != error
   ${AndIf} $0 != ""
@@ -886,17 +894,17 @@ Function MineradioDirectoryShow
   CreateFont $MineradioBodyFont "Microsoft YaHei UI" 9 400
   CreateFont $MineradioSmallFont "Microsoft YaHei UI" 8 500
 
-  ${NSD_CreateLabel} 22u 12u 238u 20u "选择安装位置"
+  ${NSD_CreateLabel} 22u 12u 238u 20u "Choose Install Location"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioTitleFont 1
   SetCtlColors $0 "111217" "FFFFFF"
 
-  ${NSD_CreateLabel} 22u 40u 238u 24u "你可以使用默认路径，也可以选择其它磁盘或文件夹。安装器会自动创建缺失的目录。"
+  ${NSD_CreateLabel} 22u 40u 238u 24u "Use the default path, or pick another disk/folder. Missing directories are created automatically."
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioBodyFont 1
   SetCtlColors $0 "4B5263" "FFFFFF"
 
-  ${NSD_CreateLabel} 22u 76u 238u 10u "安装目录"
+  ${NSD_CreateLabel} 22u 76u 238u 10u "Install directory"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioSmallFont 1
   SetCtlColors $0 "3257F7" "FFFFFF"
@@ -906,12 +914,12 @@ Function MineradioDirectoryShow
   SendMessage $MineradioDirectoryInput ${WM_SETFONT} $MineradioBodyFont 1
   SetCtlColors $MineradioDirectoryInput "111217" "FFFFFF"
 
-  ${NSD_CreateBrowseButton} 210u 93u 50u 17u "浏览..."
+  ${NSD_CreateBrowseButton} 210u 93u 50u 17u "Browse..."
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioSmallFont 1
   ${NSD_OnClick} $0 MineradioDirectoryBrowse
 
-  ${NSD_CreateLabel} 22u 122u 238u 12u "默认推荐：D:\${MINERADIO_INSTALL_DIR_NAME}；选盘符会自动建文件夹。"
+  ${NSD_CreateLabel} 22u 122u 238u 12u "Recommended default: D:\${MINERADIO_INSTALL_DIR_NAME} — picking a drive letter auto-creates the folder."
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioSmallFont 1
   SetCtlColors $0 "6B7280" "FFFFFF"
@@ -922,7 +930,7 @@ FunctionEnd
 Function MineradioDirectoryLeave
   ${NSD_GetText} $MineradioDirectoryInput $0
   ${If} $0 == ""
-    MessageBox MB_ICONEXCLAMATION|MB_OK "请选择安装文件夹。"
+    MessageBox MB_ICONEXCLAMATION|MB_OK "Please select an installation folder."
     Abort
   ${EndIf}
   Push "$0"
@@ -1006,7 +1014,10 @@ Function un.MineradioValidateUninstallDir
   Call un.MineradioNormalizeInstallDir
   Pop $1
   ${If} $0 != $1
-    MessageBox MB_OK|MB_ICONSTOP "当前卸载路径不是 Mineradio 专属目录，已阻止卸载以避免误删其它文件。$\r$\n$\r$\n当前路径：$INSTDIR$\r$\n安全路径应为：$0"
+    MessageBox MB_OK|MB_ICONSTOP "The current uninstall path is not a dedicated Mineradio directory. Uninstall blocked to avoid deleting unrelated files.$$
+$$
+Current path: $INSTDIR$$
+Safe path should be: $0"
     SetErrorLevel 2
     Quit
   ${EndIf}
@@ -1016,7 +1027,9 @@ Function un.MineradioValidateUninstallDir
   Call un.MineradioInstallDirLooksOwned
   Pop $0
   ${If} $0 != "1"
-    MessageBox MB_OK|MB_ICONSTOP "无法确认当前目录属于 Mineradio，已阻止卸载以避免误删其它文件。$\r$\n$\r$\n当前路径：$INSTDIR"
+    MessageBox MB_OK|MB_ICONSTOP "Cannot confirm this directory belongs to Mineradio. Uninstall blocked to avoid deleting unrelated files.$$
+$$
+Current path: $INSTDIR"
     SetErrorLevel 2
     Quit
   ${EndIf}

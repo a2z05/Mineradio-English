@@ -229,7 +229,7 @@ function removeCustomLyricFont(event, id) {
   refreshCurrentLyricStyle();
   saveLyricLayout({ user: true, reason: 'lyricFontRemove' });
   pushDesktopLyricsState(true);
-  showToast('已删除上传字体');
+  showToast('Uploaded font removed');
 }
 function currentLyricPaletteSource() {
   return fx.lyricColorMode === 'custom'
@@ -271,7 +271,7 @@ function setLyricGlowCustom(color, silent) {
   updateLyricGlowControls();
   saveLyricLayout({ syncDisk: true, user: true, reason: 'lyricGlowColor' });
   pushDesktopLyricsState(true);
-  if (!silent) showToast('溢光颜色: ' + fx.lyricGlowColor.toUpperCase());
+  if (!silent) showToast('Glow color: ' + fx.lyricGlowColor.toUpperCase());
 }
 function setLyricColorAuto() {
   fx.lyricColorMode = 'auto';
@@ -281,7 +281,7 @@ function setLyricColorAuto() {
   updateLyricGlowControls();
   saveLyricLayout({ syncDisk: true, user: true, reason: 'lyricColorAuto' });
   pushDesktopLyricsState(true);
-  showToast('歌词颜色: 封面取色');
+  showToast('Lyric color: from cover');
 }
 function setLyricColorCustom(color, silent) {
   fx.lyricColorMode = 'custom';
@@ -292,7 +292,7 @@ function setLyricColorCustom(color, silent) {
   updateLyricGlowControls();
   saveLyricLayout({ syncDisk: true, user: true, reason: 'lyricColorCustom' });
   pushDesktopLyricsState(true);
-  if (!silent) showToast('歌词颜色: ' + fx.lyricColor.toUpperCase());
+  if (!silent) showToast('Lyric color: ' + fx.lyricColor.toUpperCase());
 }
 function setLyricColorPreset(i) {
   var p = lyricColorPresets[i];
@@ -306,7 +306,7 @@ function setLyricHighlightAuto() {
   updateLyricGlowControls();
   saveLyricLayout({ syncDisk: true, user: true, reason: 'lyricHighlightAuto' });
   pushDesktopLyricsState(true);
-  showToast('高亮颜色: 跟随歌词');
+  showToast('Highlight color: follow lyrics');
 }
 function setLyricHighlightCustom(color, silent) {
   fx.lyricHighlightMode = 'custom';
@@ -316,5 +316,5 @@ function setLyricHighlightCustom(color, silent) {
   updateLyricGlowControls();
   saveLyricLayout({ syncDisk: true, user: true, reason: 'lyricHighlightCustom' });
   pushDesktopLyricsState(true);
-  if (!silent) showToast('高亮颜色: ' + fx.lyricHighlightColor.toUpperCase());
+  if (!silent) showToast('Highlight color: ' + fx.lyricHighlightColor.toUpperCase());
 }

@@ -37,18 +37,18 @@ function normalizeCustomBackgroundMedia(value) {
 }
 function customBackgroundMediaLabel(media) {
   media = normalizeCustomBackgroundMedia(media);
-  if (!media) return '未设置';
-  return media.type === 'video' ? '视频已设置' : '图片已设置';
+  if (!media) return 'Not set';
+  return media.type === 'video' ? 'Video set' : 'Image set';
 }
 function customBackgroundUsesAlbumCover() {
   return typeof fx !== 'undefined' && !!(fx && fx.backgroundAlbumCover === true);
 }
 function customBackgroundMediaLabel(media) {
-  if (customBackgroundUsesAlbumCover()) return '\u5c01\u9762\u539f\u56fe';
+  if (customBackgroundUsesAlbumCover()) return 'Album cover';
   media = normalizeCustomBackgroundMedia(media);
-  if (!media) return '\u672a\u8bbe\u7f6e';
-  if (media.type === 'album') return '\u5c01\u9762\u539f\u56fe';
-  return media.type === 'video' ? '\u89c6\u9891\u5df2\u8bbe\u7f6e' : '\u56fe\u7247\u5df2\u8bbe\u7f6e';
+  if (!media) return 'Not set';
+  if (media.type === 'album') return 'Album cover';
+  return media.type === 'video' ? 'Video set' : 'Image set';
 }
 var CUSTOM_BG_DB_NAME = 'mineradio-custom-background-v1';
 var CUSTOM_BG_STORE = 'media';
@@ -87,14 +87,14 @@ async function getCustomBackgroundBlob(id) {
 }
 var colorLabState = { picker: null, id: '', h: 0, s: 1, v: 1, dragging: false };
 var COLOR_LAB_PRESETS = [
-  { name: '极黑', color: '#000000' },
-  { name: '极白', color: '#ffffff' },
-  { name: '克莱因蓝', color: '#002fa7' },
-  { name: '法拉利红', color: '#f00000' },
-  { name: '香槟金', color: '#c8a96a' },
-  { name: '孔雀绿', color: '#006b5b' },
-  { name: '午夜紫', color: '#2b164f' },
-  { name: '银雾', color: '#d9dde2' }
+  { name: 'Pitch Black', color: '#000000' },
+  { name: 'Pure White', color: '#ffffff' },
+  { name: 'Klein Blue', color: '#002fa7' },
+  { name: 'Ferrari Red', color: '#f00000' },
+  { name: 'Champagne Gold', color: '#c8a96a' },
+  { name: 'Peacock Green', color: '#006b5b' },
+  { name: 'Midnight Purple', color: '#2b164f' },
+  { name: 'Silver Mist', color: '#d9dde2' }
 ];
 function rgbToHsv(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -139,7 +139,7 @@ function applyColorLabValue(hex, silent) {
   else if (id === 'lyric-color-picker') setLyricColorCustom(hex, true);
   else if (id === 'lyric-highlight-picker') setLyricHighlightCustom(hex, true);
   else if (id === 'lyric-glow-picker') setLyricGlowCustom(hex, true);
-  if (!silent) showToast('颜色: ' + hex.toUpperCase());
+  if (!silent) showToast('Color: ' + hex.toUpperCase());
 }
 function commitColorLabValue(silent) {
   if (!colorLabState || !colorLabState.id) return;

@@ -1710,9 +1710,9 @@ function configureMineradioGlobalHotkeys(bindings = []) {
         accelerator,
         ok: false,
         conflict: {
-          sourceName: '系统 / 其他软件',
+          sourceName: 'System / Other software',
           sourceIcon: 'warning',
-          reason: '该组合键已被占用或被系统保留',
+          reason: 'This shortcut is already in use or reserved by the system',
         },
       });
     }
@@ -2028,9 +2028,9 @@ function createOrUpdateTray() {
   }
   const desktopMode = fullDesktopModeRuntime.getStatus('tray-menu');
   const menu = Menu.buildFromTemplate([
-    { label: `显示 ${APP_NAME}`, click: () => focusMainWindow() },
+    { label: `Show ${APP_NAME}`, click: () => focusMainWindow() },
     {
-      label: '退出完整桌面模式',
+      label: 'Exit Full Desktop Mode',
       visible: desktopMode.enabled === true,
       click: () => disableFullDesktopMode('tray-exit-desktop-mode').catch((error) => {
         console.warn('[FullDesktopMode] tray exit failed:', error && error.message || error);
@@ -2038,7 +2038,7 @@ function createOrUpdateTray() {
     },
     { type: 'separator' },
     {
-      label: '退出',
+      label: 'Quit',
       click: () => {
         appQuitting = true;
         app.quit();
@@ -2156,26 +2156,26 @@ function writeStartupErrorLog(context, code, error) {
 
 function startupStageLabel(context) {
   const value = String(context || '').toLowerCase();
-  if (value.includes('second')) return '重复启动/唤醒已有窗口';
-  if (value.includes('activate')) return '系统激活/恢复窗口';
-  if (value.includes('server')) return '本地服务启动';
-  if (value.includes('load')) return '主窗口加载';
-  return '主窗口创建';
+  if (value.includes('second')) return 'Second instance / waking existing window';
+  if (value.includes('activate')) return 'System activation / window restore';
+  if (value.includes('server')) return 'Local server startup';
+  if (value.includes('load')) return 'Main window load';
+  return 'Main window creation';
 }
 
 function buildStartupErrorMessage(context, code, logInfo, error) {
   const detail = startupErrorText(error);
-  const reason = String((error && error.message) || error || '未知错误').split(/\r?\n/)[0].slice(0, 360);
+  const reason = String((error && error.message) || error || 'Unknown error').split(/\r?\n/)[0].slice(0, 360);
   return [
-    `错误代码：${code}`,
-    `报告编号：${logInfo.reportId}`,
-    `启动阶段：${startupStageLabel(context)}`,
-    `简短原因：${reason || '未知错误'}`,
+    `Error code: ${code}`,
+    `Report ID: ${logInfo.reportId}`,
+    `Startup stage: ${startupStageLabel(context)}`,
+    `Brief cause: ${reason || 'Unknown error'}`,
     '',
-    '请把错误代码和报告编号发给开发者。',
-    `日志文件：${logInfo.file}`,
+    'Please send the error code and report ID to the developer.',
+    `Log file: ${logInfo.file}`,
     '',
-    '详细信息：',
+    'Details:',
     detail.slice(0, 1400),
   ].join('\n');
 }
@@ -2190,7 +2190,7 @@ function reportWindowCreationFailure(context, error) {
     try {
       // Keep this literal visible for startup dialog regression checks:
       // dialog.showErrorBox('Mineradio 启动失败'
-      dialog.showErrorBox(`Mineradio 启动失败 (${code})`, buildStartupErrorMessage(context, code, logInfo, error));
+      dialog.showErrorBox(`Mineradio Startup Failed (${code})`, buildStartupErrorMessage(context, code, logInfo, error));
     } catch (_) {}
   }
   if (!startupCompleted) {
@@ -2325,10 +2325,10 @@ function qqLoginCompletionFromCookie(cookieText) {
       ok: false,
       partial: true,
       error: 'QQ_PLAYBACK_AUTH_INCOMPLETE',
-      message: 'QQ 账号验证已完成，但 QQ 音乐播放授权尚未生成，请在官方登录窗口完成授权后再关闭',
+      message: 'QQ account verification is complete, but QQ Music playback authorization was not issued yet. Complete the authorization in the official login window before closing it',
     };
   }
-  return { ok: false, cancelled: true, message: 'QQ 登录窗口已关闭' };
+  return { ok: false, cancelled: true, message: 'QQ login window was closed' };
 }
 
 function neteaseCookieHasLogin(cookieText) {
@@ -2453,7 +2453,7 @@ async function openNeteaseMusicLoginWindow(owner) {
       modal: false,
       show: false,
       autoHideMenuBar: true,
-      title: '网易云音乐登录',
+      title: 'NetEase Cloud Music Login',
       backgroundColor: '#111111',
       icon: APP_ICON_ICO,
       webPreferences: {
@@ -2525,9 +2525,9 @@ async function openNeteaseMusicLoginWindow(owner) {
         const cookie = await readNeteaseLoginCookieHeader(cookieSession);
         resolve(neteaseCookieHasLogin(cookie)
           ? { ok: true, cookie }
-          : { ok: false, cancelled: true, message: '网易云登录窗口已关闭' });
+          : { ok: false, cancelled: true, message: 'NetEase login window was closed' });
       } catch (e) {
-        resolve({ ok: false, error: e.message || '网易云登录窗口已关闭' });
+        resolve({ ok: false, error: e.message || 'NetEase login window was closed' });
       }
     });
 
@@ -2567,7 +2567,7 @@ async function openQQMusicLoginWindow(owner, options) {
       modal: false,
       show: false,
       autoHideMenuBar: true,
-      title: 'QQ 音乐登录',
+      title: 'QQ Music Login',
       backgroundColor: '#111111',
       icon: APP_ICON_ICO,
       webPreferences: {
@@ -2751,7 +2751,7 @@ async function openQQMusicLoginWindow(owner, options) {
         try { await cookieSession.flushStorageData(); } catch (_) {}
         resolve(qqLoginCompletionFromCookie(cookie));
       } catch (e) {
-        resolve({ ok: false, error: e.message || 'QQ 登录窗口已关闭' });
+        resolve({ ok: false, error: e.message || 'QQ login window was closed' });
       }
     });
 
@@ -2788,7 +2788,7 @@ async function openKugouMusicLoginWindow(owner) {
       modal: false,
       show: false,
       autoHideMenuBar: true,
-      title: '酷狗音乐登录',
+      title: 'Kugou Music Login',
       backgroundColor: '#111111',
       icon: APP_ICON_ICO,
       webPreferences: {
@@ -2859,10 +2859,10 @@ async function openKugouMusicLoginWindow(owner) {
         resolve(kugouCookieHasPlayback(cookie)
           ? { ok: true, cookie }
           : (kugouCookieHasLogin(cookie)
-            ? { ok: true, cookie, partial: true, message: '酷狗账号已登录，但播放 token 不完整，请稍后在播放器内重试登录' }
-            : { ok: false, cancelled: true, message: '酷狗登录窗口已关闭' }));
+            ? { ok: true, cookie, partial: true, message: 'Kugou account is logged in but the playback token is incomplete. Retry the login in the player later' }
+            : { ok: false, cancelled: true, message: 'Kugou login window was closed' }));
       } catch (e) {
-        resolve({ ok: false, error: e.message || '酷狗登录窗口已关闭' });
+        resolve({ ok: false, error: e.message || 'Kugou login window was closed' });
       }
     });
 
@@ -2943,7 +2943,7 @@ function spotifyOAuthResultHtml(ok, message) {
     'h1{font-size:26px;margin:0 0 12px;font-weight:850;}',
     'p{margin:0 auto;color:rgba(243,255,246,.72);line-height:1.7;font-size:14px;}',
     '</style>',
-    '<main><div class="brand">SPOTIFY</div><h1>' + (ok ? '授权完成' : '授权失败') + '</h1><p>' + escaped + '</p></main>',
+    '<main><div class="brand">SPOTIFY</div><h1>' + (ok ? 'Authorization Complete' : 'Authorization Failed') + '</h1><p>' + escaped + '</p></main>',
   ].join('');
 }
 
@@ -2982,7 +2982,7 @@ function startSpotifyOAuthCallbackServer(redirectUri, onCallback) {
         const result = await onCallback(current);
         const ok = !!(result && result.ok);
         res.writeHead(ok ? 200 : 500, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(spotifyOAuthResultHtml(ok, (result && (result.message || result.error)) || (ok ? '可以回到 Mineradio。' : '请回到 Mineradio 重新尝试。')));
+        res.end(spotifyOAuthResultHtml(ok, (result && (result.message || result.error)) || (ok ? 'You can return to Mineradio.' : 'Please return to Mineradio and try again.')));
       } catch (e) {
         res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(spotifyOAuthResultHtml(false, e && e.message || 'SPOTIFY_OAUTH_CALLBACK_FAILED'));
@@ -3012,7 +3012,7 @@ async function openSpotifyMusicLoginWindow(owner) {
       error: 'SPOTIFY_OAUTH_NOT_CONFIGURED',
       missing: config.missing,
       redirectUri: config.redirectUri,
-      message: 'Spotify 登录需要先配置 SPOTIFY_CLIENT_ID，并在 Spotify Developer Dashboard 登记本地回调地址 ' + config.redirectUri,
+      message: 'Spotify login requires a configured SPOTIFY_CLIENT_ID and the local callback address registered in the Spotify Developer Dashboard: ' + config.redirectUri,
     };
   }
 
@@ -3032,7 +3032,7 @@ async function openSpotifyMusicLoginWindow(owner) {
       provider: 'spotify',
       error: e.code || e.message,
       missing: e.missing || config.missing,
-      message: e.message || 'Spotify 授权地址生成失败',
+      message: e.message || 'Failed to build the Spotify authorization URL',
     };
   }
 
@@ -3053,7 +3053,7 @@ async function openSpotifyMusicLoginWindow(owner) {
 
     const exchangeFromRedirect = async (targetUrl, event) => {
       if (event && typeof event.preventDefault === 'function') event.preventDefault();
-      if (exchangeStarted) return { ok: true, provider: 'spotify', message: 'Spotify 授权正在处理。' };
+      if (exchangeStarted) return { ok: true, provider: 'spotify', message: 'Spotify authorization is in progress.' };
       exchangeStarted = true;
       let parsed = null;
       try {
@@ -3063,7 +3063,7 @@ async function openSpotifyMusicLoginWindow(owner) {
       }
       const returnedState = parsed.searchParams.get('state') || '';
       if (returnedState !== oauthState) {
-        return finish({ ok: false, provider: 'spotify', error: 'SPOTIFY_OAUTH_STATE_MISMATCH', message: 'Spotify 授权状态校验失败，请重新登录。' });
+        return finish({ ok: false, provider: 'spotify', error: 'SPOTIFY_OAUTH_STATE_MISMATCH', message: 'Spotify authorization state check failed. Please log in again.' });
       }
       const oauthError = parsed.searchParams.get('error') || '';
       if (oauthError) {
@@ -3071,12 +3071,12 @@ async function openSpotifyMusicLoginWindow(owner) {
           ok: false,
           provider: 'spotify',
           error: oauthError,
-          message: parsed.searchParams.get('error_description') || 'Spotify 授权已取消或失败。',
+          message: parsed.searchParams.get('error_description') || 'Spotify authorization was cancelled or failed.',
         });
       }
       const code = parsed.searchParams.get('code') || '';
       if (!code) {
-        return finish({ ok: false, provider: 'spotify', error: 'SPOTIFY_OAUTH_CODE_MISSING', message: 'Spotify 回调没有返回 code。' });
+        return finish({ ok: false, provider: 'spotify', error: 'SPOTIFY_OAUTH_CODE_MISSING', message: 'The Spotify callback did not return a code.' });
       }
       try {
         const info = await exchangeSpotifyOAuthCode({
@@ -3086,14 +3086,14 @@ async function openSpotifyMusicLoginWindow(owner) {
         });
         return finish(Object.assign({ ok: true, provider: 'spotify', opened: true }, info || {}, {
           redirectUri: config.redirectUri,
-          message: 'Spotify 登录成功，会员状态、歌单和 Liked Songs 已可同步。',
+          message: 'Spotify login successful — membership status, playlists, and Liked Songs are ready to sync.',
         }));
       } catch (e) {
         return finish({
           ok: false,
           provider: 'spotify',
           error: e.code || e.message || 'SPOTIFY_OAUTH_EXCHANGE_FAILED',
-          message: e.message || 'Spotify token 换取失败。',
+          message: e.message || 'Failed to exchange the Spotify token.',
           missing: e.missing || [],
         });
       }
@@ -3108,8 +3108,8 @@ async function openSpotifyMusicLoginWindow(owner) {
         error: e.code || e.message || 'SPOTIFY_CALLBACK_SERVER_FAILED',
         redirectUri: config.redirectUri,
         message: (e.code || e.message) === 'SPOTIFY_CALLBACK_PORT_BUSY'
-          ? 'Spotify 本地回调端口被占用，请关闭占用 43879 端口的程序后重试。'
-          : 'Spotify 本地回调端口启动失败：' + (e.message || e.code || ''),
+          ? 'The Spotify local callback port is busy. Close the program using port 43879 and try again.'
+          : 'Failed to start the Spotify local callback server: ' + (e.message || e.code || ''),
       });
       return;
     }
@@ -3123,7 +3123,7 @@ async function openSpotifyMusicLoginWindow(owner) {
       modal: false,
       show: false,
       autoHideMenuBar: true,
-      title: 'Spotify 授权',
+      title: 'Spotify Authorization',
       backgroundColor: '#101414',
       icon: APP_ICON_ICO,
       webPreferences: {
@@ -3155,9 +3155,9 @@ async function openSpotifyMusicLoginWindow(owner) {
     loginWindow.webContents.on('will-navigate', (event, url) => handleMaybeRedirect(url, event));
     loginWindow.on('ready-to-show', () => loginWindow.show());
     loginWindow.on('closed', () => {
-      if (!settled) finish({ ok: false, provider: 'spotify', cancelled: true, message: 'Spotify 授权窗口已关闭。' });
+      if (!settled) finish({ ok: false, provider: 'spotify', cancelled: true, message: 'Spotify authorization window was closed.' });
     });
-    loginWindow.loadURL(authUrl).catch((e) => finish({ ok: false, provider: 'spotify', error: e.message || 'Spotify 授权页打开失败' }));
+    loginWindow.loadURL(authUrl).catch((e) => finish({ ok: false, provider: 'spotify', error: e.message || 'Failed to open the Spotify authorization page' }));
   });
 }
 
@@ -3175,7 +3175,7 @@ function loginEasterEggLockedResult() {
     ok: false,
     unlocked: false,
     error: 'LOGIN_EASTER_EGG_LOCKED',
-    message: '请先完成登录彩蛋解锁。',
+    message: 'Unlock the login easter egg first.',
   };
 }
 
@@ -3945,7 +3945,7 @@ ipcMain.handle('mineradio-cache-get-settings', async () => {
 
 ipcMain.handle('mineradio-cache-choose-directory', async () => {
   const result = await dialog.showOpenDialog({
-    title: '选择 Mineradio 缓存目录',
+    title: 'Choose the Mineradio Cache Folder',
     defaultPath: cacheSettings.rootPath,
     properties: ['openDirectory', 'createDirectory'],
   });
@@ -4023,8 +4023,8 @@ ipcMain.handle('mineradio-wallpaper-engine-choose-directory', async (event) => {
   try {
     if (!isTrustedWallpaperEngineIpc(event)) return { ok: false, canceled: false, projects: [], count: 0, error: 'WALLPAPER_ENGINE_UNTRUSTED_CALLER' };
     const options = {
-      title: '识别并导入 Wallpaper Engine 项目',
-      buttonLabel: '识别此目录',
+      title: 'Detect and Import Wallpaper Engine Projects',
+      buttonLabel: 'Scan This Folder',
       properties: ['openDirectory'],
     };
     const result = mainWindow && !mainWindow.isDestroyed()
@@ -4043,11 +4043,11 @@ ipcMain.handle('mineradio-wallpaper-engine-choose-project-file', async (event) =
   try {
     if (!isTrustedWallpaperEngineIpc(event)) return { ok: false, canceled: false, projects: [], count: 0, error: 'WALLPAPER_ENGINE_UNTRUSTED_CALLER' };
     const options = {
-      title: '选择 Wallpaper Engine 的 project.json 或场景包（.pkg/.pak）',
-      buttonLabel: '导入此项目',
+      title: 'Choose a Wallpaper Engine project.json or scene package (.pkg/.pak)',
+      buttonLabel: 'Import This Project',
       properties: ['openFile'],
       filters: [
-        { name: 'Wallpaper Engine 项目', extensions: ['pkg', 'pak', 'json'] },
+        { name: 'Wallpaper Engine Projects', extensions: ['pkg', 'pak', 'json'] },
       ],
     };
     const result = mainWindow && !mainWindow.isDestroyed()
@@ -4490,10 +4490,10 @@ function loginCookieExportMeta(provider) {
   const key = String(provider || '').toLowerCase();
   const userData = app.getPath('userData');
   const entries = {
-    netease: { label: '网易云音乐', files: [process.env.COOKIE_FILE, path.join(userData, '.cookie')] },
-    qq: { label: 'QQ音乐', files: [process.env.QQ_COOKIE_FILE, path.join(userData, '.qq-cookie')] },
-    kugou: { label: '酷狗音乐', files: [process.env.KUGOU_COOKIE_FILE, path.join(userData, '.kugou-cookie')] },
-    qishui: { label: '汽水音乐', files: [process.env.QISHUI_COOKIE_FILE, path.join(userData, '.qishui-cookie'), process.env.QISHUI_TOKEN_FILE, path.join(userData, '.qishui-token')] },
+    netease: { label: 'NetEase Cloud Music', files: [process.env.COOKIE_FILE, path.join(userData, '.cookie')] },
+    qq: { label: 'QQ Music', files: [process.env.QQ_COOKIE_FILE, path.join(userData, '.qq-cookie')] },
+    kugou: { label: 'Kugou Music', files: [process.env.KUGOU_COOKIE_FILE, path.join(userData, '.kugou-cookie')] },
+    qishui: { label: 'Soda Music', files: [process.env.QISHUI_COOKIE_FILE, path.join(userData, '.qishui-cookie'), process.env.QISHUI_TOKEN_FILE, path.join(userData, '.qishui-token')] },
     spotify: { label: 'Spotify', files: [process.env.SPOTIFY_TOKEN_FILE, path.join(userData, '.spotify-token.json')] },
   };
   return entries[key] || null;
@@ -4502,13 +4502,13 @@ function loginCookieExportMeta(provider) {
 ipcMain.handle('mineradio-export-login-cookie', async (_event, provider) => {
   try {
     const meta = loginCookieExportMeta(provider);
-    if (!meta) return { ok: false, error: 'UNKNOWN_PROVIDER', message: '未知平台，无法导出登录 cookie' };
+    if (!meta) return { ok: false, error: 'UNKNOWN_PROVIDER', message: 'Unknown platform — cannot export the login cookie' };
     const source = (meta.files || []).filter(Boolean).find((file) => {
       try { return fs.existsSync(file) && fs.statSync(file).isFile() && fs.readFileSync(file, 'utf8').trim(); } catch (_) { return false; }
     });
-    if (!source) return { ok: false, error: 'COOKIE_NOT_FOUND', message: `${meta.label} 当前没有可导出的登录 cookie` };
+    if (!source) return { ok: false, error: 'COOKIE_NOT_FOUND', message: `No exportable login cookie for ${meta.label} right now` };
     const text = fs.readFileSync(source, 'utf8');
-    const safeName = String(`${meta.label}_登录cookie.txt`).replace(/[\\/:*?"<>|]+/g, '-');
+    const safeName = String(`${meta.label}_login-cookie.txt`).replace(/[\\/:*?"<>|]+/g, '-');
     const filePath = path.join(app.getPath('desktop'), safeName);
     fs.writeFileSync(filePath, text, 'utf8');
     return { ok: true, filePath };
@@ -4522,7 +4522,7 @@ ipcMain.handle('mineradio-export-json-file', async (event, payload = {}) => {
     const owner = getSenderWindow(event);
     const defaultName = String(payload.defaultName || 'mineradio-export.json').replace(/[\\/:*?"<>|]+/g, '-');
     const result = await dialog.showSaveDialog(owner, {
-      title: '导出 Mineradio 存档',
+      title: 'Export Mineradio Archive',
       defaultPath: defaultName.toLowerCase().endsWith('.json') ? defaultName : `${defaultName}.json`,
       filters: [{ name: 'JSON', extensions: ['json'] }],
     });
@@ -4539,7 +4539,7 @@ ipcMain.handle('mineradio-import-json-file', async (event) => {
   try {
     const owner = getSenderWindow(event);
     const result = await dialog.showOpenDialog(owner, {
-      title: '导入 Mineradio 存档',
+      title: 'Import Mineradio Archive',
       properties: ['openFile'],
       filters: [{ name: 'JSON', extensions: ['json'] }],
     });
@@ -5150,7 +5150,7 @@ function recoverMainWindowAfterRendererGone(win, details = {}, cleanupPromise = 
   if (!attempt) {
     const error = new Error('renderer recovery limit reached');
     const log = writeStartupErrorLog('Runtime renderer recovery', 'MR-RUNTIME-RENDERER-LOOP', error);
-    dialog.showErrorBox('Mineradio 显示恢复失败', `前台界面连续异常退出，已停止自动重载。\n日志：${log.file}`);
+    dialog.showErrorBox('Mineradio Display Recovery Failed', `The foreground UI crashed repeatedly, so automatic reloading has stopped.\nLog: ${log.file}`);
     return Promise.resolve(false);
   }
   const keepFullscreen = win.isFullScreen() || windowFullscreenActive;
@@ -5186,7 +5186,7 @@ function recoverMainWindowAfterRendererGone(win, details = {}, cleanupPromise = 
         try { win.show(); } catch (_) { }
       }
       if (attempt >= RENDERER_RECOVERY_MAX_ATTEMPTS) {
-        dialog.showErrorBox('Mineradio 显示恢复失败', `前台界面无法重新加载。\n日志：${log.file}`);
+        dialog.showErrorBox('Mineradio Display Recovery Failed', `The foreground UI could not be reloaded.\nLog: ${log.file}`);
       }
     }
     return false;

@@ -65,8 +65,8 @@ function updateRipples(dt) {
 }
 
 // ============================================================
-//  封面 + 边缘 + 启发式深度 处理 (CPU 端)
-//   生成 256×256 RGBA 纹理: R=depth G=edge B=fg-mask A=lum
+//  cover + edge + heuristic depth processing (CPU side)
+//   produces a 256×256 RGBA texture: R=depth G=edge B=fg-mask A=lum
 // ============================================================
 function coverDepthCacheId(raw) {
   var str = String(raw || '');
@@ -116,7 +116,7 @@ function buildEdgeAndDepth(srcCanvas) {
     var di = i * 4;
     lum[i] = (src[di] * 0.299 + src[di + 1] * 0.587 + src[di + 2] * 0.114) / 255;
   }
-  // 2) Box blur 2 次 (深度基础)
+  // 2) Box blur twice (depth base)
   function blurH(s, d, r) {
     for (var y = 0; y < H; y++) {
       var sum = 0;
@@ -141,7 +141,7 @@ function buildEdgeAndDepth(srcCanvas) {
   }
   blurH(lum, tmp, 4); blurV(tmp, blur, 4);
 
-  // 3) Sobel 边缘 (在 blur 上做 - 减少噪声)
+  // 3) Sobel edges (computed on the blurred image to reduce noise)
   var edge = new Float32Array(N);
   for (var y = 1; y < H - 1; y++) for (var x = 1; x < W - 1; x++) {
     var gx = -blur[(y - 1) * W + (x - 1)] - 2 * blur[y * W + (x - 1)] - blur[(y + 1) * W + (x - 1)]
@@ -150,7 +150,7 @@ function buildEdgeAndDepth(srcCanvas) {
       + blur[(y + 1) * W + (x - 1)] + 2 * blur[(y + 1) * W + x] + blur[(y + 1) * W + (x + 1)];
     edge[y * W + x] = Math.min(1.0, Math.sqrt(gx * gx + gy * gy) * 1.4);
   }
-  // 4) 启发式深度:亮度 + 中心 mask + 边缘累积
+  // 4) heuristic depth: brightness + center mask + edge accumulation
   var depth = new Float32Array(N);
   for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
     var i = y * W + x;
@@ -161,7 +161,7 @@ function buildEdgeAndDepth(srcCanvas) {
     var bright = blur[i];
     depth[i] = Math.min(1.0, bright * 0.45 + centerBias * 0.55);
   }
-  // 5) fg-mask: 中心 + 高对比区
+  // 5) fg-mask: center + high-contrast regions
   var fg = new Float32Array(N);
   for (var i = 0; i < N; i++) {
     var d = depth[i];
@@ -169,7 +169,7 @@ function buildEdgeAndDepth(srcCanvas) {
     fg[i] = Math.min(1.0, d * 0.6 + e * 0.5);
   }
 
-  // 输出 256×256 RGBA
+  // output 256×256 RGBA
   var out = document.createElement('canvas'); out.width = W; out.height = H;
   var octx = out.getContext('2d'), imgOut = octx.createImageData(W, H);
   for (var i = 0; i < N; i++) {
@@ -183,13 +183,13 @@ function buildEdgeAndDepth(srcCanvas) {
   return out;
 }
 
-// AI 深度估计 (Xenova/depth-anything-small) - 异步加载, 失败回退
+// AI depth estimation (Xenova/depth-anything-small) - async load, falls back on failure
 async function ensureAIDepthPipeline() {
   if (aiDepthReady && aiDepthPipeline) return aiDepthPipeline;
   if (aiDepthBusy) return null;
   aiDepthBusy = true;
   try {
-    showAIDepthChip('加载 AI 深度模型 (首次需下载 50MB)…');
+    showAIDepthChip('Loading AI depth model (first run downloads ~50MB)...');
     var mod = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
     mod.env.allowLocalModels = false;
     if (mod.env.backends && mod.env.backends.onnx && mod.env.backends.onnx.wasm) mod.env.backends.onnx.wasm.numThreads = 1;
@@ -221,7 +221,7 @@ function makeAIDepthInputCanvas(srcCanvas) {
 async function estimateAIDepth(srcCanvas, token) {
   if (!fx.aiDepth) return null;
   if (performance.now() < aiDepthFailUntil) return null;
-  showAIDepthChip('后台增强封面深度…');
+  showAIDepthChip('Enhancing cover depth in background...');
   try {
     var pipe = await ensureAIDepthPipeline();
     if (!pipe) { hideAIDepthChip(); return null; }
@@ -248,7 +248,7 @@ async function estimateAIDepth(srcCanvas, token) {
 }
 
 function mergeAIDepthIntoEdgeTexture(heuristicCanvas, aiCanvas) {
-  // 把 AI 深度 (灰度) 写入 R 通道, 保留启发式的 G/B/A
+  // write AI depth (grayscale) into the R channel, keep the heuristic G/B/A
   var W = heuristicCanvas.width || 256, H = heuristicCanvas.height || 256;
   var hctx = heuristicCanvas.getContext('2d');
   var hImg = hctx.getImageData(0, 0, W, H);
@@ -258,7 +258,7 @@ function mergeAIDepthIntoEdgeTexture(heuristicCanvas, aiCanvas) {
   actx.drawImage(aiCanvas, 0, 0, W, H);
   var aData = actx.getImageData(0, 0, W, H).data;
 
-  // 归一化 AI 深度
+  // normalize AI depth
   var aiVals = new Float32Array(W * H), minV = 1, maxV = 0;
   for (var i = 0; i < aiVals.length; i++) {
     var di = i * 4;
@@ -266,7 +266,7 @@ function mergeAIDepthIntoEdgeTexture(heuristicCanvas, aiCanvas) {
     aiVals[i] = v; if (v < minV) minV = v; if (v > maxV) maxV = v;
   }
   var range = Math.max(0.001, maxV - minV);
-  // 判断是否反相 (中心应该比边缘深, 表示前景在中)
+  // decide whether to invert (center should be darker than edges, meaning the subject is centered)
   var centerSum = 0, centerCount = 0, edgeSum = 0, edgeCount = 0;
   for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
     var i = y * W + x;
@@ -305,7 +305,7 @@ function queueAIDepthForCover(srcCanvas, edgeCanvas, token, opts, cacheSeed, for
     coverEdgeTex.needsUpdate = true;
     setCoverDepthState(1, 1.0, 360);
     setCoverDepthCache(cacheSeed, edgeCanvas, true);
-    showToast('AI 深度已后台增强');
+    showToast('AI depth enhanced in background');
   }, force ? 240 : 1800, force ? 1200 : 3000);
 }
 
@@ -315,7 +315,7 @@ function queueAIDepthForCurrentCover(force) {
   queueAIDepthForCover(coverTex.image, coverEdgeTex.image, coverProcessToken, {}, '', !!force);
 }
 
-// 颜色渐变 tween (切歌时旧封面→新封面)
+// color blend tween (old cover → new cover on track switch)
 var colorMixTween = null;
 function startColorMixTween(durationMs) {
   if (colorMixTween) cancelAnimationFrame(colorMixTween.raf);
@@ -332,7 +332,7 @@ function startColorMixTween(durationMs) {
   colorMixTween = { raf: requestAnimationFrame(step) };
 }
 
-// 粒子整体透明度 tween (启动 fade-in)
+// overall particle alpha tween (startup fade-in)
 var alphaTween = null;
 var floatAlphaTween = null;
 var IDLE_PARTICLE_ALPHA = 0;
@@ -372,7 +372,7 @@ function revealIdleParticles(target, durationMs) {
   tweenFloatAlpha(from, next, durationMs || 1800);
 }
 
-// 加载形态 tween (uLoading 0..1)
+// loading form tween (uLoading 0..1)
 var loadingTween = null;
 var loadingShownAt = 0;
 var loadingHideTimer = null;
@@ -565,7 +565,7 @@ function applyCoverCanvas(cv, thumbSrc, opts) {
   }
   var cacheSeed = (opts.coverKey || thumbSrc || '') + '|tex=' + (cv.width || 0) + 'x' + (cv.height || 0);
   var cachedDepth = getCoverDepthCache(cacheSeed);
-  // 切歌颜色渐变: 把当前 coverTex 当作 prevCoverTex
+  // track-switch color blend: keep the current coverTex as prevCoverTex
   if (!opts.noCoverTransition && uniforms.uHasCover.value > 0.5 && coverTex.image) {
     var prevW = coverTex.image.width || 256;
     var prevH = coverTex.image.height || 256;
@@ -597,7 +597,7 @@ function applyCoverCanvas(cv, thumbSrc, opts) {
   }
   if (shelfManager) shelfManager.onCoverChange(thumbSrc);
 
-  // 切歌只做干净的新旧封面 crossfade，不再插入加载雾团。
+  // track switch is just a clean old-to-new cover crossfade; no loading mist inserted.
   var colorMixMs = opts.colorMixDuration || (opts.seamlessTrackSwitch ? (fx.preset === 0 ? 320 : 460) : (fx.preset === 0 ? 520 : 960));
   if (opts.noCoverTransition) {
     if (colorMixTween) {
@@ -642,10 +642,10 @@ function applyCoverCanvas(cv, thumbSrc, opts) {
 }
 
 // ============================================================
-//  离线节拍预解析 (v7.2)
-//    流程: fetch 完整音频 → OfflineAudioContext.decodeAudioData
-//          → 低通滤波 (只保留 60-150Hz, 即 kick 频段)
-//          → 短时能量曲线 → 自适应阈值检测峰值
-//          → 输出 kick 时间戳数组 (单位: 秒)
-//    优点: 完全规避人声干扰; 预先准备好节奏表
-//    缺点: 每首歌首次要 1-3 秒
+//  offline beat pre-analysis (v7.2)
+//    flow: fetch full audio → OfflineAudioContext.decodeAudioData
+//          → low-pass filter (keep only 60-150Hz, the kick band)
+//          → short-time energy curve → adaptive threshold peak detection
+//          → output array of kick timestamps (unit: seconds)
+//    pro: completely avoids vocal interference; rhythm table ready in advance
+//    con: first analysis takes 1-3s per song

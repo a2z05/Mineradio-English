@@ -163,7 +163,7 @@ function bindFxPanel() {
     lyricPicker.addEventListener('input', function () { setLyricColorCustom(lyricPicker.value, true); });
     lyricPicker.addEventListener('change', function () {
       setLyricColorCustom(lyricPicker.value, true);
-      showToast('歌词颜色: ' + normalizeHexColor(lyricPicker.value).toUpperCase());
+      showToast('Lyric color: ' + normalizeHexColor(lyricPicker.value).toUpperCase());
     });
   }
   var lyricHighlightPicker = document.getElementById('lyric-highlight-picker');
@@ -171,7 +171,7 @@ function bindFxPanel() {
     lyricHighlightPicker.addEventListener('input', function () { setLyricHighlightCustom(lyricHighlightPicker.value, true); });
     lyricHighlightPicker.addEventListener('change', function () {
       setLyricHighlightCustom(lyricHighlightPicker.value, true);
-      showToast('高亮颜色: ' + normalizeHexColor(lyricHighlightPicker.value).toUpperCase());
+      showToast('Highlight color: ' + normalizeHexColor(lyricHighlightPicker.value).toUpperCase());
     });
   }
   var lyricGlowPicker = document.getElementById('lyric-glow-picker');
@@ -179,14 +179,14 @@ function bindFxPanel() {
     lyricGlowPicker.addEventListener('input', function () { setLyricGlowCustom(lyricGlowPicker.value, true); });
     lyricGlowPicker.addEventListener('change', function () {
       setLyricGlowCustom(lyricGlowPicker.value, true);
-      showToast('溢光颜色: ' + normalizeHexColor(lyricGlowPicker.value).toUpperCase());
+      showToast('Glow color: ' + normalizeHexColor(lyricGlowPicker.value).toUpperCase());
     });
   }
   var uiAccentPicker = document.getElementById('ui-accent-picker');
   if (uiAccentPicker) {
     uiAccentPicker.addEventListener('input', function () { setUiAccentColor(uiAccentPicker.value, true); });
     uiAccentPicker.addEventListener('change', function () {
-      showToast('界面高亮: ' + normalizeHexColor(
+      showToast('UI accent: ' + normalizeHexColor(
         uiAccentPicker.value,
         fxDefaults.uiAccentColor || '#ffffff'
       ).toUpperCase());
@@ -195,7 +195,7 @@ function bindFxPanel() {
   var visualTintPicker = document.getElementById('visual-tint-picker');
   if (visualTintPicker) {
     visualTintPicker.addEventListener('input', function () { setVisualTintCustom(visualTintPicker.value, true); });
-    visualTintPicker.addEventListener('change', function () { showToast('视觉主色: ' + normalizeHexColor(visualTintPicker.value).toUpperCase()); });
+    visualTintPicker.addEventListener('change', function () { showToast('Visual tint: ' + normalizeHexColor(visualTintPicker.value).toUpperCase()); });
   }
   [
     ['sonic-ground-base-picker', 'sonicGroundBaseColor'],
@@ -224,27 +224,27 @@ function bindFxPanel() {
   var homeAccentPicker = document.getElementById('home-accent-picker');
   if (homeAccentPicker) {
     homeAccentPicker.addEventListener('input', function () { setHomeAccentColor(homeAccentPicker.value, true); });
-    homeAccentPicker.addEventListener('change', function () { showToast('Home 填充: ' + normalizeHexColor(homeAccentPicker.value).toUpperCase()); });
+    homeAccentPicker.addEventListener('change', function () { showToast('Home fill: ' + normalizeHexColor(homeAccentPicker.value).toUpperCase()); });
   }
   var homeIconPicker = document.getElementById('home-icon-picker');
   if (homeIconPicker) {
     homeIconPicker.addEventListener('input', function () { setHomeIconColor(homeIconPicker.value, true); });
-    homeIconPicker.addEventListener('change', function () { showToast('主页图标: ' + normalizeHexColor(homeIconPicker.value, '#f4d28a').toUpperCase()); });
+    homeIconPicker.addEventListener('change', function () { showToast('Home icon: ' + normalizeHexColor(homeIconPicker.value, '#f4d28a').toUpperCase()); });
   }
   var visualIconPicker = document.getElementById('visual-icon-picker');
   if (visualIconPicker) {
     visualIconPicker.addEventListener('input', function () { setVisualIconColor(visualIconPicker.value, true); });
-    visualIconPicker.addEventListener('change', function () { showToast('视觉图标: ' + normalizeHexColor(visualIconPicker.value, '#7fd8ff').toUpperCase()); });
+    visualIconPicker.addEventListener('change', function () { showToast('Visual icon: ' + normalizeHexColor(visualIconPicker.value, '#7fd8ff').toUpperCase()); });
   }
   var bgColorPicker = document.getElementById('bg-color-picker');
   if (bgColorPicker) {
     bgColorPicker.addEventListener('input', function () { setCustomBackgroundColor(bgColorPicker.value, true); });
-    bgColorPicker.addEventListener('change', function () { showToast('背景颜色: ' + normalizeHexColor(bgColorPicker.value, '#000000').toUpperCase()); });
+    bgColorPicker.addEventListener('change', function () { showToast('Background color: ' + normalizeHexColor(bgColorPicker.value, '#000000').toUpperCase()); });
   }
   var shelfAccentPicker = document.getElementById('shelf-accent-picker');
   if (shelfAccentPicker) {
     shelfAccentPicker.addEventListener('input', function () { setShelfAccentColor(shelfAccentPicker.value, true); });
-    shelfAccentPicker.addEventListener('change', function () { showToast('歌单架颜色: ' + shelfAccentHex().toUpperCase()); });
+    shelfAccentPicker.addEventListener('change', function () { showToast('Shelf color: ' + shelfAccentHex().toUpperCase()); });
   }
   var bgImageInput = document.getElementById('background-image-input');
   if (bgImageInput) {
@@ -322,7 +322,7 @@ function bindFxPanel() {
       closeCoverColorPicker();
     }, true);
   }
-  // 三态
+  // Tri-state segments
   document.querySelectorAll('#shelf-seg button').forEach(function (b) {
     b.addEventListener('click', function () { setShelfMode(b.dataset.shelf); });
   });
@@ -341,7 +341,7 @@ function bindFxPanel() {
       updateDesktopLyricsFpsControls();
       saveLyricLayout({ user: true, reason: 'desktopLyricsFps' });
       pushDesktopLyricsState(true);
-      showToast(fx.desktopLyricsFps ? ('桌面歌词帧数 ' + fx.desktopLyricsFps) : '桌面歌词帧数无上限');
+      showToast(fx.desktopLyricsFps ? ('Desktop lyrics FPS ' + fx.desktopLyricsFps) : 'Desktop lyrics FPS uncapped');
     });
   });
   document.querySelectorAll('#wallpaper-fps-seg [data-wallpaper-fps]').forEach(function (btn) {
@@ -350,7 +350,7 @@ function bindFxPanel() {
       updateWallpaperFpsControls();
       saveLyricLayout({ user: true, reason: 'wallpaperFps' });
       if (fx.wallpaperMode) pushWallpaperState(true);
-      showToast('壁纸帧数 ' + fx.wallpaperFps);
+      showToast('Wallpaper FPS ' + fx.wallpaperFps);
     });
   });
   document.querySelectorAll('#performance-background-seg [data-performance-background]').forEach(function (btn) {
@@ -373,7 +373,7 @@ function bindFxPanel() {
 }
 function toggleWallpaperModeFromUi() {
   if (typeof desktopWallpaperRuntimeState !== 'undefined' && desktopWallpaperRuntimeState.supported === false) {
-    showToast('当前系统不支持桌面壁纸模式');
+    showToast('Desktop wallpaper mode is not supported on this system');
     return Promise.resolve({ ok: false, enabled: false, error: 'WALLPAPER_PLATFORM_UNSUPPORTED' });
   }
   var desired = !fx.wallpaperMode;
@@ -382,9 +382,9 @@ function toggleWallpaperModeFromUi() {
   return applyWallpaperModeState(true).then(function (result) {
     if (result && result.rendererStale) return result;
     var accepted = !!(result && result.ok === true && result.enabled === desired);
-    if (accepted) showToast(desired ? ('完整桌面模式已开启 · ' + desktopInteractionHotkeyHint()) : '完整桌面模式已关闭');
-    else if (desired) showToast('完整桌面模式启动失败：' + desktopWallpaperErrorLabel(result && result.error));
-    else showToast('完整桌面模式关闭失败：' + desktopWallpaperErrorLabel(result && result.error));
+    if (accepted) showToast(desired ? ('Full desktop mode on · ' + desktopInteractionHotkeyHint()) : 'Full desktop mode off');
+    else if (desired) showToast('Failed to start full desktop mode: ' + desktopWallpaperErrorLabel(result && result.error));
+    else showToast('Failed to exit full desktop mode: ' + desktopWallpaperErrorLabel(result && result.error));
     return result;
   });
 }
@@ -395,7 +395,7 @@ function toggleFx(key) {
     updateFxInputs();
     applyDesktopLyricsState(true);
     applyWallpaperModeState(true);
-    showToast('开发中，暂不可用');
+    showToast('In development — not available yet');
     return;
   }
   if (key === 'wallpaperMode') {
@@ -416,7 +416,7 @@ function toggleFx(key) {
   if (key === 'lyricGlow' || key === 'lyricGlowBeat' || key === 'lyricGlowParticles') pushDesktopLyricsState(true);
   if (key === 'backgroundStarRiver') {
     if (typeof updateBackgroundStarRiverState === 'function') updateBackgroundStarRiverState(0.016, true);
-    showToast(fx.backgroundStarRiver !== false ? '背景星河已开启' : '背景星河已关闭');
+    showToast(fx.backgroundStarRiver !== false ? 'Background star river on' : 'Background star river off');
   }
   if (key === 'wallpaperMode') applyWallpaperModeState(true);
   if (key === 'shelfShowPodcasts' || key === 'shelfMergeCollections') {
@@ -439,40 +439,40 @@ function toggleFx(key) {
     if (typeof updateMemoryControls === 'function') updateMemoryControls();
     if (typeof configureMemoryReductFromFx === 'function') configureMemoryReductFromFx('toggle', key === 'memoryAutoSystemTrim' && fx.memoryAutoSystemTrim);
   }
-  if (key === 'lyricGlow') showToast(fx.lyricGlow ? '歌词溢光已开启' : '歌词溢光已关闭');
-  if (key === 'lyricGlowBeat') showToast(fx.lyricGlowBeat ? '歌词溢光跟随鼓点' : '歌词溢光已脱离鼓点');
-  if (key === 'lyricGlowParticles') showToast(fx.lyricGlowParticles ? '歌词光粒已开启' : '歌词光粒已关闭');
-  if (key === 'lyricVerticalFloat') showToast(fx.lyricVerticalFloat !== false ? '歌词上下浮动已开启' : '歌词上下浮动已关闭');
-  if (key === 'lyricPauseHold') showToast(fx.lyricPauseHold !== false ? '暂停时保留歌词' : '暂停时隐藏歌词');
-  if (key === 'desktopLyrics') showToast(fx.desktopLyrics ? '桌面歌词已开启' : '桌面歌词已关闭');
-  if (key === 'desktopLyricsClickThrough') showToast(fx.desktopLyricsClickThrough !== false ? '桌面歌词已锁定' : '桌面歌词可移动');
-  if (key === 'desktopLyricsCinema') showToast(fx.desktopLyricsCinema !== false ? '桌面歌词电影震动已开启' : '桌面歌词电影震动已关闭，基础漂浮保留');
-  if (key === 'desktopLyricsHighlight') showToast(fx.desktopLyricsHighlight === true ? '桌面歌词高亮跟随已开启' : '桌面歌词高亮跟随已关闭');
-  if (key === 'wallpaperMode') showToast(fx.wallpaperMode ? '壁纸模式已开启' : '壁纸模式已关闭');
-  if (key === 'shelfShowPodcasts') showToast(fx.shelfShowPodcasts !== false ? '3D歌单架已显示播客歌单' : '3D歌单架已隐藏播客歌单');
-  if (key === 'shelfMergeCollections') showToast(fx.shelfMergeCollections === true ? '我的歌单与收藏歌单已合并滚动' : '收藏歌单恢复滚到底切页');
-  if (key === 'liveBackgroundKeep') showToast(fx.liveBackgroundKeep ? '直播后台保持已开启' : '直播后台保持已关闭');
-  if (key === 'memoryAutoTrimApp') showToast(fx.memoryAutoTrimApp ? '播放器进程压缩已开启' : '播放器进程压缩已关闭');
-  if (key === 'memoryAutoTrimOnBackground') showToast(fx.memoryAutoTrimOnBackground ? '最小化后台会自动压缩' : '后台自动压缩已关闭');
-  if (key === 'memoryAutoSystemTrim') showToast(fx.memoryAutoSystemTrim ? '系统级 Mem Reduct 已开启' : '系统级 Mem Reduct 已关闭');
-  if (key === 'memorySystemAutoElevate') showToast(fx.memorySystemAutoElevate ? '系统释放允许请求管理员权限' : '系统释放不再自动提权');
-  if (key === 'lyricCameraLock') showToast(fx.lyricCameraLock ? '歌词已绑定镜头' : '歌词已恢复自由漂浮');
-  if (key === 'bloom') showToast(fx.bloom ? '溢光已开启' : '溢光已关闭');
-  if (key === 'edge') showToast(fx.edge ? '已开启轮廓高亮' : '已关闭轮廓高亮');
-  if (key === 'cinema') showToast(fx.cinema ? '已开启电影镜头' : '已关闭电影镜头');
+  if (key === 'lyricGlow') showToast(fx.lyricGlow ? 'Lyric glow on' : 'Lyric glow off');
+  if (key === 'lyricGlowBeat') showToast(fx.lyricGlowBeat ? 'Lyric glow follows the beat' : 'Lyric glow detached from the beat');
+  if (key === 'lyricGlowParticles') showToast(fx.lyricGlowParticles ? 'Lyric light particles on' : 'Lyric light particles off');
+  if (key === 'lyricVerticalFloat') showToast(fx.lyricVerticalFloat !== false ? 'Lyric vertical float on' : 'Lyric vertical float off');
+  if (key === 'lyricPauseHold') showToast(fx.lyricPauseHold !== false ? 'Lyrics stay visible when paused' : 'Lyrics hidden when paused');
+  if (key === 'desktopLyrics') showToast(fx.desktopLyrics ? 'Desktop lyrics on' : 'Desktop lyrics off');
+  if (key === 'desktopLyricsClickThrough') showToast(fx.desktopLyricsClickThrough !== false ? 'Desktop lyrics locked' : 'Desktop lyrics movable');
+  if (key === 'desktopLyricsCinema') showToast(fx.desktopLyricsCinema !== false ? 'Desktop lyrics cinema shake on' : 'Desktop lyrics cinema shake off — basic float kept');
+  if (key === 'desktopLyricsHighlight') showToast(fx.desktopLyricsHighlight === true ? 'Desktop lyrics highlight follow on' : 'Desktop lyrics highlight follow off');
+  if (key === 'wallpaperMode') showToast(fx.wallpaperMode ? 'Wallpaper mode on' : 'Wallpaper mode off');
+  if (key === 'shelfShowPodcasts') showToast(fx.shelfShowPodcasts !== false ? '3D shelf now shows podcast playlists' : '3D shelf now hides podcast playlists');
+  if (key === 'shelfMergeCollections') showToast(fx.shelfMergeCollections === true ? 'My playlists and saved playlists merged into one scroll' : 'Saved playlists back to switch tab at scroll end');
+  if (key === 'liveBackgroundKeep') showToast(fx.liveBackgroundKeep ? 'Background rendering keep-alive on' : 'Background rendering keep-alive off');
+  if (key === 'memoryAutoTrimApp') showToast(fx.memoryAutoTrimApp ? 'Player process trimming on' : 'Player process trimming off');
+  if (key === 'memoryAutoTrimOnBackground') showToast(fx.memoryAutoTrimOnBackground ? 'Auto-trims while minimized to background' : 'Background auto-trim off');
+  if (key === 'memoryAutoSystemTrim') showToast(fx.memoryAutoSystemTrim ? 'System-level Mem Reduct on' : 'System-level Mem Reduct off');
+  if (key === 'memorySystemAutoElevate') showToast(fx.memorySystemAutoElevate ? 'System memory release may request admin rights' : 'System memory release no longer auto-elevates');
+  if (key === 'lyricCameraLock') showToast(fx.lyricCameraLock ? 'Lyrics locked to camera' : 'Lyrics back to free floating');
+  if (key === 'bloom') showToast(fx.bloom ? 'Bloom on' : 'Bloom off');
+  if (key === 'edge') showToast(fx.edge ? 'Edge highlighting on' : 'Edge highlighting off');
+  if (key === 'cinema') showToast(fx.cinema ? 'Cinematic camera on' : 'Cinematic camera off');
   if (key === 'aiDepth') {
     if (fx.aiDepth) {
       aiDepthFailUntil = 0;
       queueAIDepthForCurrentCover(true);
     }
-    showToast(fx.aiDepth ? '已开启后台 AI 立体增强' : '已关闭 AI 立体增强, 使用轻量弧面');
+    showToast(fx.aiDepth ? 'Background AI depth enhancement on' : 'AI depth enhancement off — using lightweight parallax');
   }
 }
 function toggleFxPanel(force) {
   var el = document.getElementById('fx-panel');
   if (!el) return;
   if (!diyPlayerMode && force !== false) {
-    showToast('开启 DIY 玩家模式后可打开视觉控制台');
+    showToast('Turn on DIY player mode to open the visual console');
     return;
   }
   var currentlyOpen = el.classList.contains('show') || el.classList.contains('peek');
@@ -517,7 +517,7 @@ function resetFx() {
   if (shelfManager && shelfManager.rebuild) shelfManager.rebuild(true);
   if (shelfManager && shelfManager.refreshTheme) shelfManager.refreshTheme();
   saveLyricLayout({ user: true, reason: 'resetFx' });
-  showToast('已恢复默认参数');
+  showToast('Defaults restored');
 }
 
 function setShelfMode(m, opts) {
@@ -544,7 +544,7 @@ function setShelfMode(m, opts) {
   if (m === 'off') fx.shelfPresence = 'auto';
   document.querySelectorAll('#shelf-seg button').forEach(function (b) { b.classList.toggle('active', b.dataset.shelf === m); });
   if (shelfManager) shelfManager.setMode(m);
-  // 舞台模式: 顶部搜索、底部控件让位
+  // Stage mode: top search and bottom controls step aside
   var searchArea = document.getElementById('search-area');
   var bottomBar = document.getElementById('bottom-bar');
   if (searchArea) searchArea.classList.toggle('stage-mode', m === 'stage');
@@ -583,7 +583,7 @@ function setShelfCameraMode(mode) {
     setFocusZone(null, true);
   }
   saveLyricLayout({ user: true, reason: 'shelfCameraMode' });
-  showToast(fx.shelfCameraMode === 'static' ? '3D歌单架: 静态镜头' : '3D歌单架: 动态镜头');
+  showToast(fx.shelfCameraMode === 'static' ? '3D shelf: static camera' : '3D shelf: dynamic camera');
 }
 function setShelfPresence(mode) {
   fx.shelfPresence = normalizeShelfPresence(mode);
@@ -606,13 +606,13 @@ function setShelfPresence(mode) {
   }
   updateShelfControlUi();
   saveLyricLayout({ user: true, reason: 'shelfPresence' });
-  showToast(fx.shelfPresence === 'always' ? '3D歌单架: 常驻' : '3D歌单架: 自动隐藏');
+  showToast(fx.shelfPresence === 'always' ? '3D shelf: always visible' : '3D shelf: auto-hide');
 }
 function setShelfAccentColor(color, silent) {
   fx.shelfAccentColor = normalizeHexColor(color || fxDefaults.shelfAccentColor, fxDefaults.shelfAccentColor);
   refreshShelfVisuals('color');
   saveLyricLayout({ user: true, reason: 'shelfAccentColor' });
-  if (!silent) showToast('歌单架颜色: ' + fx.shelfAccentColor.toUpperCase());
+  if (!silent) showToast('Shelf color: ' + fx.shelfAccentColor.toUpperCase());
 }
 function resetShelfAccentColor() {
   setShelfAccentColor(fxDefaults.shelfAccentColor || '#f4d28a');
@@ -643,7 +643,7 @@ function updateImmersiveButton() {
   if (!btn) return;
   btn.classList.toggle('active', immersiveMode);
   btn.setAttribute('aria-pressed', immersiveMode ? 'true' : 'false');
-  btn.title = immersiveMode ? '退出全沉浸式' : '全沉浸式';
+  btn.title = immersiveMode ? 'Exit full immersive mode' : 'Full immersive mode';
   btn.setAttribute('aria-label', btn.title);
 }
 
@@ -711,7 +711,7 @@ function setImmersiveMode(on) {
   var bottomBarExit = document.getElementById('bottom-bar');
   if (immersiveState.bottomVisible) revealBottomControls(900);
   else if (bottomBarExit) bottomBarExit.classList.remove('visible', 'soft-hidden');
-  showToast('已退出全沉浸式');
+  showToast('Exited full immersive mode');
 }
 
 function toggleImmersiveMode() {
@@ -719,7 +719,7 @@ function toggleImmersiveMode() {
 }
 
 function setCamMode(m) {
-  if (m === 'head') m = 'gesture'; // v8: 头部追踪已下线, 兼容旧设置
+  if (m === 'head') m = 'gesture'; // v8: head tracking removed, kept for old settings compatibility
   fx.cam = m;
   document.querySelectorAll('#cam-seg button').forEach(function (b) { b.classList.toggle('active', b.dataset.cam === m); });
   if (m === 'off') stopGestureControl();
@@ -728,4 +728,4 @@ function setCamMode(m) {
 }
 
 // ============================================================
-//  更新提示预览
+//  Update notice preview

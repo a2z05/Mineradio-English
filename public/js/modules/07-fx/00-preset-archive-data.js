@@ -1,14 +1,14 @@
 // ============================================================
 var presetMeta = [
-  { name: 'emily专辑封面', desc: '封面粒子 · 快速入场' },
-  { name: '滚筒', desc: '隧道 · 沉浸感' },
-  { name: '星球', desc: '星球 · 雕塑感' },
-  { name: '虚空', desc: '无粒子 · 自定义背景' },
-  { name: '唱片', desc: '唱片 · 圆形封面' },
-  { name: '星河', desc: '壁纸粒子 · 音乐律动' },
-  { name: '安魂', desc: '骷髅·YUI7W', descHtml: '骷髅·<span class="pc-yui7w">YUI7W</span>' },
-  { name: '音域回响', nameHtml: '音域回响 <span class="pc-name-en">Sonic-Topography</span>', desc: '作者 Ajin', descHtml: '作者 <span class="pc-author-ajin">Ajin</span>' },
-  { name: '音域回响', nameHtml: '音域回响 <span class="pc-name-en">Wallpaper Engine</span>', desc: '作者 CmzYa' },
+  { name: 'Emily album cover', desc: 'Cover particles · fast intro' },
+  { name: 'Tunnel', desc: 'Tunnel · immersive' },
+  { name: 'Planet', desc: 'Planet · sculpted look' },
+  { name: 'Void', desc: 'No particles · custom background' },
+  { name: 'Vinyl', desc: 'Vinyl · round cover' },
+  { name: 'Star river', desc: 'Wallpaper particles · music motion' },
+  { name: 'Requiem', desc: 'Skull · YUI7W', descHtml: 'Skull · <span class="pc-yui7w">YUI7W</span>' },
+  { name: 'Sonic Topography', nameHtml: 'Sonic Topography <span class="pc-name-en">Sonic-Topography</span>', desc: 'By Ajin', descHtml: 'By <span class="pc-author-ajin">Ajin</span>' },
+  { name: 'Sonic Topography', nameHtml: 'Sonic Topography <span class="pc-name-en">Wallpaper Engine</span>', desc: 'By CmzYa' },
 ];
 var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 14c3-2 5-2 8 0s5 2 8 0M3 10c3-2 5-2 8 0s5 2 8 0M3 18c3-2 5-2 8 0s5 2 8 0"/></svg>',
@@ -23,24 +23,24 @@ var presetIcons = [
 ];
 var presetDisplayOrder = [0, 6, 7, 8, 5, 4, 2, 1, 3];
 var lyricColorPresets = [
-  { name: '雾蓝', color: '#a9b8c8' },
-  { name: '银蓝', color: '#9db8cf' },
-  { name: '冰川', color: '#7ec8d8' },
-  { name: '青绿', color: '#66d2b5' },
-  { name: '松针', color: '#7fa894' },
-  { name: '月白', color: '#d7d2c4' },
-  { name: '岩金', color: '#c3ae7c' },
-  { name: '琥珀', color: '#d9a45f' },
-  { name: '暮粉', color: '#c78aa4' },
-  { name: '玫红', color: '#d76a8d' },
-  { name: '烟紫', color: '#9b83d3' },
-  { name: '电紫', color: '#8d70ff' },
-  { name: '靛蓝', color: '#5e78d8' },
-  { name: '海蓝', color: '#3c9fe0' },
-  { name: '霓青', color: '#28c5c3' },
-  { name: '夜绿', color: '#245c49' },
-  { name: '酒红', color: '#6d1f35' },
-  { name: '墨黑', color: '#111318' },
+  { name: 'Mist blue', color: '#a9b8c8' },
+  { name: 'Silver blue', color: '#9db8cf' },
+  { name: 'Glacier', color: '#7ec8d8' },
+  { name: 'Teal green', color: '#66d2b5' },
+  { name: 'Pine', color: '#7fa894' },
+  { name: 'Moon white', color: '#d7d2c4' },
+  { name: 'Rock gold', color: '#c3ae7c' },
+  { name: 'Amber', color: '#d9a45f' },
+  { name: 'Dusk pink', color: '#c78aa4' },
+  { name: 'Rose red', color: '#d76a8d' },
+  { name: 'Smoke purple', color: '#9b83d3' },
+  { name: 'Electric violet', color: '#8d70ff' },
+  { name: 'Indigo', color: '#5e78d8' },
+  { name: 'Ocean blue', color: '#3c9fe0' },
+  { name: 'Neon cyan', color: '#28c5c3' },
+  { name: 'Night green', color: '#245c49' },
+  { name: 'Wine red', color: '#6d1f35' },
+  { name: 'Ink black', color: '#111318' },
 ];
 var USER_FX_ARCHIVE_STORE_KEY = 'mineradio-user-fx-archives-v1';
 var USER_FX_ARCHIVE_EXPORT_TYPE = 'mineradio-user-fx-archive';
@@ -261,7 +261,7 @@ var USER_FX_SHARE_KEYS = [
   'lyricTextureClarity'
 ];
 function defaultUserFxArchiveName(index) {
-  return '存档 ' + (index + 1);
+  return 'Archive ' + (index + 1);
 }
 function normalizeUserFxArchiveName(name, index) {
   name = String(name || '').replace(/\s+/g, ' ').trim();
@@ -545,7 +545,7 @@ function saveUserFxArchives() {
   try {
     localStorage.setItem(USER_FX_ARCHIVE_STORE_KEY, JSON.stringify(userFxArchives));
   } catch (e) {
-    showToast('用户存档保存失败，本地存储空间可能不足');
+    showToast('Failed to save user archive — local storage may be full');
   }
 }
 function hasStoredUserFxArchives() {
@@ -565,10 +565,10 @@ function createPackagedDefaultUserFxArchiveSlot() {
 }
 function formatUserArchiveTime(ts) {
   ts = Number(ts) || 0;
-  if (!ts) return '空槽位';
+  if (!ts) return 'Empty slot';
   var diff = Date.now() - ts;
-  if (diff < 60000) return '刚刚保存';
-  if (diff < 3600000) return Math.max(1, Math.round(diff / 60000)) + ' 分钟前';
+  if (diff < 60000) return 'Saved just now';
+  if (diff < 3600000) return Math.max(1, Math.round(diff / 60000)) + ' min ago';
   var d = new Date(ts);
   function pad(v) { return String(v).padStart(2, '0'); }
   return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
@@ -748,11 +748,11 @@ function renderUserFxArchives() {
       ? '<input class="user-archive-input" id="user-archive-input-' + index + '" type="text" maxlength="18" value="' + escHtml(slot.name) + '" onkeydown="handleUserFxArchiveRenameKey(event,' + index + ')">'
       : '<div class="user-archive-name" title="' + escHtml(slot.name) + '">' + escHtml(slot.name) + '</div>';
     var actionsHtml = editing
-      ? '<button type="button" onclick="commitUserFxArchiveRename(' + index + ')">确定</button>' +
-      '<button type="button" onclick="cancelUserFxArchiveRename()">取消</button>'
-      : '<button type="button" onclick="applyUserFxArchive(' + index + ')"' + (hasSave ? '' : ' disabled') + '>应用</button>' +
-      '<button type="button" onclick="saveUserFxArchive(' + index + ')">保存</button>' +
-      '<button type="button" onclick="renameUserFxArchive(' + index + ')">命名</button>';
+      ? '<button type="button" onclick="commitUserFxArchiveRename(' + index + ')">OK</button>' +
+      '<button type="button" onclick="cancelUserFxArchiveRename()">Cancel</button>'
+      : '<button type="button" onclick="applyUserFxArchive(' + index + ')"' + (hasSave ? '' : ' disabled') + '>Apply</button>' +
+      '<button type="button" onclick="saveUserFxArchive(' + index + ')">Save</button>' +
+      '<button type="button" onclick="renameUserFxArchive(' + index + ')">Rename</button>';
     return '<div class="user-archive-slot' + (hasSave ? ' has-save' : '') + '" data-slot="' + index + '">' +
       nameHtml +
       '<div class="user-archive-meta">' + formatUserArchiveTime(slot.savedAt) + '</div>' +
@@ -778,17 +778,17 @@ function saveUserFxArchive(index) {
   userFxArchives[index].name = normalizeUserFxArchiveName(userFxArchives[index].name, index);
   saveUserFxArchives();
   renderUserFxArchives();
-  showToast('已保存到 ' + userFxArchives[index].name);
+  showToast('Saved to ' + userFxArchives[index].name);
 }
 function applyUserFxArchive(index) {
   index = clampRange(Number(index) || 0, 0, Math.max(0, userFxArchives.length - 1));
   var slot = userFxArchives[index];
   if (!slot || !slot.snapshot) {
-    showToast('这个用户存档还是空的');
+    showToast('This user archive is still empty');
     return;
   }
   if (applyFxArchiveSnapshot(slot.snapshot)) {
-    showToast('已应用 ' + slot.name);
+    showToast('Applied ' + slot.name);
   }
 }
 function renameUserFxArchive(index) {
@@ -803,7 +803,7 @@ function commitUserFxArchiveRename(index) {
   userFxArchiveEditing = -1;
   saveUserFxArchives();
   renderUserFxArchives();
-  showToast('已命名为 ' + userFxArchives[index].name);
+  showToast('Renamed to ' + userFxArchives[index].name);
 }
 function cancelUserFxArchiveRename() {
   userFxArchiveEditing = -1;
@@ -820,7 +820,7 @@ function handleUserFxArchiveRenameKey(e, index) {
 }
 
 function defaultUserFxArchiveName(index) {
-  return '用户存档 ' + (Number(index) + 1);
+  return 'User archive ' + (Number(index) + 1);
 }
 function normalizeUserFxArchiveName(name, index) {
   name = String(name || '').replace(/\s+/g, ' ').trim();
@@ -992,7 +992,7 @@ async function decodeUserFxArchiveShareCode(text) {
   var snapshot = expandUserFxArchiveSnapshot(compactSnapshot);
   if (!snapshot) throw new Error('INVALID_SHARE_SNAPSHOT');
   return {
-    name: normalizeUserFxArchiveName(archiveName || '短代码存档', userFxArchives.length),
+    name: normalizeUserFxArchiveName(archiveName || 'Share code archive', userFxArchives.length),
     createdAt: Date.now(),
     savedAt: archiveSavedAt,
     snapshot: snapshot
@@ -1003,7 +1003,7 @@ function addImportedUserFxArchiveSlot(slot, toastLabel) {
   userFxArchives.push(slot);
   saveUserFxArchives();
   renderUserFxArchives();
-  showToast((toastLabel || '已导入 ') + slot.name);
+  showToast((toastLabel || 'Imported ') + slot.name);
   return true;
 }
 function getArchiveClipboardApi() {
@@ -1045,28 +1045,28 @@ async function readUserFxArchiveClipboard() {
 async function copyUserFxArchiveShareCode(index) {
   var slot = userFxArchiveAt(index);
   if (!slot || !slot.snapshot) {
-    showToast('空白存档不能复制短码');
+    showToast('Empty archives have no share code to copy');
     return;
   }
   try {
     var code = await encodeUserFxArchiveShareCode(slot);
     var copied = await writeUserFxArchiveClipboard(code);
     if (copied) {
-      showToast(code.length > 12000 ? '完整短码已复制，配置较长' : '用户存档短码已复制');
+      showToast(code.length > 12000 ? 'Full share code copied (large configuration)' : 'User archive share code copied');
     } else {
-      window.prompt('复制这段 MR2 短代码', code);
-      showToast('已打开完整短码');
+      window.prompt('Copy this MR2 share code', code);
+      showToast('Full share code shown');
     }
   } catch (e) {
-    showToast('短码生成失败');
+    showToast('Failed to generate share code');
   }
 }
 async function importUserFxArchiveShareCodeText(text) {
   try {
     var slot = await decodeUserFxArchiveShareCode(text);
-    return addImportedUserFxArchiveSlot(slot, '已导入短码 ');
+    return addImportedUserFxArchiveSlot(slot, 'Imported share code: ');
   } catch (e) {
-    showToast(e && e.message === 'BAD_SHARE_CHECKSUM' ? '短码校验失败，未导入' : '短码无效，未导入');
+    showToast(e && e.message === 'BAD_SHARE_CHECKSUM' ? 'Share code checksum failed — not imported' : 'Invalid share code — not imported');
     return false;
   }
 }
@@ -1091,7 +1091,7 @@ async function pasteUserFxArchiveShareCodeToBox() {
   }
   text = String(text || '').trim();
   if (!text) {
-    showToast('剪贴板里没有可粘贴的存档码');
+    showToast('No archive code in the clipboard to paste');
     focusUserFxArchiveShareInput(false);
     return false;
   }
@@ -1101,7 +1101,7 @@ async function pasteUserFxArchiveShareCodeToBox() {
     input.value = userFxArchiveShareDraft;
     input.focus();
   }
-  showToast(looksLikeUserFxShareCode(text) ? '短码已粘到输入框' : '已粘到输入框，可尝试作为旧 JSON 导入');
+  showToast(looksLikeUserFxShareCode(text) ? 'Share code pasted into the input' : 'Pasted into the input — you can also try importing it as legacy JSON');
   return true;
 }
 async function importUserFxArchiveShareCodeFromBox() {
@@ -1109,11 +1109,11 @@ async function importUserFxArchiveShareCodeFromBox() {
   var text = input ? input.value : userFxArchiveShareDraft;
   userFxArchiveShareDraft = String(text || '');
   if (!userFxArchiveShareDraft.trim()) {
-    showToast('先把 MR2 短码粘到输入框');
+    showToast('Paste an MR2 share code into the input first');
     focusUserFxArchiveShareInput(false);
     return false;
   }
-  var ok = await importUserFxArchiveText(userFxArchiveShareDraft, '短代码');
+  var ok = await importUserFxArchiveText(userFxArchiveShareDraft, 'Share code');
   if (ok) {
     userFxArchiveShareDraft = '';
     renderUserFxArchives();
@@ -1142,20 +1142,20 @@ function renderUserFxArchives() {
   if (!grid) return;
   var toolbar =
     '<div class="user-archive-toolbar">' +
-    '<div class="user-archive-note">主入口使用 MR2 短代码复制/粘贴；旧 JSON 仍可拖拽或作为兼容备份导入。</div>' +
+    '<div class="user-archive-note">The main flow uses MR2 share codes for copy/paste; legacy JSON can still be dragged in or imported as a backup.</div>' +
     '<div class="user-archive-tools">' +
-    '<button class="fx-mini-btn ghost" type="button" onclick="createUserFxArchive()">新建</button>' +
-    '<button class="fx-mini-btn ghost" type="button" onclick="importUserFxArchiveFromShareCodePrompt()">粘贴码</button>' +
-    '<button class="fx-mini-btn ghost" type="button" onclick="importUserFxArchiveFromDialog()">导入 JSON</button>' +
+    '<button class="fx-mini-btn ghost" type="button" onclick="createUserFxArchive()">New</button>' +
+    '<button class="fx-mini-btn ghost" type="button" onclick="importUserFxArchiveFromShareCodePrompt()">Paste code</button>' +
+    '<button class="fx-mini-btn ghost" type="button" onclick="importUserFxArchiveFromDialog()">Import JSON</button>' +
     '</div>' +
     '</div>';
   var shareBox =
     '<div class="user-archive-share-panel">' +
-    '<textarea id="user-archive-share-input" class="user-archive-share-input" spellcheck="false" placeholder="把 MR2 短代码粘到这里，也兼容旧 JSON 存档" oninput="updateUserFxArchiveShareDraft(this.value)" onkeydown="handleUserFxArchiveShareInputKey(event)">' + escHtml(userFxArchiveShareDraft) + '</textarea>' +
+    '<textarea id="user-archive-share-input" class="user-archive-share-input" spellcheck="false" placeholder="Paste an MR2 share code here; legacy JSON archives also work" oninput="updateUserFxArchiveShareDraft(this.value)" onkeydown="handleUserFxArchiveShareInputKey(event)">' + escHtml(userFxArchiveShareDraft) + '</textarea>' +
     '<div class="user-archive-share-actions">' +
-    '<button type="button" onclick="pasteUserFxArchiveShareCodeToBox()">从剪贴板粘贴</button>' +
-    '<button type="button" onclick="importUserFxArchiveShareCodeFromBox()">导入短码</button>' +
-    '<button type="button" onclick="clearUserFxArchiveShareCodeBox()">清空</button>' +
+    '<button type="button" onclick="pasteUserFxArchiveShareCodeToBox()">Paste from clipboard</button>' +
+    '<button type="button" onclick="importUserFxArchiveShareCodeFromBox()">Import code</button>' +
+    '<button type="button" onclick="clearUserFxArchiveShareCodeBox()">Clear</button>' +
     '</div>' +
     '</div>';
   var cards = userFxArchives.map(function (slot, index) {
@@ -1165,21 +1165,21 @@ function renderUserFxArchives() {
       ? '<input class="user-archive-input" id="user-archive-input-' + index + '" type="text" maxlength="28" value="' + escHtml(slot.name) + '" onkeydown="handleUserFxArchiveRenameKey(event,' + index + ')">'
       : '<div class="user-archive-name" title="' + escHtml(slot.name) + '">' + escHtml(slot.name) + '</div>';
     var actionsHtml = editing
-      ? '<button type="button" onclick="commitUserFxArchiveRename(' + index + ')">确定</button>' +
-      '<button type="button" onclick="cancelUserFxArchiveRename()">取消</button>'
-      : '<button type="button" onclick="applyUserFxArchive(' + index + ')"' + (hasSave ? '' : ' disabled') + '>应用</button>' +
-      '<button type="button" onclick="saveUserFxArchive(' + index + ')">保存</button>' +
-      '<button type="button" onclick="copyUserFxArchiveShareCode(' + index + ')"' + (hasSave ? '' : ' disabled') + '>复制码</button>' +
-      '<button type="button" onclick="renameUserFxArchive(' + index + ')">命名</button>' +
-      '<button type="button" onclick="exportUserFxArchive(' + index + ')"' + (hasSave ? '' : ' disabled') + '>文件</button>' +
-      '<button type="button" onclick="removeUserFxArchive(' + index + ')">删除</button>';
+      ? '<button type="button" onclick="commitUserFxArchiveRename(' + index + ')">OK</button>' +
+      '<button type="button" onclick="cancelUserFxArchiveRename()">Cancel</button>'
+      : '<button type="button" onclick="applyUserFxArchive(' + index + ')"' + (hasSave ? '' : ' disabled') + '>Apply</button>' +
+      '<button type="button" onclick="saveUserFxArchive(' + index + ')">Save</button>' +
+      '<button type="button" onclick="copyUserFxArchiveShareCode(' + index + ')"' + (hasSave ? '' : ' disabled') + '>Copy code</button>' +
+      '<button type="button" onclick="renameUserFxArchive(' + index + ')">Rename</button>' +
+      '<button type="button" onclick="exportUserFxArchive(' + index + ')"' + (hasSave ? '' : ' disabled') + '>File</button>' +
+      '<button type="button" onclick="removeUserFxArchive(' + index + ')">Delete</button>';
     return '<div class="user-archive-slot' + (hasSave ? ' has-save' : '') + '" data-slot="' + index + '">' +
       nameHtml +
-      '<div class="user-archive-meta">' + (hasSave ? formatUserArchiveTime(slot.savedAt) : '空白存档，点击保存写入当前视觉') + '</div>' +
+      '<div class="user-archive-meta">' + (hasSave ? formatUserArchiveTime(slot.savedAt) : 'Empty archive — click Save to capture the current visuals') + '</div>' +
       '<div class="user-archive-actions">' + actionsHtml + '</div>' +
       '</div>';
   }).join('');
-  var addCard = '<button class="user-archive-slot is-new" type="button" onclick="createUserFxArchive()"><strong>＋ 新建空白存档</strong><span class="user-archive-meta">可继续创建，不限制 4 个</span></button>';
+  var addCard = '<button class="user-archive-slot is-new" type="button" onclick="createUserFxArchive()"><strong>+ New empty archive</strong><span class="user-archive-meta">Create as many as you like — no 4-slot limit</span></button>';
   grid.innerHTML = toolbar + shareBox + cards + addCard;
   bindUserFxArchiveDrop();
   if (userFxArchiveEditing >= 0) {
@@ -1203,7 +1203,7 @@ function createUserFxArchive() {
   userFxArchiveEditing = index;
   saveUserFxArchives();
   renderUserFxArchives();
-  showToast('已新建空白用户存档');
+  showToast('New empty user archive created');
 }
 function saveUserFxArchive(index) {
   var slot = userFxArchiveAt(index);
@@ -1214,15 +1214,15 @@ function saveUserFxArchive(index) {
   slot.name = normalizeUserFxArchiveName(slot.name, index);
   saveUserFxArchives();
   renderUserFxArchives();
-  showToast('已保存到 ' + slot.name);
+  showToast('Saved to ' + slot.name);
 }
 function applyUserFxArchive(index) {
   var slot = userFxArchiveAt(index);
   if (!slot || !slot.snapshot) {
-    showToast('这个用户存档还是空白');
+    showToast('This user archive is still empty');
     return;
   }
-  if (applyFxArchiveSnapshot(slot.snapshot)) showToast('已应用 ' + slot.name);
+  if (applyFxArchiveSnapshot(slot.snapshot)) showToast('Applied ' + slot.name);
 }
 function renameUserFxArchive(index) {
   if (!userFxArchiveAt(index)) return;
@@ -1238,7 +1238,7 @@ function commitUserFxArchiveRename(index) {
   userFxArchiveEditing = -1;
   saveUserFxArchives();
   renderUserFxArchives();
-  showToast('已命名为 ' + slot.name);
+  showToast('Renamed to ' + slot.name);
 }
 function cancelUserFxArchiveRename() {
   userFxArchiveEditing = -1;
@@ -1250,7 +1250,7 @@ function removeUserFxArchive(index) {
   userFxArchiveEditing = -1;
   saveUserFxArchives();
   renderUserFxArchives();
-  showToast('已删除用户存档');
+  showToast('User archive deleted');
 }
 function userFxArchiveExportPayload(slot) {
   return {
@@ -1263,12 +1263,12 @@ function userFxArchiveExportPayload(slot) {
   };
 }
 function safeArchiveFileName(name) {
-  return String(name || 'Mineradio 用户存档').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 48) + '.json';
+  return String(name || 'Mineradio user archive').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 48) + '.json';
 }
 function exportUserFxArchive(index) {
   var slot = userFxArchiveAt(index);
   if (!slot || !slot.snapshot) {
-    showToast('空白存档不能导出');
+    showToast('Empty archives cannot be exported');
     return;
   }
   var payload = userFxArchiveExportPayload(slot);
@@ -1276,9 +1276,9 @@ function exportUserFxArchive(index) {
   var api = getDesktopWindowApi && getDesktopWindowApi();
   if (api && typeof api.exportJsonFile === 'function') {
     api.exportJsonFile({ defaultName: safeArchiveFileName(slot.name), text: text }).then(function (res) {
-      if (res && res.ok) showToast('用户存档已导出');
-      else if (!res || !res.canceled) showToast('用户存档导出失败');
-    }).catch(function () { showToast('用户存档导出失败'); });
+      if (res && res.ok) showToast('User archive exported');
+      else if (!res || !res.canceled) showToast('User archive export failed');
+    }).catch(function () { showToast('User archive export failed'); });
     return;
   }
   var blob = new Blob([text], { type: 'application/json;charset=utf-8' });
@@ -1307,18 +1307,18 @@ async function importUserFxArchiveText(text, fileName) {
   try { payload = JSON.parse(String(text || '')); } catch (e) { }
   var slot = normalizeImportedFxArchivePayload(payload, fileName);
   if (!slot) {
-    showToast('导入失败，文件不是有效的用户存档');
+    showToast('Import failed — the file is not a valid user archive');
     return false;
   }
-  return addImportedUserFxArchiveSlot(slot, '已导入 ');
+  return addImportedUserFxArchiveSlot(slot, 'Imported ');
 }
 function importUserFxArchiveFromDialog() {
   var api = getDesktopWindowApi && getDesktopWindowApi();
   if (api && typeof api.importJsonFile === 'function') {
     api.importJsonFile().then(function (res) {
-      if (res && res.ok) importUserFxArchiveText(res.text, res.filePath || '用户存档.json');
-      else if (!res || !res.canceled) showToast('导入失败');
-    }).catch(function () { showToast('导入失败'); });
+      if (res && res.ok) importUserFxArchiveText(res.text, res.filePath || 'user-archive.json');
+      else if (!res || !res.canceled) showToast('Import failed');
+    }).catch(function () { showToast('Import failed'); });
     return;
   }
   var input = document.createElement('input');
@@ -1332,12 +1332,12 @@ function importUserFxArchiveFromDialog() {
 }
 function readUserFxArchiveImportFile(file) {
   if (!file || !/\.json$/i.test(file.name || '')) {
-    showToast('请导入 JSON 用户存档');
+    showToast('Please import a JSON user archive');
     return;
   }
   var reader = new FileReader();
   reader.onload = function (e) { importUserFxArchiveText(e.target && e.target.result, file.name); };
-  reader.onerror = function () { showToast('导入失败'); };
+  reader.onerror = function () { showToast('Import failed'); };
   reader.readAsText(file, 'utf-8');
 }
 function bindUserFxArchiveDrop() {

@@ -55,18 +55,18 @@ function updateUserModalUi() {
     if (btn) btn.classList.toggle('active', key === 'both' ? dualAccountMode : (!dualAccountMode && activeAccountProvider === key));
   });
   if (addNetease) addNetease.style.display = hasPlatformLogin('netease') ? 'none' : '';
-  if (addQQ) addQQ.textContent = hasPlatformLogin('qq') ? '查看 QQ 音乐' : '补登 QQ 音乐';
-  if (addKugou) addKugou.textContent = hasPlatformLogin('kugou') ? '查看酷狗音乐' : '补登酷狗音乐';
-  if (addQishui) addQishui.textContent = hasPlatformLogin('qishui') ? '重新登录汽水' : '登录汽水音乐';
-  if (addSpotify) addSpotify.textContent = hasPlatformLogin('spotify') ? '查看 Spotify' : '连接 Spotify';
+  if (addQQ) addQQ.textContent = hasPlatformLogin('qq') ? 'View QQ Music' : 'Add QQ Music';
+  if (addKugou) addKugou.textContent = hasPlatformLogin('kugou') ? 'View Kugou Music' : 'Add Kugou Music';
+  if (addQishui) addQishui.textContent = hasPlatformLogin('qishui') ? 'Sign in to Soda again' : 'Sign in to Soda Music';
+  if (addSpotify) addSpotify.textContent = hasPlatformLogin('spotify') ? 'View Spotify' : 'Connect Spotify';
   if (logoutBtn) logoutBtn.textContent =
-    activeAccountProvider === 'qq' ? '退出 QQ 音乐' :
-    (activeAccountProvider === 'kugou' ? '退出酷狗音乐' :
-    (activeAccountProvider === 'qishui' ? '清除汽水登录态' :
-    (activeAccountProvider === 'spotify' ? '退出 Spotify' : '退出网易云')));
+    activeAccountProvider === 'qq' ? 'Log out of QQ Music' :
+    (activeAccountProvider === 'kugou' ? 'Log out of Kugou Music' :
+    (activeAccountProvider === 'qishui' ? 'Clear Soda sign-in' :
+    (activeAccountProvider === 'spotify' ? 'Log out of Spotify' : 'Log out of NetEase Cloud Music')));
   if (hint) hint.textContent = dualAccountMode
-    ? '右上角已切换为多平台并排展示。'
-    : '可切换右上角展示的平台；“我两个都要”会并排显示当前已登录的平台。';
+    ? 'The top-right corner now shows multiple platforms side by side.'
+    : 'Choose which platforms show in the top-right; "I want both" shows all signed-in platforms side by side.';
 }
 function showUserModal() {
   if (!hasAnyPlatformLogin()) return showLoginModal();
@@ -98,7 +98,7 @@ function enableDualAccountView() {
   dualAccountMode = true;
   renderUserBtn();
   updateUserModalUi();
-  showToast('已启用多平台账号展示');
+  showToast('Multi-platform account view enabled');
 }
 function requestDualLoginMode() {
   enableDualAccountView();
@@ -123,7 +123,7 @@ function clearLogoutAllAccountsResetConfirmation() {
   var button = document.getElementById('login-reset-all-btn');
   if (button) {
     button.classList.remove('confirming');
-    if (!logoutAllAccountsResetBusy) button.textContent = '退出登录';
+    if (!logoutAllAccountsResetBusy) button.textContent = 'Log out';
   }
 }
 
@@ -132,18 +132,18 @@ function armLogoutAllAccountsResetConfirmation() {
   var button = document.getElementById('login-reset-all-btn');
   if (button) {
     button.classList.add('confirming');
-    button.textContent = '再次点击确认';
+    button.textContent = 'Click again to confirm';
   }
-  if (typeof showToast === 'function') showToast('再次点击“退出登录”以清除全部平台 Cookie');
+  if (typeof showToast === 'function') showToast('Click "Log out" again to clear cookies for all platforms');
   if (logoutAllAccountsResetConfirmTimer) window.clearTimeout(logoutAllAccountsResetConfirmTimer);
   logoutAllAccountsResetConfirmTimer = window.setTimeout(clearLogoutAllAccountsResetConfirmation, 5000);
 }
 
 function resetAllProviderRendererLoginState() {
-  loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '无VIP' };
-  qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ 音乐', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false };
-  kugouLoginStatus = { provider: 'kugou', loggedIn: false, preview: false, nickname: '酷狗音乐', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false };
-  qishuiLoginStatus = { provider: 'qishui', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: '汽水音乐', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match' };
+  loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: 'No VIP' };
+  qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false };
+  kugouLoginStatus = { provider: 'kugou', loggedIn: false, preview: false, nickname: 'Kugou Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false };
+  qishuiLoginStatus = { provider: 'qishui', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: 'Soda Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match' };
   spotifyLoginStatus = { provider: 'spotify', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: 'Spotify', userId: '', avatar: '', product: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match', tokenConfigured: false, tokenFileExists: false, credentialsFileExists: false, localConfigMissing: false };
   loginStatusChecked = true;
   loginStatusCheckFailed = false;
@@ -182,7 +182,7 @@ async function logoutAllAccountsAndResetEasterEgg() {
   clearLogoutAllAccountsResetConfirmation();
   if (button) {
     button.disabled = true;
-    button.textContent = '正在清除…';
+    button.textContent = 'Clearing…';
   }
   try {
     await Promise.allSettled([
@@ -210,16 +210,16 @@ async function logoutAllAccountsAndResetEasterEgg() {
     if (typeof setHomeControlsLocked === 'function') setHomeControlsLocked(true);
     if (typeof updateEmptyHomeVisibility === 'function') updateEmptyHomeVisibility({ forceLoad: false });
     if (typeof renderHomeDashboard === 'function') renderHomeDashboard();
-    showToast('已退出全部账号，登录彩蛋已重新开启');
+    showToast('All accounts signed out; the login easter egg has reset');
   } catch (error) {
     console.warn('Logout all accounts and reset easter egg failed:', error);
-    showToast('清理未完成，请重启后重试');
+    showToast('Cleanup incomplete. Restart and try again');
   } finally {
     logoutAllAccountsResetBusy = false;
     if (button) {
       button.disabled = false;
       button.classList.remove('confirming');
-      button.textContent = '退出登录';
+      button.textContent = 'Log out';
     }
   }
 }
@@ -242,7 +242,7 @@ async function logoutActiveAccount() {
     safeShelfRebuild('spotify-logout');
     if (hasAnyPlatformLogin()) updateUserModalUi();
     else closeUserModal();
-    showToast('已退出 Spotify');
+    showToast('Signed out of Spotify');
     return;
   }
   if (activeAccountProvider === 'qishui') {
@@ -252,7 +252,7 @@ async function logoutActiveAccount() {
         await window.desktopWindow.clearQishuiMusicLogin();
       }
     } catch (e) { }
-    qishuiLoginStatus = { provider: 'qishui', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: '汽水音乐', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match' };
+    qishuiLoginStatus = { provider: 'qishui', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: 'Soda Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match' };
     qishuiPlaylists = [];
     userPlaylists = userPlaylists.filter(function (pl) { return pl.provider !== 'qishui'; });
     playlistCatalogRevision += 1;
@@ -262,7 +262,7 @@ async function logoutActiveAccount() {
     safeShelfRebuild('qishui-logout');
     if (hasAnyPlatformLogin()) updateUserModalUi();
     else closeUserModal();
-    showToast('已清除汽水音乐授权');
+    showToast('Soda Music authorization cleared');
     return;
   }
   if (activeAccountProvider === 'kugou') {
@@ -272,7 +272,7 @@ async function logoutActiveAccount() {
         await window.desktopWindow.clearKugouMusicLogin();
       }
     } catch (e) { }
-    kugouLoginStatus = { provider: 'kugou', loggedIn: false, preview: false, nickname: '酷狗音乐', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false };
+    kugouLoginStatus = { provider: 'kugou', loggedIn: false, preview: false, nickname: 'Kugou Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false };
     kugouPlaylists = [];
     userPlaylists = userPlaylists.filter(function (pl) { return pl.provider !== 'kugou'; });
     playlistCatalogRevision += 1;
@@ -281,7 +281,7 @@ async function logoutActiveAccount() {
     renderUserBtn();
     if (hasAnyPlatformLogin()) updateUserModalUi();
     else closeUserModal();
-    showToast('已退出酷狗音乐');
+    showToast('Signed out of Kugou Music');
     return;
   }
   if (activeAccountProvider === 'qq') {
@@ -292,7 +292,7 @@ async function logoutActiveAccount() {
       }
     } catch (e) { }
     if (typeof clearQQPlaybackVipEvidence === 'function') clearQQPlaybackVipEvidence();
-    qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ 音乐', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false };
+    qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false };
     qqPlaylists = [];
     userPlaylists = userPlaylists.filter(function (pl) { return pl.provider !== 'qq'; });
     playlistCatalogRevision += 1;
@@ -301,7 +301,7 @@ async function logoutActiveAccount() {
     renderUserBtn();
     if (hasAnyPlatformLogin()) updateUserModalUi();
     else closeUserModal();
-    showToast('已退出 QQ 音乐');
+    showToast('Signed out of QQ Music');
     return;
   }
   doLogout();
@@ -328,5 +328,5 @@ async function doLogout() {
   renderUserBtn();
   safeShelfRebuild('logout');
   closeUserModal();
-  showToast('已退出登录');
+  showToast('Signed out');
 }

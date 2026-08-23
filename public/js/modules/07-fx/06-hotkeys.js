@@ -59,7 +59,7 @@ function hotkeyDisplayPart(part) {
 }
 function formatHotkey(hotkey) {
   hotkey = String(hotkey || '').trim();
-  if (!hotkey) return '未设置';
+  if (!hotkey) return 'Not set';
   return hotkey.split('+').map(hotkeyDisplayPart).join(' + ');
 }
 function hotkeyToAccelerator(hotkey) {
@@ -105,14 +105,14 @@ function executeHotkeyAction(actionKey, source) {
         fx.wallpaperMode = false;
         updateFxInputs();
         return applyWallpaperModeState(true).then(function (result) {
-          if (result && result.ok === true) showToast('已退出完整桌面模式');
+          if (result && result.ok === true) showToast('Exited full desktop mode');
           return result;
         });
       }
       fx.wallpaperMode = true;
       updateFxInputs();
       return applyWallpaperModeState(true).then(function (result) {
-        if (result && result.ok === true) showToast('完整桌面模式已开启 · ' + desktopInteractionHotkeyHint());
+        if (result && result.ok === true) showToast('Full desktop mode on · ' + desktopInteractionHotkeyHint());
         return result;
       });
     }).catch(function () { });
@@ -121,7 +121,7 @@ function executeHotkeyAction(actionKey, source) {
 }
 function desktopInteractionHotkeyHint() {
   var binding = hotkeySettings && hotkeySettings.global && hotkeySettings.global.toggleDesktopInteraction;
-  return binding ? ('按 ' + formatHotkey(binding) + ' 进入 / 退出完整桌面模式') : '可在热键设置中配置完整桌面模式切换';
+  return binding ? ('Press ' + formatHotkey(binding) + ' to enter / exit full desktop mode') : 'Full desktop mode toggle can be configured in hotkey settings';
 }
 function handleConfiguredLocalHotkey(e) {
   if (!hotkeySettings || !hotkeySettings.local || isTypingTarget(e.target)) return false;
@@ -163,7 +163,7 @@ function ensureHotkeySettingsButton() {
   btn.id = 'hotkey-settings-btn';
   btn.type = 'button';
   btn.className = 'fx-mini-btn ghost';
-  btn.textContent = '热键';
+  btn.textContent = 'Hotkeys';
   btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openHotkeySettings(); });
   actions.appendChild(btn);
   head.appendChild(actions);
@@ -175,18 +175,18 @@ function ensureHotkeyModal() {
   modal.id = 'hotkey-modal';
   modal.className = 'hotkey-modal';
   modal.innerHTML =
-    '<div class="hotkey-dialog" role="dialog" aria-modal="true" aria-label="热键设置">' +
+    '<div class="hotkey-dialog" role="dialog" aria-modal="true" aria-label="Hotkey settings">' +
     '<div class="hotkey-head">' +
-    '<div><div class="hotkey-title">热键设置</div><div class="hotkey-sub">局内热键只在 Mineradio 窗口内生效；全局热键会向系统注册，并检测是否被占用。</div></div>' +
-    '<button class="hotkey-close" type="button" data-hotkey-close aria-label="关闭">×</button>' +
+    '<div><div class="hotkey-title">Hotkey Settings</div><div class="hotkey-sub">In-app hotkeys only work inside the Mineradio window; global hotkeys register with the system and are checked for conflicts.</div></div>' +
+    '<button class="hotkey-close" type="button" data-hotkey-close aria-label="Close">×</button>' +
     '</div>' +
     '<div class="hotkey-toolbar">' +
-    '<div class="hotkey-tabs"><button type="button" data-hotkey-scope="local" class="active">局内热键</button><button type="button" data-hotkey-scope="global">全局热键</button></div>' +
-    '<div class="hotkey-note">按 Backspace / Delete 可清空当前功能热键</div>' +
+    '<div class="hotkey-tabs"><button type="button" data-hotkey-scope="local" class="active">In-app hotkeys</button><button type="button" data-hotkey-scope="global">Global hotkeys</button></div>' +
+    '<div class="hotkey-note">Press Backspace / Delete to clear the hotkey for an action</div>' +
     '</div>' +
     '<div id="hotkey-local-section" class="hotkey-section active"></div>' +
     '<div id="hotkey-global-section" class="hotkey-section"></div>' +
-    '<div class="hotkey-capture-tip" id="hotkey-capture-tip">正在录入组合键，按 Esc 取消。</div>' +
+    '<div class="hotkey-capture-tip" id="hotkey-capture-tip">Press a key combination — Esc to cancel.</div>' +
     '</div>';
   document.body.appendChild(modal);
   modal.addEventListener('click', function (e) {
@@ -201,13 +201,13 @@ function ensureHotkeyModal() {
   return modal;
 }
 function hotkeyStatusMarkup(scope, actionKey, binding, duplicate) {
-  if (!binding) return '<span class="hotkey-status">未设置</span>';
-  if (duplicate && duplicate[binding] > 1) return '<span class="hotkey-status conflict"><span class="source-icon">!</span>Mineradio 内部重复</span>';
-  if (scope === 'local') return '<span class="hotkey-status ok">可用</span>';
+  if (!binding) return '<span class="hotkey-status">Not set</span>';
+  if (duplicate && duplicate[binding] > 1) return '<span class="hotkey-status conflict"><span class="source-icon">!</span>Duplicate within Mineradio</span>';
+  if (scope === 'local') return '<span class="hotkey-status ok">Available</span>';
   var status = hotkeyGlobalStatus[actionKey];
-  if (!status) return '<span class="hotkey-status">待检测</span>';
-  if (status.ok) return '<span class="hotkey-status ok">可用</span>';
-  var source = status.conflict && status.conflict.sourceName || '系统 / 其他软件';
+  if (!status) return '<span class="hotkey-status">Pending check</span>';
+  if (status.ok) return '<span class="hotkey-status ok">Available</span>';
+  var source = status.conflict && status.conflict.sourceName || 'System / other software';
   return '<span class="hotkey-status conflict"><span class="source-icon">!</span>' + escHtml(source) + '</span>';
 }
 function renderHotkeyScope(scope) {
@@ -225,8 +225,8 @@ function renderHotkeyScope(scope) {
       var binding = (hotkeySettings[scope] && hotkeySettings[scope][action.key]) || '';
       html += '<div class="hotkey-row">' +
         '<div class="hotkey-name">' + escHtml(action.label) + '</div>' +
-        '<button class="hotkey-key' + (hotkeyCaptureState && hotkeyCaptureState.scope === scope && hotkeyCaptureState.action === action.key ? ' capturing' : '') + '" type="button" data-hotkey-bind="' + scope + '" data-hotkey-action="' + action.key + '">' + escHtml(hotkeyCaptureState && hotkeyCaptureState.scope === scope && hotkeyCaptureState.action === action.key ? '按下组合键...' : formatHotkey(binding)) + '</button>' +
-        '<button class="hotkey-reset" type="button" data-hotkey-reset="' + scope + '" data-hotkey-action="' + action.key + '">默认</button>' +
+        '<button class="hotkey-key' + (hotkeyCaptureState && hotkeyCaptureState.scope === scope && hotkeyCaptureState.action === action.key ? ' capturing' : '') + '" type="button" data-hotkey-bind="' + scope + '" data-hotkey-action="' + action.key + '">' + escHtml(hotkeyCaptureState && hotkeyCaptureState.scope === scope && hotkeyCaptureState.action === action.key ? 'Press keys...' : formatHotkey(binding)) + '</button>' +
+        '<button class="hotkey-reset" type="button" data-hotkey-reset="' + scope + '" data-hotkey-action="' + action.key + '">Default</button>' +
         hotkeyStatusMarkup(scope, action.key, binding, duplicate) +
         '</div>';
     });

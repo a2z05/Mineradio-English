@@ -127,7 +127,7 @@ async function testFiniteQueueRecovery() {
   assert.strictEqual(sandbox.audio.src, '');
   assert.strictEqual(sandbox.audio.onended, null);
   assert.strictEqual(sandbox.playbackResumeRecovery.serial, 4, 'terminal state invalidates late media watchdogs');
-  assert.strictEqual(sandbox.notices.filter(item => item.title === '当前没有可用音源').length, 1);
+  assert.strictEqual(sandbox.notices.filter(item => item.title === 'No available source').length, 1);
 }
 
 async function testDuplicateSongProviderDeduplication() {
@@ -189,7 +189,7 @@ async function testLateAsyncCannotReviveTerminal() {
   assert.strictEqual(result, false);
   assert.strictEqual(childCalls, 0, 'late search completion must not start playback');
   assert.strictEqual(sandbox.playQueue[0], source);
-  assert.strictEqual(sandbox.notices.filter(item => item.title === '当前没有可用音源').length, 1);
+  assert.strictEqual(sandbox.notices.filter(item => item.title === 'No available source').length, 1);
 }
 
 async function testDeadlineAndManualSupersession() {

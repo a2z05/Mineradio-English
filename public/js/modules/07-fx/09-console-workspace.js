@@ -1,12 +1,12 @@
 'use strict';
 
 var FX_CONSOLE_TABS = [
-  { key: 'home', label: '常用' },
-  { key: 'interface', label: '界面' },
-  { key: 'lyrics', label: '歌词' },
-  { key: 'motion', label: '动效' },
-  { key: 'shelf', label: '歌单架' },
-  { key: 'system', label: '系统' }
+  { key: 'home', label: 'Home' },
+  { key: 'interface', label: 'Interface' },
+  { key: 'lyrics', label: 'Lyrics' },
+  { key: 'motion', label: 'Motion' },
+  { key: 'shelf', label: 'Shelf' },
+  { key: 'system', label: 'System' }
 ];
 
 function fxConsoleItem(ref, title, aliases, history) {
@@ -22,271 +22,271 @@ var FX_CONSOLE_LAYOUT = [
   {
     key: 'home',
     groups: [
-      { key: 'presets', title: '视觉预设', hint: '先选整体风格，再进入细节调整', open: true, items: [
-        fxConsoleItem('preset-grid', '视觉预设', '风格 场景 Emily 安魂 音域 星河 唱片 星球 滚筒 虚空')
+      { key: 'presets', title: 'Visual presets', hint: 'Pick an overall style, then fine-tune the details', open: true, items: [
+        fxConsoleItem('preset-grid', 'Visual presets', 'style scene Emily Requiem Sonic Star river Vinyl Planet Tunnel Void')
       ] },
-      { key: 'archives', title: '用户存档', hint: '保存、应用和分享整套视觉参数', items: [
-        fxConsoleItem('user-archive-grid', '用户存档', '方案 快照 预设码 应用 回退')
+      { key: 'archives', title: 'User archives', hint: 'Save, apply and share full visual configurations', items: [
+        fxConsoleItem('user-archive-grid', 'User archives', 'profile snapshot share code apply rollback')
       ] },
-      { key: 'reset', title: '恢复与整理', hint: '恢复全部默认参数', items: [
-        fxConsoleItem({ selector: '.fx-actions' }, '恢复默认', '重置 全部默认')
+      { key: 'reset', title: 'Reset & tidy up', hint: 'Restore all defaults', items: [
+        fxConsoleItem({ selector: '.fx-actions' }, 'Restore defaults', 'reset all default')
       ] }
     ]
   },
   {
     key: 'interface',
     groups: [
-      { key: 'background', title: '背景媒体', hint: '颜色、封面、图片、视频与 Wallpaper Engine', open: true, items: [
-        fxConsoleItem('bg-color-picker', '背景颜色', '纯色 封面取色'),
-        fxConsoleItem('bg-media-preview', '背景媒体', '封面 图片 视频 上传 裁切 清除', false),
-        fxConsoleItem('wallpaper-engine-value', 'Wallpaper Engine', '壁纸库 识别 导入 恢复原背景', false),
-        fxConsoleItem('fx-bgopacity', '背景透明度', '背景强度'),
-        fxConsoleItem('fx-bgcropx', '裁切左右', '背景水平 位置'),
-        fxConsoleItem('fx-bgcropy', '裁切上下', '背景垂直 位置'),
-        fxConsoleItem('fx-bgzoom', '裁切缩放', '背景放大 缩小')
+      { key: 'background', title: 'Background media', hint: 'Color, cover, image, video and Wallpaper Engine', open: true, items: [
+        fxConsoleItem('bg-color-picker', 'Background color', 'solid from cover'),
+        fxConsoleItem('bg-media-preview', 'Background media', 'cover image video upload crop clear', false),
+        fxConsoleItem('wallpaper-engine-value', 'Wallpaper Engine', 'wallpaper library detect import restore background', false),
+        fxConsoleItem('fx-bgopacity', 'Background opacity', 'background strength'),
+        fxConsoleItem('fx-bgcropx', 'Crop horizontal', 'background position x'),
+        fxConsoleItem('fx-bgcropy', 'Crop vertical', 'background position y'),
+        fxConsoleItem('fx-bgzoom', 'Crop zoom', 'background zoom in out')
       ] },
-      { key: 'colors', title: '界面配色', hint: '界面高亮、视觉主色与图标颜色', items: [
-        fxConsoleItem('ui-accent-picker', '界面高亮', '主题色 强调色'),
-        fxConsoleItem('visual-tint-picker', '视觉主色', '粒子主色 封面取色'),
-        fxConsoleItem('home-accent-picker', 'Home 填充', '主页颜色'),
-        fxConsoleItem('home-icon-picker', '主页图标', 'Home 图标颜色'),
-        fxConsoleItem('visual-icon-picker', '视觉图标', '控制台图标颜色')
+      { key: 'colors', title: 'Interface colors', hint: 'UI accent, visual tint and icon colors', items: [
+        fxConsoleItem('ui-accent-picker', 'UI accent', 'theme accent color'),
+        fxConsoleItem('visual-tint-picker', 'Visual tint', 'particle tint from cover'),
+        fxConsoleItem('home-accent-picker', 'Home fill', 'home color'),
+        fxConsoleItem('home-icon-picker', 'Home icon', 'home icon color'),
+        fxConsoleItem('visual-icon-picker', 'Visual icon', 'console icon color')
       ] },
-      { key: 'glass', title: '玻璃与左栏', hint: '窗口玻璃质感和歌单栏唤出手感', items: [
-        fxConsoleItem('fx-windowbgopacity', '窗口背景透明', '窗口透明度'),
-        fxConsoleItem('fx-bgglassopacity', '毛玻璃透明', '玻璃 背景模糊'),
-        fxConsoleItem('fx-glassaberration', '控制台玻璃色差', 'RGB 色散 玻璃质感'),
-        fxConsoleItem('fx-playlistblur', '左栏雾面', '歌单栏 模糊'),
-        fxConsoleItem('fx-playlistdensity', '左栏遮挡', '歌单栏 密度 透明'),
-        fxConsoleItem('fx-playlistopen', '左栏唤出', '打开速度 秒数'),
-        fxConsoleItem('fx-playlistclose', '左栏收起', '关闭速度 秒数')
+      { key: 'glass', title: 'Glass & left panel', hint: 'Window glass texture and playlist panel feel', items: [
+        fxConsoleItem('fx-windowbgopacity', 'Window background opacity', 'window transparency'),
+        fxConsoleItem('fx-bgglassopacity', 'Frosted glass opacity', 'glass blur'),
+        fxConsoleItem('fx-glassaberration', 'Console glass aberration', 'RGB dispersion glass'),
+        fxConsoleItem('fx-playlistblur', 'Panel frosted blur', 'playlist panel blur'),
+        fxConsoleItem('fx-playlistdensity', 'Panel density', 'playlist panel density transparency'),
+        fxConsoleItem('fx-playlistopen', 'Panel open speed', 'open duration seconds'),
+        fxConsoleItem('fx-playlistclose', 'Panel close speed', 'close duration seconds')
       ] }
     ]
   },
   {
     key: 'lyrics',
     groups: [
-      { key: 'display', title: '显示与翻译', hint: '歌词来源、行数和双语译文', open: true, items: [
-        fxConsoleItem('lyric-source-seg', '歌词来源', '原词 自定义歌词', false),
-        fxConsoleItem('lyric-display-mode-seg', '歌词行数', '单行 双行 三行 沉浸 自定义'),
-        fxConsoleItem('fx-lyriccustomlines', '显示行数', '自定义歌词行数'),
-        fxConsoleItem('lyric-translation-mode-seg', '双语翻译', '译文 当前 双行 多行 关闭'),
-        fxConsoleItem('fx-lyrictranslationgap', '译文间距', '翻译距离'),
-        fxConsoleItem('fx-lyrictranslationscale', '译文字号', '翻译大小'),
-        fxConsoleItem('fx-lyrictranslationopacity', '译文透明', '翻译透明度')
+      { key: 'display', title: 'Display & translation', hint: 'Lyric source, line count and bilingual text', open: true, items: [
+        fxConsoleItem('lyric-source-seg', 'Lyric source', 'original custom lyrics', false),
+        fxConsoleItem('lyric-display-mode-seg', 'Lyric lines', 'single double triple immersive custom'),
+        fxConsoleItem('fx-lyriccustomlines', 'Visible lines', 'custom lyric line count'),
+        fxConsoleItem('lyric-translation-mode-seg', 'Translation', 'current line dual multi off'),
+        fxConsoleItem('fx-lyrictranslationgap', 'Translation gap', 'translation distance'),
+        fxConsoleItem('fx-lyrictranslationscale', 'Translation size', 'translation font size'),
+        fxConsoleItem('fx-lyrictranslationopacity', 'Translation opacity', 'translation transparency')
       ] },
-      { key: 'colors', title: '颜色与光效', hint: '文字、高亮、溢光和亮底可读性', items: [
-        fxConsoleItem('lyric-color-grid', '歌词颜色', '文字颜色 封面取色'),
-        fxConsoleItem('lyric-color-picker', '歌词自定义颜色', '文字色轮'),
-        fxConsoleItem('lyric-highlight-picker', '跟唱高亮', '高亮颜色 逐字'),
-        fxConsoleItem('lyric-glow-picker', '歌词溢光颜色', '辉光 光晕 颜色'),
-        fxConsoleItem({ selector: '.lyric-glow-effect-row' }, '歌词溢光开关', '后层溢光 跟随鼓点'),
-        fxConsoleItem('fx-lyricglow', '溢光强度', '歌词辉光 强度'),
-        fxConsoleItem('fx-lyricbgadapt', '亮底避光', '亮背景 可读性 自动压光'),
-        fxConsoleItem('t-lyricGlow', '歌词溢光', '后层辉光 开关'),
-        fxConsoleItem('t-lyricGlowBeat', '鼓点溢光', '歌词辉光 跟随节拍'),
-        fxConsoleItem('t-lyricGlowParticles', '歌词光粒', '歌词粒子 光点')
+      { key: 'colors', title: 'Colors & glow', hint: 'Text, highlight, glow and bright-background readability', items: [
+        fxConsoleItem('lyric-color-grid', 'Lyric color', 'text color from cover'),
+        fxConsoleItem('lyric-color-picker', 'Custom lyric color', 'text color wheel'),
+        fxConsoleItem('lyric-highlight-picker', 'Sing-along highlight', 'highlight color per word'),
+        fxConsoleItem('lyric-glow-picker', 'Lyric glow color', 'glow halo color'),
+        fxConsoleItem({ selector: '.lyric-glow-effect-row' }, 'Lyric glow toggle', 'background glow follow beat'),
+        fxConsoleItem('fx-lyricglow', 'Glow strength', 'lyric glow strength'),
+        fxConsoleItem('fx-lyricbgadapt', 'Bright-background dimming', 'bright background readability auto dim'),
+        fxConsoleItem('t-lyricGlow', 'Lyric glow', 'background glow on/off'),
+        fxConsoleItem('t-lyricGlowBeat', 'Beat glow', 'lyric glow follows beat'),
+        fxConsoleItem('t-lyricGlowParticles', 'Lyric light particles', 'lyric particles dots')
       ] },
-      { key: 'type', title: '字体与排版', hint: '字体、字重、大小、位置和角度', items: [
-        fxConsoleItem('lyric-texture-quality-seg', '歌词清晰度', '分辨率 纹理 1x 2x 3x 4x 标清 高清 超清 极致 低配 显存 放大 清楚'),
-        fxConsoleItem('lyric-font-grid', '歌词字体', '黑体 宋体 楷宋 Serif Gothic 等宽 上传字体'),
-        fxConsoleItem('fx-lyricspacing', '字间距', '文字间距'),
-        fxConsoleItem('fx-lyriclineheight', '行距', '歌词行间距'),
-        fxConsoleItem('fx-lyricweight', '字重', '粗细'),
-        fxConsoleItem('fx-lyricscale', '歌词大小', '字号 缩放'),
-        fxConsoleItem('fx-lyricx', '左右位置', '歌词水平'),
-        fxConsoleItem('fx-lyricy', '上下位置', '歌词垂直 高度'),
-        fxConsoleItem('fx-lyricz', '前后景深', '歌词远近 Z'),
-        fxConsoleItem('fx-lyrictiltx', '上下旋转', '歌词俯仰'),
-        fxConsoleItem('fx-lyrictilty', '左右旋转', '歌词侧旋')
+      { key: 'type', title: 'Font & layout', hint: 'Font, weight, size, position and angle', items: [
+        fxConsoleItem('lyric-texture-quality-seg', 'Lyric sharpness', 'resolution texture 1x 2x 3x 4x low high ultra vram upscale clear'),
+        fxConsoleItem('lyric-font-grid', 'Lyric fonts', 'serif gothic mono upload font'),
+        fxConsoleItem('fx-lyricspacing', 'Letter spacing', 'text spacing'),
+        fxConsoleItem('fx-lyriclineheight', 'Line height', 'lyric line spacing'),
+        fxConsoleItem('fx-lyricweight', 'Font weight', 'thickness boldness'),
+        fxConsoleItem('fx-lyricscale', 'Lyric size', 'font size scale'),
+        fxConsoleItem('fx-lyricx', 'Horizontal position', 'lyrics horizontal x'),
+        fxConsoleItem('fx-lyricy', 'Vertical position', 'lyrics vertical y height'),
+        fxConsoleItem('fx-lyricz', 'Depth position', 'lyrics near far z'),
+        fxConsoleItem('fx-lyrictiltx', 'Tilt vertical', 'lyrics pitch'),
+        fxConsoleItem('fx-lyrictilty', 'Rotate sideways', 'lyrics yaw side rotation')
       ] },
-      { key: 'motion', title: '歌词动画', hint: '滚动手感、上下文层次与故障效果', items: [
-        fxConsoleItem('lyric-motion-style-seg', '歌词动画', '漂浮 柔滑 玻璃 线光 故障'),
-        fxConsoleItem('lyric-glitch-controls', '故障细节', '故障强度 切片 色散 触发速度 抖动 鼓点'),
-        fxConsoleItem('fx-lyriccontextopacity', '上下句清晰', '上下文透明度'),
-        fxConsoleItem('fx-lyriccontextspread', '上下句间距', '上下文距离'),
-        fxConsoleItem('fx-lyricedgefade', '边缘渐隐', '歌词边缘淡出'),
-        fxConsoleItem('fx-lyricmotionsoftness', '动画柔顺', '歌词滚动 丝滑 缓动'),
-        fxConsoleItem('t-lyricVerticalFloat', '歌词上下浮动', '漂浮 垂直'),
-        fxConsoleItem('t-lyricCameraLock', '歌词镜头绑定', '跟随镜头 锁定'),
-        fxConsoleItem('t-lyricPauseHold', '暂停保留歌词', '暂停不隐藏')
+      { key: 'motion', title: 'Lyric animation', hint: 'Scroll feel, context layers and glitch effects', items: [
+        fxConsoleItem('lyric-motion-style-seg', 'Lyric animation', 'float smooth glass line glow glitch'),
+        fxConsoleItem('lyric-glitch-controls', 'Glitch details', 'glitch intensity slice chroma trigger speed jitter beat'),
+        fxConsoleItem('fx-lyriccontextopacity', 'Context lines clarity', 'context opacity'),
+        fxConsoleItem('fx-lyriccontextspread', 'Context spacing', 'context distance'),
+        fxConsoleItem('fx-lyricedgefade', 'Edge fade', 'lyric edge fade out'),
+        fxConsoleItem('fx-lyricmotionsoftness', 'Motion softness', 'lyric scroll smooth easing'),
+        fxConsoleItem('t-lyricVerticalFloat', 'Vertical float', 'floating vertical'),
+        fxConsoleItem('t-lyricCameraLock', 'Lock lyrics to camera', 'follow camera lock'),
+        fxConsoleItem('t-lyricPauseHold', 'Keep lyrics when paused', 'pause not hidden')
       ] },
-      { key: 'desktop', title: '桌面歌词', hint: '桌面层开关、位置、透明度和帧数', items: [
-        fxConsoleItem('t-desktopLyrics', '桌面歌词', '全屏置顶歌词'),
-        fxConsoleItem('t-desktopLyricsClickThrough', '桌面歌词锁定', '鼠标穿透 防误触'),
-        fxConsoleItem('t-desktopLyricsCinema', '桌面歌词电影震动', '桌面歌词 鼓点'),
-        fxConsoleItem('t-desktopLyricsHighlight', '桌面歌词高亮跟随', '桌面逐字高亮'),
-        fxConsoleItem('fx-desktoplyricssize', '桌面歌词大小', '桌面字号'),
-        fxConsoleItem('fx-desktoplyricsopacity', '桌面歌词透明度', '桌面歌词透明'),
-        fxConsoleItem('fx-desktoplyricsy', '桌面歌词高度', '桌面位置'),
-        fxConsoleItem('desktop-lyrics-fps-seg', '桌面歌词帧率', '24 30 60 120 无上限 FPS')
+      { key: 'desktop', title: 'Desktop lyrics', hint: 'Desktop layer toggle, position, opacity and FPS', items: [
+        fxConsoleItem('t-desktopLyrics', 'Desktop lyrics', 'fullscreen on-top lyrics'),
+        fxConsoleItem('t-desktopLyricsClickThrough', 'Lock desktop lyrics', 'mouse pass-through prevent misclicks'),
+        fxConsoleItem('t-desktopLyricsCinema', 'Desktop lyrics cinema shake', 'desktop lyrics beat shake'),
+        fxConsoleItem('t-desktopLyricsHighlight', 'Desktop lyrics highlight follow', 'desktop per-word highlight'),
+        fxConsoleItem('fx-desktoplyricssize', 'Desktop lyrics size', 'desktop font size'),
+        fxConsoleItem('fx-desktoplyricsopacity', 'Desktop lyrics opacity', 'desktop lyrics transparent'),
+        fxConsoleItem('fx-desktoplyricsy', 'Desktop lyrics height', 'desktop position'),
+        fxConsoleItem('desktop-lyrics-fps-seg', 'Desktop lyrics FPS', '24 30 60 120 uncapped fps')
       ] }
     ]
   },
   {
     key: 'motion',
     groups: [
-      { key: 'base', title: '基础画面', hint: '整体律动、景深、封面和电影镜头', open: true, items: [
-        fxConsoleItem('fx-intensity', '律动强度', '音乐响应 节奏'),
-        fxConsoleItem('fx-depth', '画面景深', '立体感 深度'),
-        fxConsoleItem('fx-coverres', '封面清晰度', '粒子数量 分辨率'),
-        fxConsoleItem('fx-cineshake', '电影镜头', '镜头晃动 强度'),
-        fxConsoleItem('t-cinema', '电影镜头开关', '动态镜头')
+      { key: 'base', title: 'Base visuals', hint: 'Overall motion, depth, cover and cinematic camera', open: true, items: [
+        fxConsoleItem('fx-intensity', 'Motion intensity', 'music response rhythm'),
+        fxConsoleItem('fx-depth', 'Scene depth', 'depth of field stereo'),
+        fxConsoleItem('fx-coverres', 'Cover sharpness', 'particle count resolution'),
+        fxConsoleItem('fx-cineshake', 'Cinematic shake', 'camera shake strength'),
+        fxConsoleItem('t-cinema', 'Cinematic camera toggle', 'dynamic camera')
       ] },
-      { key: 'particles', title: '粒子与光影', hint: '粒子尺寸、运动、扭曲和溢光', items: [
-        fxConsoleItem('t-float', '浮空粒子层', '漂浮粒子'),
-        fxConsoleItem('t-bloom', '粒子溢光', '粒子光晕'),
-        fxConsoleItem('t-edge', '轮廓高亮', '边缘光'),
-        fxConsoleItem('t-backgroundStarRiver', '背景星河', '星空 粒子背景'),
-        fxConsoleItem('fx-point', '粒子尺寸', '点大小'),
-        fxConsoleItem('fx-speed', '运动速度', '粒子流速'),
-        fxConsoleItem('fx-twist', '粒子扭曲', '旋转 扭曲'),
-        fxConsoleItem('fx-color', '色彩张力', '粒子颜色 饱和'),
-        fxConsoleItem('fx-bloom', '光晕强度', '溢光 bloom'),
-        fxConsoleItem('fx-scatter', '离散感', '粒子散开'),
-        fxConsoleItem('fx-bgfade', '背景压暗', '背景压缩 暗度')
+      { key: 'particles', title: 'Particles & light', hint: 'Particle size, motion, twist and bloom', items: [
+        fxConsoleItem('t-float', 'Floating particle layer', 'floating particles'),
+        fxConsoleItem('t-bloom', 'Particle bloom', 'particle halo'),
+        fxConsoleItem('t-edge', 'Edge highlighting', 'edge light'),
+        fxConsoleItem('t-backgroundStarRiver', 'Background star river', 'starry sky particle background'),
+        fxConsoleItem('fx-point', 'Particle size', 'point size'),
+        fxConsoleItem('fx-speed', 'Motion speed', 'particle flow speed'),
+        fxConsoleItem('fx-twist', 'Particle twist', 'rotation swirl'),
+        fxConsoleItem('fx-color', 'Color intensity', 'particle color saturation'),
+        fxConsoleItem('fx-bloom', 'Halo strength', 'bloom glow'),
+        fxConsoleItem('fx-scatter', 'Scatter', 'particles spread apart'),
+        fxConsoleItem('fx-bgfade', 'Background dimming', 'background darken')
       ] },
-      { key: 'sonic-terrain', title: '音域地形', hint: '地面形态、颜色和空间位置', items: [
-        fxConsoleItem('fx-sonicamp', '地面起伏', '音域振幅'),
-        fxConsoleItem('fx-sonicspeed', '起伏速度', '地形运动'),
-        fxConsoleItem('fx-sonicdensity', '地形密度', '网格密度'),
-        fxConsoleItem('fx-sonicrange', '地面范围', '地形大小'),
-        fxConsoleItem('fx-soniclower', '歌词避让', '地形降低'),
-        fxConsoleItem('fx-sonicdepth', '地面远近', '地形景深'),
-        fxConsoleItem('fx-sonicautorotate', '地形自转', '旋转速度'),
-        fxConsoleItem('sonic-ground-base-picker', '地形暗部', '音域底色'),
-        fxConsoleItem('sonic-ground-cool-picker', '冷色峰值', '音域冷色'),
-        fxConsoleItem('sonic-ground-warm-picker', '暖色峰值', '音域暖色'),
-        fxConsoleItem('sonic-ground-accent-picker', '涟漪高光', '音域强调色'),
-        fxConsoleItem('fx-sonicglow', '音域光强', '地形辉光')
+      { key: 'sonic-terrain', title: 'Sonic terrain', hint: 'Ground shape, colors and spatial placement', items: [
+        fxConsoleItem('fx-sonicamp', 'Ground amplitude', 'terrain amplitude'),
+        fxConsoleItem('fx-sonicspeed', 'Terrain speed', 'ground motion'),
+        fxConsoleItem('fx-sonicdensity', 'Terrain density', 'grid density'),
+        fxConsoleItem('fx-sonicrange', 'Ground range', 'terrain size'),
+        fxConsoleItem('fx-soniclower', 'Lyric clearance', 'terrain lower'),
+        fxConsoleItem('fx-sonicdepth', 'Ground depth', 'terrain depth of field'),
+        fxConsoleItem('fx-sonicautorotate', 'Auto rotation', 'rotation speed'),
+        fxConsoleItem('sonic-ground-base-picker', 'Ground shadow', 'terrain base color'),
+        fxConsoleItem('sonic-ground-cool-picker', 'Cool peaks', 'terrain cool color'),
+        fxConsoleItem('sonic-ground-warm-picker', 'Warm peaks', 'terrain warm color'),
+        fxConsoleItem('sonic-ground-accent-picker', 'Ripple highlight', 'terrain accent color'),
+        fxConsoleItem('fx-sonicglow', 'Terrain glow', 'ground glow strength')
       ] },
-      { key: 'sonic-audio', title: '频谱响应', hint: 'Kick 检测、频段范围和各段权重', items: [
-        fxConsoleItem('t-sonicAudioMonitorEnabled', '实时频谱', '音频分析 频谱开关'),
-        fxConsoleItem('t-sonicAudioAutoTrack', 'Kick 自动', '鼓点自动追踪'),
-        fxConsoleItem('sonic-audio-monitor-toggle', '频谱面板', '音频监视器'),
-        fxConsoleItem('fx-sonicaudiosensitivity', 'Kick 灵敏', '鼓点灵敏度'),
-        fxConsoleItem('fx-sonicaudiobandstart', '范围起点', '频谱起点'),
-        fxConsoleItem('fx-sonicaudiobandend', '范围终点', '频谱终点'),
-        fxConsoleItem('fx-sonicaudiothreshold', '触发阈值', '频谱门限'),
-        fxConsoleItem('fx-sonicaudiopulse', '触发力度', '频谱脉冲'),
-        fxConsoleItem('fx-sonicsubbass', '中心低频', 'Sub Bass'),
-        fxConsoleItem('fx-sonicbass', '低频重量', 'Bass'),
-        fxConsoleItem('fx-soniclowmid', '慢波流动', 'Low Mid'),
-        fxConsoleItem('fx-sonicmid', '方向流', 'Mid'),
-        fxConsoleItem('fx-sonichighmid', '尖峰', 'High Mid'),
-        fxConsoleItem('fx-sonicpresence', '闪光触发', 'Presence'),
-        fxConsoleItem('fx-sonicbrilliance', '边缘微闪', 'Brilliance'),
-        fxConsoleItem('fx-sonicair', '空气颗粒', 'Air 高频')
+      { key: 'sonic-audio', title: 'Spectrum response', hint: 'Kick detection, band range and band weights', items: [
+        fxConsoleItem('t-sonicAudioMonitorEnabled', 'Live spectrum', 'audio analysis spectrum toggle'),
+        fxConsoleItem('t-sonicAudioAutoTrack', 'Auto kick tracking', 'beat auto tracking'),
+        fxConsoleItem('sonic-audio-monitor-toggle', 'Spectrum panel', 'audio monitor'),
+        fxConsoleItem('fx-sonicaudiosensitivity', 'Kick sensitivity', 'beat sensitivity'),
+        fxConsoleItem('fx-sonicaudiobandstart', 'Range start', 'spectrum start'),
+        fxConsoleItem('fx-sonicaudiobandend', 'Range end', 'spectrum end'),
+        fxConsoleItem('fx-sonicaudiothreshold', 'Trigger threshold', 'spectrum gate'),
+        fxConsoleItem('fx-sonicaudiopulse', 'Pulse strength', 'spectrum pulse'),
+        fxConsoleItem('fx-sonicsubbass', 'Center sub bass', 'Sub Bass'),
+        fxConsoleItem('fx-sonicbass', 'Bass weight', 'Bass'),
+        fxConsoleItem('fx-soniclowmid', 'Slow wave drift', 'Low Mid'),
+        fxConsoleItem('fx-sonicmid', 'Directional flow', 'Mid'),
+        fxConsoleItem('fx-sonichighmid', 'Sharp spikes', 'High Mid'),
+        fxConsoleItem('fx-sonicpresence', 'Flash trigger', 'Presence'),
+        fxConsoleItem('fx-sonicbrilliance', 'Edge shimmer', 'Brilliance'),
+        fxConsoleItem('fx-sonicair', 'Air grains', 'Air high frequency')
       ] },
-      { key: 'sonic-blocks', title: '音域方块', hint: '浮空方块的数量、尺寸和速度', items: [
-        fxConsoleItem('t-sonicGroundFloatingEnabled', '浮空方块', '音域方块开关'),
-        fxConsoleItem('fx-sonicfloatcount', '方块数量', '浮空数量'),
-        fxConsoleItem('fx-sonicfloatintensity', '方块强度', '浮空强度'),
-        fxConsoleItem('fx-sonicfloatmin', '方块小值', '最小尺寸'),
-        fxConsoleItem('fx-sonicfloatmax', '方块大值', '最大尺寸'),
-        fxConsoleItem('fx-sonicfloatspeed', '方块速度', '浮空速度')
+      { key: 'sonic-blocks', title: 'Sonic blocks', hint: 'Floating block count, size and speed', items: [
+        fxConsoleItem('t-sonicGroundFloatingEnabled', 'Floating blocks', 'sonic blocks toggle'),
+        fxConsoleItem('fx-sonicfloatcount', 'Block count', 'floating count'),
+        fxConsoleItem('fx-sonicfloatintensity', 'Block intensity', 'floating intensity'),
+        fxConsoleItem('fx-sonicfloatmin', 'Block min size', 'minimum size'),
+        fxConsoleItem('fx-sonicfloatmax', 'Block max size', 'maximum size'),
+        fxConsoleItem('fx-sonicfloatspeed', 'Block speed', 'floating speed')
       ] },
-      { key: 'sonic-we', title: '音域回响 · WE', hint: 'Wallpaper Engine 派生地形的响应与配色', items: [
-        fxConsoleItem('fx-sonicwegain', '输入压制', 'WE 输入增益'),
-        fxConsoleItem('fx-sonicweaudio', '音频响应', 'WE 音频强度'),
-        fxConsoleItem('fx-sonicwerange', '响应范围', 'WE 范围'),
-        fxConsoleItem('fx-sonicwepeak', '中心高光', 'WE 峰值'),
-        fxConsoleItem('sonic-workshop-cover-picker', 'WE 主题基色', '主题 封面取色'),
-        fxConsoleItem('sonic-workshop-base-picker', '地形底色', 'WE 底色'),
-        fxConsoleItem('sonic-workshop-warm-picker', '暖色主体', 'WE 暖色'),
-        fxConsoleItem('sonic-workshop-cool-picker', '上层高光', 'WE 冷色'),
-        fxConsoleItem('sonic-workshop-ripple-picker', '波纹亮区', 'WE 波纹'),
-        fxConsoleItem('sonic-workshop-peak-picker', '峰值高光', 'WE 高光'),
-        fxConsoleItem('sonic-workshop-theme-seg', 'WE 主题', '珊瑚 深海 冰蓝 翠绿 极简')
+      { key: 'sonic-we', title: 'Sonic Topography · WE', hint: 'Response and colors for the Wallpaper Engine terrain', items: [
+        fxConsoleItem('fx-sonicwegain', 'Input taming', 'WE input gain'),
+        fxConsoleItem('fx-sonicweaudio', 'Audio response', 'WE audio intensity'),
+        fxConsoleItem('fx-sonicwerange', 'Response range', 'WE range'),
+        fxConsoleItem('fx-sonicwepeak', 'Center highlight', 'WE peak'),
+        fxConsoleItem('sonic-workshop-cover-picker', 'WE theme base color', 'theme from cover'),
+        fxConsoleItem('sonic-workshop-base-picker', 'Terrain base color', 'WE base color'),
+        fxConsoleItem('sonic-workshop-warm-picker', 'Warm body', 'WE warm color'),
+        fxConsoleItem('sonic-workshop-cool-picker', 'Upper highlight', 'WE cool color'),
+        fxConsoleItem('sonic-workshop-ripple-picker', 'Ripple bright area', 'WE ripple'),
+        fxConsoleItem('sonic-workshop-peak-picker', 'Peak highlight', 'WE highlight'),
+        fxConsoleItem('sonic-workshop-theme-seg', 'WE theme', 'coral deep sea ice blue emerald minimal')
       ] }
     ]
   },
   {
     key: 'shelf',
     groups: [
-      { key: 'display', title: '显示方式', hint: '模式、镜头、常驻状态和内容来源', open: true, items: [
-        fxConsoleItem('shelf-seg', '3D 歌单架', '关闭 侧栏 舞台'),
-        fxConsoleItem('shelf-camera-seg', '歌单架镜头', '动态镜头 静态镜头'),
-        fxConsoleItem('shelf-presence-seg', '歌单架显示', '自动隐藏 常驻'),
-        fxConsoleItem('t-shelfShowPodcasts', '显示播客歌单', '3D 播客'),
-        fxConsoleItem('t-shelfMergeCollections', '合并收藏歌单', '我的歌单 收藏 连续滚动')
+      { key: 'display', title: 'Display mode', hint: 'Mode, camera, visibility and content source', open: true, items: [
+        fxConsoleItem('shelf-seg', '3D playlist shelf', 'off side stage'),
+        fxConsoleItem('shelf-camera-seg', 'Shelf camera', 'dynamic static camera'),
+        fxConsoleItem('shelf-presence-seg', 'Shelf visibility', 'auto-hide always visible'),
+        fxConsoleItem('t-shelfShowPodcasts', 'Show podcast playlists', '3D podcasts'),
+        fxConsoleItem('t-shelfMergeCollections', 'Merge saved playlists', 'my playlists saved continuous scroll')
       ] },
-      { key: 'look', title: '外观与位置', hint: '歌单架颜色、大小、位置和透明度', items: [
-        fxConsoleItem('shelf-accent-picker', '歌单架颜色', '3D 强调色'),
-        fxConsoleItem('fx-shelfsize', '歌单架大小', '3D 缩放'),
-        fxConsoleItem('fx-shelfx', '左右位置', '歌单架水平'),
-        fxConsoleItem('fx-shelfy', '上下位置', '歌单架垂直'),
-        fxConsoleItem('fx-shelfz', '前后景深', '歌单架远近'),
-        fxConsoleItem('fx-shelfangle', '侧向角度', '歌单架旋转'),
-        fxConsoleItem('fx-shelfopacity', '整体透明度', '歌单架透明'),
-        fxConsoleItem('fx-shelfbgalpha', '背景透明度', '歌单架背景')
+      { key: 'look', title: 'Look & position', hint: 'Shelf color, size, position and opacity', items: [
+        fxConsoleItem('shelf-accent-picker', 'Shelf color', '3D accent color'),
+        fxConsoleItem('fx-shelfsize', 'Shelf size', '3D scale'),
+        fxConsoleItem('fx-shelfx', 'Horizontal position', 'shelf x'),
+        fxConsoleItem('fx-shelfy', 'Vertical position', 'shelf y'),
+        fxConsoleItem('fx-shelfz', 'Depth position', 'shelf near far'),
+        fxConsoleItem('fx-shelfangle', 'Side angle', 'shelf rotation'),
+        fxConsoleItem('fx-shelfopacity', 'Overall opacity', 'shelf transparent'),
+        fxConsoleItem('fx-shelfbgalpha', 'Background opacity', 'shelf background')
       ] },
-      { key: 'detail-position', title: '详情页位置', hint: '详情页位置、比例、角度与行距', items: [
-        fxConsoleItem('fx-shelfdetailx', '详情左右', '详情页水平'),
-        fxConsoleItem('fx-shelfdetaily', '详情上下', '详情页垂直'),
-        fxConsoleItem('fx-shelfdetailz', '详情前后', '详情页景深'),
-        fxConsoleItem('fx-shelfdetailscale', '详情大小', '详情页缩放'),
-        fxConsoleItem('fx-shelfdetailanglex', '详情俯仰', '详情页上下角度'),
-        fxConsoleItem('fx-shelfdetailangley', '详情侧旋', '详情页左右角度'),
-        fxConsoleItem('fx-shelfdetailrowgap', '详情行间距', '歌曲行距')
+      { key: 'detail-position', title: 'Detail page position', hint: 'Detail position, scale, angle and row gap', items: [
+        fxConsoleItem('fx-shelfdetailx', 'Detail horizontal', 'detail page x'),
+        fxConsoleItem('fx-shelfdetaily', 'Detail vertical', 'detail page y'),
+        fxConsoleItem('fx-shelfdetailz', 'Detail depth', 'detail page depth'),
+        fxConsoleItem('fx-shelfdetailscale', 'Detail size', 'detail page scale'),
+        fxConsoleItem('fx-shelfdetailanglex', 'Detail pitch', 'detail vertical angle'),
+        fxConsoleItem('fx-shelfdetailangley', 'Detail yaw', 'detail horizontal angle'),
+        fxConsoleItem('fx-shelfdetailrowgap', 'Detail row gap', 'song row spacing')
       ] },
-      { key: 'detail-motion', title: '详情页动画', hint: '展开、关闭和歌曲行入场手感', items: [
-        fxConsoleItem('fx-shelfdetailopen', '展开秒数', '详情打开速度'),
-        fxConsoleItem('fx-shelfdetailclose', '关闭秒数', '详情关闭速度'),
-        fxConsoleItem('fx-shelfdetailrowtime', '行入场秒数', '歌曲行动画'),
-        fxConsoleItem('fx-shelfdetailintro', '展开位移', '详情入场位移'),
-        fxConsoleItem('fx-shelfdetailparallax', '悬浮视差', '详情视差')
+      { key: 'detail-motion', title: 'Detail animation', hint: 'Expand, close and song row entrance feel', items: [
+        fxConsoleItem('fx-shelfdetailopen', 'Expand duration', 'detail open speed'),
+        fxConsoleItem('fx-shelfdetailclose', 'Close duration', 'detail close speed'),
+        fxConsoleItem('fx-shelfdetailrowtime', 'Row entrance duration', 'song row animation'),
+        fxConsoleItem('fx-shelfdetailintro', 'Expand offset', 'detail entrance offset'),
+        fxConsoleItem('fx-shelfdetailparallax', 'Hover parallax', 'detail parallax')
       ] },
-      { key: 'summon', title: '唤出动画', hint: '歌单架整体唤出、收起和镜头速度', items: [
-        fxConsoleItem('fx-shelfsummonopen', '唤出秒数', '歌单架打开速度'),
-        fxConsoleItem('fx-shelfsummonclose', '收起秒数', '歌单架关闭速度'),
-        fxConsoleItem('fx-shelfsummonslide', '唤出位移', '歌单架滑入'),
-        fxConsoleItem('fx-shelfsummonstagger', '卡片错层', '卡片延迟'),
-        fxConsoleItem('fx-shelfsummonscale', '唤出缩放', '卡片缩放'),
-        fxConsoleItem('fx-shelfsummonparallax', '唤出视差', '卡片视差'),
-        fxConsoleItem('fx-shelfcamenter', '镜头进入速度', '歌单镜头进入'),
-        fxConsoleItem('fx-shelfcamexit', '镜头离开速度', '歌单镜头退出')
+      { key: 'summon', title: 'Summon animation', hint: 'Whole-shelf summon, collapse and camera speed', items: [
+        fxConsoleItem('fx-shelfsummonopen', 'Summon duration', 'shelf open speed'),
+        fxConsoleItem('fx-shelfsummonclose', 'Collapse duration', 'shelf close speed'),
+        fxConsoleItem('fx-shelfsummonslide', 'Summon offset', 'shelf slide in'),
+        fxConsoleItem('fx-shelfsummonstagger', 'Card stagger', 'card delay'),
+        fxConsoleItem('fx-shelfsummonscale', 'Summon scale', 'card scale'),
+        fxConsoleItem('fx-shelfsummonparallax', 'Summon parallax', 'card parallax'),
+        fxConsoleItem('fx-shelfcamenter', 'Camera enter speed', 'shelf camera enter'),
+        fxConsoleItem('fx-shelfcamexit', 'Camera exit speed', 'shelf camera exit')
       ] },
-      { key: 'camera', title: '摄像头交互', hint: '摄像头手势触碰开关', items: [
-        fxConsoleItem('cam-seg', '摄像头交互', '关闭 手势触碰')
+      { key: 'camera', title: 'Camera interaction', hint: 'Camera gesture touch toggle', items: [
+        fxConsoleItem('cam-seg', 'Camera interaction', 'off gesture touch')
       ] }
     ]
   },
   {
     key: 'system',
     groups: [
-      { key: 'startup', title: '启动与退出', hint: '关闭窗口行为和恢复播放方式', open: true, items: [
-        fxConsoleItem('close-behavior-seg', '关闭窗口', '直接退出 后台托盘'),
-        fxConsoleItem('t-startupAutoplay', '启动自动播放', '打开软件继续播放'),
-        fxConsoleItem('t-startupFastSkip', '秒启动跳过启动页', '快速启动'),
-        fxConsoleItem('startup-resume-mode-seg', '恢复播放位置', '按上次进度 重播整首')
+      { key: 'startup', title: 'Startup & exit', hint: 'Close behavior and playback resume mode', open: true, items: [
+        fxConsoleItem('close-behavior-seg', 'Closing the window', 'quit directly tray background'),
+        fxConsoleItem('t-startupAutoplay', 'Autoplay on startup', 'resume playback when opening the app'),
+        fxConsoleItem('t-startupFastSkip', 'Fast start skips splash', 'quick launch'),
+        fxConsoleItem('startup-resume-mode-seg', 'Resume position', 'from last progress replay whole song')
       ] },
-      { key: 'output', title: '播放输出', hint: '音频输出设备和路由面板', items: [
-        fxConsoleItem('audio-output-panel', '播放输出设备', '声卡 耳机 扬声器 路由', false)
+      { key: 'output', title: 'Playback output', hint: 'Audio output devices and routing panel', items: [
+        fxConsoleItem('audio-output-panel', 'Playback output device', 'sound card headphones speakers routing', false)
       ] },
-      { key: 'performance', title: '性能与后台', hint: '画质档位、后台渲染和直播保持', items: [
-        fxConsoleItem('performance-quality-seg', '画质档位', '低配 中 高 超高 渲染质量'),
-        fxConsoleItem('foreground-fps-seg', '前台帧率上限', 'FPS 跟随屏幕 垂直同步 VSync 高刷 节能 45 60 75 90 120'),
-        fxConsoleItem('performance-background-seg', '后台渲染策略', '自动优化 保持运行 停止释放'),
-        fxConsoleItem('t-liveBackgroundKeep', '直播后台保持', '最小化继续渲染')
+      { key: 'performance', title: 'Performance & background', hint: 'Quality tiers, background rendering and keep-alive', items: [
+        fxConsoleItem('performance-quality-seg', 'Quality tier', 'low medium high ultra render quality'),
+        fxConsoleItem('foreground-fps-seg', 'Foreground FPS cap', 'fps vsync vsync high refresh power saving 45 60 75 90 120'),
+        fxConsoleItem('performance-background-seg', 'Background rendering policy', 'auto optimize keep running stop release'),
+        fxConsoleItem('t-liveBackgroundKeep', 'Background keep-alive', 'keep rendering when minimized')
       ] },
-      { key: 'memory', title: '内存管理', hint: '播放器压缩、系统释放范围和阈值', items: [
-        fxConsoleItem('memory-status-chip', '系统内存状态', 'Mem Reduct 占用', false),
-        fxConsoleItem('memory-status-sub', '内存说明', '工作集 待机页', false),
-        fxConsoleItem('t-memoryAutoTrimApp', '自动压缩播放器', '内存 压缩 Electron'),
-        fxConsoleItem('t-memoryAutoTrimOnBackground', '后台触发压缩', '最小化内存'),
-        fxConsoleItem('t-memoryAutoSystemTrim', '系统级定时释放', 'Mem Reduct 自动'),
-        fxConsoleItem('t-memorySystemAutoElevate', '需要时请求管理员', 'UAC 提权'),
-        fxConsoleItem('memory-mask-seg', '系统释放范围', '工作集 修改页 待机页'),
-        fxConsoleItem('fx-memory-interval', '定时释放', '分钟 间隔'),
-        fxConsoleItem('fx-memory-threshold', '占用阈值', '内存百分比'),
-        fxConsoleItem({ selector: '.memory-action-row' }, '手动内存操作', '压缩播放器 系统释放 提权释放', false)
+      { key: 'memory', title: 'Memory management', hint: 'Player trimming, system release scope and thresholds', items: [
+        fxConsoleItem('memory-status-chip', 'System memory status', 'Mem Reduct usage', false),
+        fxConsoleItem('memory-status-sub', 'Memory notes', 'working set standby pages', false),
+        fxConsoleItem('t-memoryAutoTrimApp', 'Auto-trim player process', 'memory trim Electron'),
+        fxConsoleItem('t-memoryAutoTrimOnBackground', 'Trim in background', 'minimized memory'),
+        fxConsoleItem('t-memoryAutoSystemTrim', 'Timed system release', 'Mem Reduct auto'),
+        fxConsoleItem('t-memorySystemAutoElevate', 'Request admin when needed', 'UAC elevate'),
+        fxConsoleItem('memory-mask-seg', 'System release scope', 'working set modified pages standby pages'),
+        fxConsoleItem('fx-memory-interval', 'Timed release', 'minutes interval'),
+        fxConsoleItem('fx-memory-threshold', 'Usage threshold', 'memory percentage'),
+        fxConsoleItem({ selector: '.memory-action-row' }, 'Manual memory actions', 'trim player system release elevated release', false)
       ] },
-      { key: 'cache', title: '缓存与存储', hint: '统一缓存目录、占用和各类路径', items: [
-        fxConsoleItem('cache-storage-panel', '本地缓存', '缓存路径 缓存目录 占用 歌词 封面 音频 更新', false)
+      { key: 'cache', title: 'Cache & storage', hint: 'Unified cache directory, usage and paths', items: [
+        fxConsoleItem('cache-storage-panel', 'Local cache', 'cache path cache directory usage lyrics covers audio updates', false)
       ] },
-      { key: 'experimental', title: '实验功能', hint: '尚未开放或需要谨慎使用的能力', items: [
-        fxConsoleItem('t-wallpaperMode', '完整桌面模式', '完整 Mineradio 进入桌面层 Ctrl Shift M 切换操作层 本次启动有效', false)
+      { key: 'experimental', title: 'Experimental', hint: 'Not fully open yet or use with care', items: [
+        fxConsoleItem('t-wallpaperMode', 'Full desktop mode', 'full Mineradio desktop layer Ctrl Shift M toggle this session only', false)
       ] }
     ]
   }
@@ -313,12 +313,12 @@ function fxConsoleMakeToolbar(panel) {
   toolbar.innerHTML =
     '<div class="fx-console-search-row" role="search">' +
     '<span class="fx-console-search-icon" aria-hidden="true">⌕</span>' +
-    '<input id="fx-console-search" class="fx-console-search" type="search" autocomplete="off" spellcheck="false" aria-label="搜索视觉控制台功能" aria-controls="fx-console-search-results" aria-expanded="false" placeholder="搜索功能，如：粒子、缓存、歌词">' +
-    '<button id="fx-console-undo" class="fx-console-tool-btn" type="button" disabled aria-label="撤销上一步设置" title="撤销上一步设置">↶<span>撤销</span></button>' +
-    '<button id="fx-console-history-toggle" class="fx-console-tool-btn" type="button" aria-label="最近操作" aria-controls="fx-console-history" aria-haspopup="true" aria-expanded="false" title="最近操作">◷<span>历史</span></button>' +
+    '<input id="fx-console-search" class="fx-console-search" type="search" autocomplete="off" spellcheck="false" aria-label="Search visual console controls" aria-controls="fx-console-search-results" aria-expanded="false" placeholder="Search controls, e.g. particles, cache, lyrics">' +
+    '<button id="fx-console-undo" class="fx-console-tool-btn" type="button" disabled aria-label="Undo last change" title="Undo last change">↶<span>Undo</span></button>' +
+    '<button id="fx-console-history-toggle" class="fx-console-tool-btn" type="button" aria-label="Recent changes" aria-controls="fx-console-history" aria-haspopup="true" aria-expanded="false" title="Recent changes">◷<span>History</span></button>' +
     '</div>' +
     '<div id="fx-console-search-results" class="fx-console-popover fx-console-search-results" hidden></div>' +
-    '<div id="fx-panel-tabs" class="fx-panel-tabs" role="tablist" aria-label="视觉控制台分类"></div>' +
+    '<div id="fx-panel-tabs" class="fx-panel-tabs" role="tablist" aria-label="Visual console categories"></div>' +
     '<div id="fx-console-history" class="fx-console-popover fx-console-history-popover" hidden></div>';
   var tabs = toolbar.querySelector('#fx-panel-tabs');
   FX_CONSOLE_TABS.forEach(function (meta) {
@@ -485,13 +485,13 @@ function organizeFxConsoleWorkspace() {
   });
   var residual = fxConsoleFindUnclassifiedControls(oldRoots);
   if (residual.length) {
-    var fallbackMeta = { key: 'other', title: '其他设置', hint: '尚未归入明确分类的兼容项' };
-    var fallbackBody = fxConsoleMakeGroup(pages.system, { key: 'system', label: '系统' }, fallbackMeta);
+    var fallbackMeta = { key: 'other', title: 'Other settings', hint: 'Compatibility controls not yet categorized' };
+    var fallbackBody = fxConsoleMakeGroup(pages.system, { key: 'system', label: 'System' }, fallbackMeta);
     residual.forEach(function (node, index) {
-      fxConsoleAppendItem(fallbackBody, { key: 'system', label: '系统' }, fallbackMeta, {
+      fxConsoleAppendItem(fallbackBody, { key: 'system', label: 'System' }, fallbackMeta, {
         ref: { element: node },
-        title: String(node.textContent || '兼容设置').trim().slice(0, 40) || '兼容设置',
-        aliases: '其他 兼容',
+        title: String(node.textContent || 'Legacy setting').trim().slice(0, 40) || 'Legacy setting',
+        aliases: 'other legacy',
         history: true
       }, { toggleGrid: null });
     });
@@ -545,7 +545,7 @@ function fxConsoleCurrentValue(entry) {
   }
   var color = el.matches && el.matches('input[type="color"]') ? el : el.querySelector && el.querySelector('input[type="color"]');
   if (color) return String(color.value || '').toUpperCase();
-  if (el.classList && el.classList.contains('fx-toggle')) return el.classList.contains('on') ? '已开启' : '已关闭';
+  if (el.classList && el.classList.contains('fx-toggle')) return el.classList.contains('on') ? 'On' : 'Off';
   var active = el.querySelector && el.querySelector('.active');
   if (active && active.textContent) return active.textContent.trim();
   return '';
@@ -621,7 +621,7 @@ function renderFxConsoleSearchResults(query) {
   if (!matches.length) {
     var empty = document.createElement('div');
     empty.className = 'fx-console-empty';
-    empty.textContent = '没有找到“' + String(query || '').trim().slice(0, 30) + '”';
+    empty.textContent = 'No results for “' + String(query || '').trim().slice(0, 30) + '”';
     results.appendChild(empty);
   } else {
     matches.forEach(function (entry) {
@@ -702,10 +702,10 @@ function fxConsoleStateEqual(a, b) {
 }
 
 function fxConsoleFormatHistoryValue(value) {
-  if (value === true) return '开启';
-  if (value === false) return '关闭';
+  if (value === true) return 'On';
+  if (value === false) return 'Off';
   if (typeof value === 'number') return Math.abs(value - Math.round(value)) < 0.0001 ? String(Math.round(value)) : String(Math.round(value * 100) / 100);
-  if (value == null) return '无';
+  if (value == null) return 'None';
   return String(value);
 }
 
@@ -719,12 +719,12 @@ function fxConsoleHistoryDetail(before, after, changes) {
     changed.push([before[key], after[key]]);
   });
   if (!changed.length) return '';
-  if (changed.length > 1) return changed.length + ' 项参数';
+  if (changed.length > 1) return changed.length + ' parameters';
   return fxConsoleFormatHistoryValue(changed[0][0]) + ' → ' + fxConsoleFormatHistoryValue(changed[0][1]);
 }
 
 function fxConsoleHistoryControlLabel(entry, target) {
-  var label = entry ? entry.title : '视觉设置';
+  var label = entry ? entry.title : 'Visual settings';
   var button = target && target.closest ? target.closest('button') : null;
   if (button && button.textContent && !button.classList.contains('fx-reset-one')) {
     var text = button.textContent.replace(/\s+/g, ' ').trim();
@@ -827,16 +827,16 @@ function fxConsoleApplyState(state, label, records, allowAdapter) {
       var current = captureFxConsoleState();
       var merged = Object.assign({}, current.fx);
       changes.fx.forEach(function (key) { merged[key] = state.fx[key]; });
-      if (typeof applyFxArchiveSnapshot !== 'function' || !applyFxArchiveSnapshot(merged)) throw new Error('视觉状态恢复失败');
+      if (typeof applyFxArchiveSnapshot !== 'function' || !applyFxArchiveSnapshot(merged)) throw new Error('Failed to restore visual state');
     }
     fxConsoleApplyPreferences(state, changes);
     if (typeof configureMemoryReductFromFx === 'function') configureMemoryReductFromFx('history-undo', false);
     if (typeof saveLyricLayout === 'function') saveLyricLayout({ user: true, reason: 'consoleHistoryUndo' });
-    if (typeof showToast === 'function') showToast('已回退：' + label);
+    if (typeof showToast === 'function') showToast('Reverted: ' + label);
     return true;
   } catch (error) {
     console.error('[FxConsole] history rollback failed', error);
-    if (typeof showToast === 'function') showToast('回退失败，请重试');
+    if (typeof showToast === 'function') showToast('Revert failed, please retry');
     return false;
   } finally {
     setTimeout(function () {
@@ -871,12 +871,12 @@ function renderFxConsoleHistory() {
   pop.innerHTML = '';
   var head = document.createElement('div');
   head.className = 'fx-console-popover-head';
-  head.innerHTML = '<strong>最近操作</strong><small>当前会话 · 最多 40 条</small>';
+  head.innerHTML = '<strong>Recent changes</strong><small>This session · up to 40 entries</small>';
   pop.appendChild(head);
   if (!fxConsoleHistory.length) {
     var empty = document.createElement('div');
     empty.className = 'fx-console-empty';
-    empty.textContent = '调整设置后会在这里留下可回退记录';
+    empty.textContent = 'Changes you make will appear here as revertible history';
     pop.appendChild(empty);
     return;
   }
@@ -895,7 +895,7 @@ function renderFxConsoleHistory() {
       text.appendChild(meta);
       var btn = document.createElement('button');
       btn.type = 'button';
-      btn.textContent = index === fxConsoleHistory.length - 1 ? '撤销' : '撤销至此项前';
+      btn.textContent = index === fxConsoleHistory.length - 1 ? 'Undo' : 'Revert to before this';
       btn.addEventListener('click', function () {
         if (index === fxConsoleHistory.length - 1) undoFxConsoleHistory();
         else rollbackFxConsoleHistoryTo(index);
@@ -915,7 +915,7 @@ function fxConsoleClickIsReversible(target, entry) {
   var archive = target.closest('#user-archive-grid');
   if (archive) {
     var archiveBtn = target.closest('button');
-    return !!(archiveBtn && archiveBtn.textContent.trim() === '应用');
+    return !!(archiveBtn && archiveBtn.textContent.trim() === 'Apply');
   }
   return !!target.closest('button,.fx-toggle,.fx-seg,.lyric-color-row,.fx-font-grid,.preset-card,.fx-actions');
 }
@@ -955,12 +955,12 @@ function fxConsoleRegisterHotkeySearchEntry() {
   if (!hotkey || hotkey.getAttribute('data-fx-console-entry')) return;
   var entry = {
     id: 'fx-console-entry-' + (fxConsoleRegistry.length + 1),
-    title: '热键设置',
-    aliases: '快捷键 局内热键 全局热键 键盘',
+    title: 'Hotkey settings',
+    aliases: 'shortcut in-app hotkeys global hotkeys keyboard',
     tab: 'system',
-    tabLabel: '系统',
+    tabLabel: 'System',
     group: 'startup',
-    groupLabel: '启动与退出',
+    groupLabel: 'Startup & exit',
     history: false,
     element: hotkey
   };

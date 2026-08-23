@@ -108,4 +108,4 @@ function lyricCameraLockFit(layoutScale, layoutX, layoutY, distance) {
   var lockScaleCap = Math.min(1, (skullSafe ? 0.94 : LYRIC_CAMERA_LOCK_MAX_SCALE) / layoutScale);
   return clampRange(Math.min(viewportFit, lockScaleCap), skullSafe ? 0.36 : 0.42, 1);
 }
-// 兼容旧变量名以便其它代码不破坏
+// legacy variable names kept so other code doesn't break

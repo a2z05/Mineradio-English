@@ -702,7 +702,7 @@ function createBackCoverLayer() {
   for (var i = 0; i < BACK_COVER_COUNT; i++) {
     var u = Math.random();
     var v = Math.random();
-    // 在 PLANE_SIZE 范围内分布
+    // distribute within PLANE_SIZE
     bp[i * 3] = (u - 0.5) * PLANE_SIZE;
     bp[i * 3 + 1] = (v - 0.5) * PLANE_SIZE;
     bp[i * 3 + 2] = -1.5 - Math.random() * 0.4;  // behind the main plane
