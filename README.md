@@ -25,8 +25,9 @@
 | 🎧 **Spotify integration** | Sign in with PKCE OAuth. Search, playlists and likes alongside NetEase / QQ / Kugou / Soda Music |
 | 🔀 **Per-app proxy** | Route Spotify/Kugou/Soda/QQ through an HTTP/SOCKS proxy where geo-blocked — titlebar toggle + per-service checkboxes |
 | 🎤 **Word-by-word lyrics** | Apple-Music-style karaoke (AMLL/TTML), Japanese/Korean romanization, decoded QQ QRC, instant lyric cache |
-| 📱 **Phone remote** | Scan a QR → control playback from your phone browser. PWA-installable, live progress |
-| 🔄 **Music transfer** | Upload songs/folders phone→PC, download PC→phone (folder = ZIP) |
+| 📱 **Phone remote** | Scan once → control playback from your phone browser. Pairing survives PC restarts and auto-reconnects to your last PC. Restyled to match the desktop app, PWA-installable via built-in install prompt |
+| 🔊 **Play anywhere** | Spotify-style output switcher — one button casts the PC's current track to your phone speaker (or back), local files included |
+| 🔄 **Music transfer** | Upload songs/folders phone→PC, download PC→phone (folder = ZIP). Inbox and library folders fully configurable in the phone panel |
 | 📂 **Folder & default player** | Batch-import a folder of tracks; audio files open straight into Mineradio from Explorer |
 | ⌨️ **Rebindable hotkeys** | Every action (incl. overlays) configurable in the built-in Hotkeys settings |
 | ⚡ **Fast startup** | Cached module loading — cold start only pays full cost once |
@@ -50,12 +51,16 @@ npm run build:win    # build installer into dist/
 
 1. Start the app on your PC and click the **phone icon** in the titlebar
 2. Scan the QR with your phone camera — the paired remote opens
-3. Optional: *Add to Home Screen* installs it as an app
+3. Optional: tap **Install** when prompted (or *Add to Home Screen*) to get a full-screen, offline-ready app
 
-Both devices need to share a network; allow Node/Electron through Windows Firewall (private) if it won't connect.
+Pairing is remembered: after the first scan your phone reconnects to the same PC automatically — no re-scanning after restarts (as long as both devices are on the same network). If the PC's IP ever changes, the remote probes the last known address and jumps there on its own.
 
-- **Transfer tab**: upload songs or whole folders phone→PC (they land in `data/music-inbox/`)
+Allow Node/Electron through Windows Firewall (**Private networks**) if it won't connect.
+
+- **Output toggle** (speaker icon): switch audio between **PC** and **Phone** — like Spotify Connect, but for your own music. Works with inbox/local files; DRM streams stay PC-only.
+- **Transfer tab**: upload songs or whole folders phone→PC into the inbox folder
 - **Library tab**: browse PC music and download tracks or folders as ZIP
+- **Folders & devices** (in the phone panel on PC): change the inbox directory, add up to 5 library folders (any drive), unpair phones
 
 ### Spotify setup
 
