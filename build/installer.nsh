@@ -764,11 +764,7 @@ Function MineradioValidateInstallDir
       ${If} $2 == "1"
       ${AndIf} $3 != "1"
       ${AndIf} $4 != "1"
-        MessageBox MB_ICONSTOP|MB_OK "This PC has a D-Z drive. Mineradio will not install to C:. Please pick the Mineradio folder on D: or another non-C: drive.$
-$
-$
-$
-If this PC only has C:, setup will automatically allow C:\Mineradio."
+        MessageBox MB_ICONSTOP|MB_OK "This PC has a D-Z drive. Mineradio will not install to C:. Please pick the Mineradio folder on D: or another non-C: drive.$\r$\n$\r$\n$\r$\nIf this PC only has C:, setup will automatically allow C:\Mineradio."
         Abort
       ${EndIf}
     ${EndIf}
@@ -809,11 +805,7 @@ If this PC only has C:, setup will automatically allow C:\Mineradio."
     Goto valid
   ${EndIf}
 
-  MessageBox MB_ICONSTOP|MB_OK "To avoid deleting unrelated files during uninstall, Mineradio cannot install into a non-dedicated folder with existing files. Please create or choose an empty Mineradio folder.$
-$
-$
-$
-Current path: $INSTDIR"
+  MessageBox MB_ICONSTOP|MB_OK "To avoid deleting unrelated files during uninstall, Mineradio cannot install into a non-dedicated folder with existing files. Please create or choose an empty Mineradio folder.$\r$\n$\r$\n$\r$\nCurrent path: $INSTDIR"
   Abort
 
   valid:
@@ -1014,10 +1006,7 @@ Function un.MineradioValidateUninstallDir
   Call un.MineradioNormalizeInstallDir
   Pop $1
   ${If} $0 != $1
-    MessageBox MB_OK|MB_ICONSTOP "The current uninstall path is not a dedicated Mineradio directory. Uninstall blocked to avoid deleting unrelated files.$$
-$$
-Current path: $INSTDIR$$
-Safe path should be: $0"
+    MessageBox MB_OK|MB_ICONSTOP "The current uninstall path is not a dedicated Mineradio directory. Uninstall blocked to avoid deleting unrelated files.$\r$\n$\r$\n$\r$\n$\r$\nCurrent path: $INSTDIR$\r$\n$\r$\n$\r$\n$\r$\nSafe path should be: $0"
     SetErrorLevel 2
     Quit
   ${EndIf}
@@ -1027,9 +1016,7 @@ Safe path should be: $0"
   Call un.MineradioInstallDirLooksOwned
   Pop $0
   ${If} $0 != "1"
-    MessageBox MB_OK|MB_ICONSTOP "Cannot confirm this directory belongs to Mineradio. Uninstall blocked to avoid deleting unrelated files.$$
-$$
-Current path: $INSTDIR"
+    MessageBox MB_OK|MB_ICONSTOP "Cannot confirm this directory belongs to Mineradio. Uninstall blocked to avoid deleting unrelated files.$\r$\n$\r$\n$\r$\n$\r$\nSafe path should be: $1$\r$\n$\r$\n$\r$\n$\r$\nCurrent path: $INSTDIR"
     SetErrorLevel 2
     Quit
   ${EndIf}
