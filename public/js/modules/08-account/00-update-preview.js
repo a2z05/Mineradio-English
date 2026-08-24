@@ -20,10 +20,10 @@ function normalizeUpdateDownloadPages(values) {
     var item = value && typeof value === 'object' ? value : { url: value };
     var url = String(item.url || item.href || item.downloadPageUrl || item.externalUrl || '').trim();
     if (!isSafeUpdatePageUrl(url) || seen[url]) return;
-    var label = String(item.label || item.name || ('下载线路 ' + (index + 1)))
+    var label = String(item.label || item.name || ('Download line ' + (index + 1)))
       .replace(/[<>|]/g, '')
       .trim()
-      .slice(0, 24) || ('下载线路 ' + (index + 1));
+      .slice(0, 24) || ('Download line ' + (index + 1));
     seen[url] = true;
     pages.push({ label: label, url: url });
   });
@@ -84,7 +84,7 @@ async function checkLatestUpdate() {
   } catch (e) {
     updatePreviewState.preview = false;
     updatePreviewState.updateAvailable = false;
-    updatePreviewState.hero = '暂时无法检查更新。';
+    updatePreviewState.hero = 'Could not check for updates right now.';
     updatePreviewState.message = (e && e.message) || 'UPDATE_CHECK_FAILED';
     renderUpdatePreviewPanel();
     setUpdatePreviewVisible(false);
@@ -109,7 +109,7 @@ function applyLatestUpdateInfo(data) {
     && !updatePreviewState.downloadPages.some(function (page) { return page.url === updatePreviewState.externalUrl; })
   ) {
     updatePreviewState.downloadPages.unshift({
-      label: '网盘下载',
+      label: 'Cloud drive download',
       url: updatePreviewState.externalUrl
     });
   }
@@ -124,7 +124,7 @@ function applyLatestUpdateInfo(data) {
   updatePreviewState.status = 'idle';
   updatePreviewState.errorReason = '';
   updatePreviewState.hero = release.summary
-    || (updatePreviewState.updateAvailable ? '发现新版本，建议更新。' : '当前版本已是最新。');
+    || (updatePreviewState.updateAvailable ? 'New version available — updating is recommended.' : 'You are on the latest version.');
   if (Array.isArray(release.notes) && release.notes.length) {
     updatePreviewState.notes = release.notes.slice(0, 4);
   }
@@ -164,11 +164,11 @@ function renderUpdatePreviewPanel() {
   var hero = document.getElementById('update-hero-main');
   var list = document.getElementById('update-list');
   if (version) version.textContent = 'v' + updatePreviewState.version;
-  if (hero) hero.textContent = updatePreviewState.hero || '当前版本已是最新。';
+  if (hero) hero.textContent = updatePreviewState.hero || 'You are on the latest version.';
   if (list) {
     var notes = Array.isArray(updatePreviewState.notes) && updatePreviewState.notes.length
       ? updatePreviewState.notes
-      : ['更新检测已就绪'];
+      : ['Update check ready'];
     list.innerHTML = notes.map(function (text, i) {
       return '<div class="update-item"><span class="update-item-dot" data-index="'
         + String(i + 1).padStart(2, '0')
@@ -195,7 +195,7 @@ function renderUpdateDownloadSources() {
     button.className = 'update-download-source';
     button.dataset.index = String(index);
     button.textContent = page.label;
-    button.title = '使用' + page.label + '下载';
+    button.title = 'Download via ' + page.label;
     button.onclick = function () {
       openUpdateDownloadSource(index);
     };
@@ -222,13 +222,13 @@ function syncUpdatePreviewStateClass() {
   }
   var label = document.getElementById('update-btn-label');
   if (label) {
-    if (isOpening) label.textContent = '正在打开下载页';
-    else if (isOpened) label.textContent = '下载页已打开';
-    else if (isError) label.textContent = '重试打开';
-    else if (!updatePreviewState.updateAvailable) label.textContent = '当前已是最新';
-    else if (selectedPage) label.textContent = '前往' + selectedPage.label;
-    else if (updatePreviewState.externalUrl) label.textContent = '前往网盘下载';
-    else label.textContent = '查看更新页面';
+    if (isOpening) label.textContent = 'Opening download page';
+    else if (isOpened) label.textContent = 'Download page opened';
+    else if (isError) label.textContent = 'Retry';
+    else if (!updatePreviewState.updateAvailable) label.textContent = 'Up to date';
+    else if (selectedPage) label.textContent = 'Open ' + selectedPage.label;
+    else if (updatePreviewState.externalUrl) label.textContent = 'Open cloud download';
+    else label.textContent = 'View update page';
   }
   var btn = document.getElementById('update-primary-btn');
   if (btn) {
@@ -242,12 +242,12 @@ function syncUpdatePreviewStateClass() {
   });
   var foot = document.getElementById('update-footnote');
   if (foot) {
-    if (isOpening) foot.textContent = '正在调用系统浏览器。';
-    else if (isError) foot.textContent = '无法打开下载页：' + (updatePreviewState.errorReason || '请稍后重试');
-    else if (!updatePreviewState.updateAvailable) foot.textContent = '当前版本已是最新。';
-    else if (downloadPages.length > 1) foot.textContent = '可选择任一网盘线路；软件不会在本地下载或应用补丁。';
-    else if (updatePreviewState.externalUrl) foot.textContent = '将在浏览器打开网盘下载页；软件不会在本地下载或应用补丁。';
-    else foot.textContent = '将在浏览器打开 GitHub 更新页面；软件不会在本地下载或应用补丁。';
+    if (isOpening) foot.textContent = 'Opening your system browser.';
+    else if (isError) foot.textContent = 'Could not open the download page: ' + (updatePreviewState.errorReason || 'try again later');
+    else if (!updatePreviewState.updateAvailable) foot.textContent = 'You are on the latest version.';
+    else if (downloadPages.length > 1) foot.textContent = 'Pick any download line; the app never downloads or applies patches itself.';
+    else if (updatePreviewState.externalUrl) foot.textContent = 'Opens the cloud download page in your browser; the app never downloads or applies patches itself.';
+    else foot.textContent = 'Opens the GitHub release page in your browser; the app never downloads or applies patches itself.';
   }
 }
 
@@ -323,7 +323,7 @@ function openUpdateDownloadSource(index) {
 async function startUpdatePreviewDownload(preferredIndex) {
   if (updatePreviewState.status === 'opening') return;
   if (!updatePreviewState.updateAvailable) {
-    showToast('当前版本已是最新');
+    showToast('You are on the latest version');
     return;
   }
   if (Number.isInteger(preferredIndex)) {
@@ -331,7 +331,7 @@ async function startUpdatePreviewDownload(preferredIndex) {
   }
   var target = currentUpdatePageUrl(preferredIndex);
   if (!target) {
-    showToast('这个版本还没有可用下载页面');
+    showToast('No download page is available for this version yet');
     return;
   }
   updatePreviewState.status = 'opening';
@@ -348,7 +348,7 @@ async function startUpdatePreviewDownload(preferredIndex) {
     updatePreviewState.status = 'opened';
     syncUpdatePreviewStateClass();
     pulseUpdateReady();
-    showToast(updatePreviewState.externalUrl ? '已在浏览器打开网盘下载页' : '已在浏览器打开更新页面');
+    showToast(updatePreviewState.externalUrl ? 'Cloud download page opened in your browser' : 'Update page opened in your browser');
     setTimeout(function () {
       if (updatePreviewState.status === 'opened') {
         updatePreviewState.status = 'idle';
@@ -359,7 +359,7 @@ async function startUpdatePreviewDownload(preferredIndex) {
     updatePreviewState.status = 'error';
     updatePreviewState.errorReason = (e && e.message) || 'OPEN_UPDATE_PAGE_FAILED';
     syncUpdatePreviewStateClass();
-    showToast('无法打开更新页面');
+    showToast('Could not open the update page');
   }
 }
 

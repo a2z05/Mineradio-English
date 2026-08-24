@@ -77,7 +77,7 @@ document.addEventListener('keydown', function (e) {
   else if (e.code === 'KeyL') { if (!immersiveMode) toggleLyricsPanel(); }
   else if (e.code === 'KeyP') {
     if (!immersiveMode && diyPlayerMode) toggleFxPanel();
-    else if (!immersiveMode) showToast('开启 DIY 玩家模式后可打开视觉控制台');
+    else if (!immersiveMode) showToast('Enable DIY player mode to open the visual console');
   }
   else if (e.code === 'KeyI') toggleImmersiveMode();
   else if (e.code === 'KeyF') toggleFullscreen();

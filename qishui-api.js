@@ -520,7 +520,7 @@ function qishuiRestriction(category, message, action, extra) {
 function qishuiUnavailable(message, category, extra) {
   const restriction = qishuiRestriction(
     category || 'provider_limited',
-    message || '汽水音乐开放平台当前没有公开可交给播放器直连的音频 URL，已按匹配源处理。',
+    message || 'The Qishui Open Platform exposes no publicly playable audio URL for the player to use directly - handled via matched source.',
     'switch_source',
     { playbackMode: 'recommend-match', scope: QISHUI_SCOPE }
   );
@@ -547,7 +547,7 @@ function getQishuiStatus(cookieText) {
   const oauthConfig = getQishuiOAuthConfig();
   return {
     provider: 'qishui',
-    label: '汽水音乐',
+    label: 'Qishui Music',
     short: 'QS',
     configured,
     tokenConfigured,
@@ -560,12 +560,12 @@ function getQishuiStatus(cookieText) {
     playbackMode: webSession ? 'direct-url' : 'recommend-match',
     scope: QISHUI_SCOPE,
     userId: webSession ? qishuiCookieUserId(cookie) : '',
-    nickname: webSession ? '汽水音乐账号' : '',
+    nickname: webSession ? 'Qishui Music account' : '',
     vipType: 0,
     vipLevel: 'none',
     isVip: false,
     isSvip: false,
-    vipLabel: '无VIP',
+    vipLabel: 'No VIP',
     membershipKnown: false,
     tokenFile: tokenInfo.file,
     tokenSource: tokenInfo.source,
@@ -587,12 +587,12 @@ function getQishuiStatus(cookieText) {
       webSession,
     },
     message: webSession
-      ? '汽水音乐官方扫码登录已连接，可同步歌单与我的喜欢，并按账号权益播放。'
+      ? 'Qishui official QR login is connected - playlists and liked songs can sync, with playback per account entitlements.'
       : tokenConfigured
-      ? '已有旧版开放平台目录授权；账号功能仍需完成官方扫码登录。'
+      ? 'A legacy Open Platform catalogue authorization exists; account features still require the official QR login.'
       : (QISHUI_PUBLIC_ENABLED
-        ? '请使用抖音 App 扫描 Mineradio 中的汽水官方二维码；未登录时仅保留公开搜索匹配。'
-        : '请使用抖音 App 扫描 Mineradio 中的汽水官方二维码完成登录。'),
+        ? 'Scan the Qishui QR code in Mineradio with the Douyin app; without login only public search matching stays available.'
+        : 'Scan the Qishui QR code in Mineradio with the Douyin app to finish signing in.'),
   };
 }
 
@@ -1024,7 +1024,7 @@ function qishuiMembershipFromData(value) {
     vipLevel,
     isVip,
     isSvip,
-    vipLabel: vipLevel === 'svip' ? 'SVIP' : (vipLevel === 'vip' ? 'VIP' : '无VIP'),
+    vipLabel: vipLevel === 'svip' ? 'SVIP' : (vipLevel === 'vip' ? 'VIP' : 'No VIP'),
     expiresAt: activeExpiries.length ? Math.min(...activeExpiries) : 0,
   };
 }
@@ -1061,7 +1061,7 @@ function qishuiPlaybackMembershipFromPayload(payload) {
     vipLevel: 'none',
     isVip: false,
     isSvip: false,
-    vipLabel: '无VIP',
+    vipLabel: 'No VIP',
     expiresAt: 0,
   };
 }
@@ -1590,7 +1590,7 @@ function mapQishuiMedia(raw, index, query, opts) {
     qishuiQuery: query || '',
     lyric: lyricData.lyric,
     tlyric: lyricData.tlyric,
-    restriction: qishuiRestriction('provider_limited', '汽水音乐当前作为推荐/匹配源接入，播放时会自动寻找其它可播版本。', 'switch_source'),
+    restriction: qishuiRestriction('provider_limited', 'Qishui Music is connected as a recommendation/matching source; playback will automatically look for another playable version.', 'switch_source'),
   };
 }
 
@@ -1689,7 +1689,7 @@ async function fetchQishuiPlaybackMembership(cookieText) {
         vipLevel: profile.vipLevel || 'none',
         isVip: !!profile.isVip,
         isSvip: !!profile.isSvip,
-        vipLabel: profile.vipLabel || '无VIP',
+        vipLabel: profile.vipLabel || 'No VIP',
         expiresAt: Number(profile.expiresAt) || 0,
         sessionValidated: !!profile.profileReady,
         userId: profile.userId || '',
@@ -1713,7 +1713,7 @@ function qishuiUnknownMembership(error) {
     vipLevel: 'unknown',
     isVip: false,
     isSvip: false,
-    vipLabel: '未知会员状态',
+    vipLabel: 'Unknown membership status',
     expiresAt: 0,
     sessionValidated: false,
     error: normalizeText(error || 'QISHUI_MEMBERSHIP_UNKNOWN'),
@@ -1777,7 +1777,7 @@ function qishuiApplyMembershipObservation(historyKey, membership, now) {
     vipLevel: 'unknown',
     isVip: false,
     isSvip: false,
-    vipLabel: '未知会员状态',
+    vipLabel: 'Unknown membership status',
     expiresAt: 0,
   });
 }
@@ -1949,7 +1949,7 @@ function extractQishuiPlaylistCards(payload) {
         cover: qishuiPlaylistCoverFromItem(item),
         trackCount: count,
         playCount: Number(item.play_count || item.playCount || 0) || 0,
-        creator: normalizeText(item.creator_name || item.author_name || item.owner_name || item.owner && (item.owner.nickname || item.owner.public_name) || '汽水音乐'),
+        creator: normalizeText(item.creator_name || item.author_name || item.owner_name || item.owner && (item.owner.nickname || item.owner.public_name) || 'Qishui Music'),
         subscribed: true,
         virtual: false,
         webSession: true,
@@ -1975,7 +1975,7 @@ function buildQishuiVirtualPlaylist(id, name, songs, extra) {
     cover: extra.cover || songs.map(song => song && song.cover).find(Boolean) || '',
     trackCount: Number(extra.trackCount || songs.length || 0) || 0,
     playCount: Number(extra.playCount || 0) || 0,
-    creator: extra.creator || '汽水音乐',
+    creator: extra.creator || 'Qishui Music',
     subscribed: !!extra.subscribed,
     shelfPane: extra.shelfPane || '',
     owned: !!extra.owned,
@@ -2162,7 +2162,7 @@ async function handleQishuiStatus(cookieText) {
       status.vipLevel = profile.vipLevel || 'none';
       status.isVip = !!profile.isVip;
       status.isSvip = !!profile.isSvip;
-      status.vipLabel = profile.vipLabel || (status.vipLevel === 'svip' ? 'SVIP' : (status.vipLevel === 'vip' ? 'VIP' : '无VIP'));
+      status.vipLabel = profile.vipLabel || (status.vipLevel === 'svip' ? 'SVIP' : (status.vipLevel === 'vip' ? 'VIP' : 'No VIP'));
       status.membershipKnown = !!profile.membershipKnown;
       status.profileReady = true;
     }
@@ -2230,7 +2230,7 @@ async function fetchQishuiWebPlaylistTracks(playlistId, cookieText, opts) {
       .map(song => song && !song.cover && playlistCover ? Object.assign({}, song, { cover: playlistCover }) : song);
     const tracks = allTracks.slice(offset, offset + limit);
     const total = Number(meta.count_tracks || meta.track_count || data.total || data.count || data.total_num || allRawItems.length || allTracks.length) || allTracks.length;
-    const playlist = buildQishuiVirtualPlaylist(id, qishuiPlaylistNameFromItem(meta) || '汽水歌单', tracks, {
+    const playlist = buildQishuiVirtualPlaylist(id, qishuiPlaylistNameFromItem(meta) || 'Qishui Playlist', tracks, {
       cover: playlistCover,
       trackCount: total,
       subscribed: true,
@@ -2285,7 +2285,7 @@ function mapQishuiPublicItem(raw, index, query) {
     qishuiQuery: query || '',
     lyric,
     tlyric: '',
-    restriction: qishuiRestriction('provider_limited', '汽水音乐当前作为搜索/匹配源接入，播放时会自动寻找其它可播版本。', 'switch_source'),
+    restriction: qishuiRestriction('provider_limited', 'Qishui Music is connected as a search/matching source; playback will automatically look for another playable version.', 'switch_source'),
   };
 }
 
@@ -2365,7 +2365,7 @@ async function handleQishuiPublicSearch(keywords, limit, cookieText, offset) {
     limit,
     nextOffset: offset + songs.length,
     hasMore: songs.length >= limit && (offset + songs.length < rankedSongs.length || requestLimit < 100),
-    message: songs.length ? '' : '汽水公开搜索暂时没有返回匹配结果。',
+    message: songs.length ? '' : 'Qishui public search returned no matching results for now.',
   };
 }
 
@@ -2568,11 +2568,11 @@ function buildQishuiFeedPlaylist(songs) {
     source: 'qishui',
     type: 'playlist',
     id: QISHUI_VIRTUAL_FEED_PLAYLIST_ID,
-    name: '汽水推荐',
+    name: 'Qishui Recommendations',
     cover: firstCover,
     trackCount: songs.length,
     playCount: 0,
-    creator: '汽水音乐',
+    creator: 'Qishui Music',
     subscribed: false,
     virtual: true,
     playbackMode: 'recommend-match',
@@ -2590,7 +2590,7 @@ async function handleQishuiUserPlaylists(cookieText) {
       const profile = library.profile || {};
       const recentTracks = library.recentTracks || [];
       const playlists = [
-        buildQishuiVirtualPlaylist(QISHUI_WEB_LIKED_PLAYLIST_ID, '汽水我的喜欢', likedTracks, {
+        buildQishuiVirtualPlaylist(QISHUI_WEB_LIKED_PLAYLIST_ID, 'Qishui Liked Songs', likedTracks, {
           subscribed: false,
           shelfPane: 'mine',
           owned: true,
@@ -2605,7 +2605,7 @@ async function handleQishuiUserPlaylists(cookieText) {
         playlists.push(pl);
       });
       if (recentTracks.length) {
-        playlists.push(buildQishuiVirtualPlaylist(QISHUI_WEB_RECENT_PLAYLIST_ID, '汽水最近播放', recentTracks, {
+        playlists.push(buildQishuiVirtualPlaylist(QISHUI_WEB_RECENT_PLAYLIST_ID, 'Qishui Recently Played', recentTracks, {
           subscribed: false,
           shelfPane: 'mine',
           owned: true,
@@ -2634,11 +2634,11 @@ async function handleQishuiUserPlaylists(cookieText) {
         configured: true,
         webSession: true,
         playlists: [
-          buildQishuiVirtualPlaylist(QISHUI_WEB_LIKED_PLAYLIST_ID, '汽水我的喜欢', [], { subscribed: false, shelfPane: 'mine', owned: true, webSession: true }),
+          buildQishuiVirtualPlaylist(QISHUI_WEB_LIKED_PLAYLIST_ID, 'Qishui Liked Songs', [], { subscribed: false, shelfPane: 'mine', owned: true, webSession: true }),
           buildQishuiFeedPlaylist([]),
         ],
         error: err && err.message || 'QISHUI_WEB_LIBRARY_FAILED',
-        message: '汽水账号已登录，但歌单同步暂时失败，请稍后重试。',
+        message: 'The Qishui account is signed in, but playlist sync failed for now - please try again later.',
       };
     }
   }
@@ -2670,7 +2670,7 @@ async function handleQishuiUserPlaylists(cookieText) {
       configured: true,
       playlists: [],
       error: err && err.message || 'QISHUI_FEED_FAILED',
-      message: '汽水推荐歌单暂时同步失败，请稍后重试。',
+      message: 'The Qishui recommendations playlist failed to sync for now - please try again later.',
     };
   }
 }
@@ -2688,7 +2688,7 @@ async function handleQishuiPlaylistTracks(playlistId, opts, cookieText) {
       if (!allSongs.length && library.likedCard && library.likedCard.id) {
         const detail = await fetchQishuiWebPlaylistTracks(library.likedCard.id, cookieText, opts).catch(() => null);
         if (detail && detail.tracks) {
-          const playlist = buildQishuiVirtualPlaylist(QISHUI_WEB_LIKED_PLAYLIST_ID, '汽水我的喜欢', detail.tracks, {
+          const playlist = buildQishuiVirtualPlaylist(QISHUI_WEB_LIKED_PLAYLIST_ID, 'Qishui Liked Songs', detail.tracks, {
             subscribed: false,
             shelfPane: 'mine',
             owned: true,
@@ -2713,7 +2713,7 @@ async function handleQishuiPlaylistTracks(playlistId, opts, cookieText) {
         }
       }
       const tracks = allSongs.slice(offset, offset + limit);
-      const playlist = buildQishuiVirtualPlaylist(QISHUI_WEB_LIKED_PLAYLIST_ID, '汽水我的喜欢', allSongs, {
+      const playlist = buildQishuiVirtualPlaylist(QISHUI_WEB_LIKED_PLAYLIST_ID, 'Qishui Liked Songs', allSongs, {
         subscribed: false,
         shelfPane: 'mine',
         owned: true,
@@ -2740,7 +2740,7 @@ async function handleQishuiPlaylistTracks(playlistId, opts, cookieText) {
       const library = await fetchQishuiWebLibrary(cookieText);
       const allSongs = library.recentTracks || [];
       const tracks = allSongs.slice(offset, offset + limit);
-      const playlist = buildQishuiVirtualPlaylist(QISHUI_WEB_RECENT_PLAYLIST_ID, '汽水最近播放', allSongs, {
+      const playlist = buildQishuiVirtualPlaylist(QISHUI_WEB_RECENT_PLAYLIST_ID, 'Qishui Recently Played', allSongs, {
         subscribed: false,
         shelfPane: 'mine',
         owned: true,
@@ -2785,7 +2785,7 @@ async function handleQishuiPlaylistTracks(playlistId, opts, cookieText) {
       tracks: [],
       total: 0,
       error: 'QISHUI_PLAYLIST_NOT_FOUND',
-      message: '当前汽水接入只支持官方推荐歌单。',
+      message: 'The current Qishui integration only supports official recommendation playlists.',
     };
   }
   const fetchCount = Math.max(limit, Math.min(50, offset + limit));
@@ -3348,7 +3348,7 @@ async function handleQishuiSongUrl(opts, cookieText) {
       vipLevel: 'none',
       isVip: false,
       isSvip: false,
-      vipLabel: '无VIP',
+      vipLabel: 'No VIP',
       rawError: err && err.message || String(err),
     });
   }
@@ -3368,10 +3368,10 @@ async function handleQishuiSongUrl(opts, cookieText) {
           ? 'membership_unknown'
           : (requiredTier === 'svip' ? 'svip_required' : 'vip_required');
         const message = reason === 'membership_unknown'
-          ? '汽水音乐暂时无法验证当前账号的会员状态，请稍后重试。'
+          ? 'Qishui cannot verify the account membership status right now - please try again later.'
           : (reason === 'svip_required'
-            ? '该汽水音乐歌曲或音质需要可验证的 SVIP 权益。'
-            : '该汽水音乐歌曲或音质需要可验证的 VIP 权益。');
+            ? 'This Qishui track or quality requires verifiable SVIP entitlements.'
+            : 'This Qishui track or quality requires verifiable VIP entitlements.');
         return qishuiUnavailable(message, reason, {
           loggedIn: true,
           playbackKeyReady: true,
@@ -3383,7 +3383,7 @@ async function handleQishuiSongUrl(opts, cookieText) {
           vipLevel: membership.vipLevel || (membership.membershipKnown ? 'none' : 'unknown'),
           isVip: !!membership.isVip,
           isSvip: !!membership.isSvip,
-          vipLabel: membership.vipLabel || (membership.membershipKnown ? '无VIP' : '未知会员状态'),
+          vipLabel: membership.vipLabel || (membership.membershipKnown ? 'No VIP' : 'Unknown membership status'),
           entitlementEvidence: trackRestriction.evidence.concat(requestRestriction.evidence),
         });
       }
@@ -3407,7 +3407,7 @@ async function handleQishuiSongUrl(opts, cookieText) {
         vipLevel: membership.vipLevel || 'none',
         isVip: !!membership.isVip,
         isSvip: !!membership.isSvip,
-        vipLabel: membership.vipLabel || (membership.isVip ? 'VIP' : '无VIP'),
+        vipLabel: membership.vipLabel || (membership.isVip ? 'VIP' : 'No VIP'),
         level,
         quality: normalizeText(stream.quality || stream.format || level),
         requiredTier: qishuiStreamRequiredTier(stream),
@@ -3425,11 +3425,11 @@ async function handleQishuiSongUrl(opts, cookieText) {
           ? 'svip_required'
           : (err && err.code === 'QISHUI_VIP_REQUIRED' ? 'vip_required' : ''));
       const message = entitlementReason === 'membership_unknown'
-        ? '汽水音乐暂时无法验证当前账号的会员状态，请稍后重试。'
+        ? 'Qishui cannot verify the account membership status right now - please try again later.'
         : (entitlementReason === 'svip_required'
-          ? '汽水音乐仅返回了需要 SVIP 权益的音质。'
+          ? 'Qishui returned only qualities that require SVIP entitlements.'
           : (entitlementReason === 'vip_required'
-            ? '汽水音乐仅返回了需要 VIP 权益的音质。'
+            ? 'Qishui returned only qualities that require VIP entitlements.'
             : 'Qishui did not return a playable audio source: ' + (err && err.message || String(err))));
       return qishuiUnavailable(
         message,
@@ -3442,7 +3442,7 @@ async function handleQishuiSongUrl(opts, cookieText) {
         vipLevel: membership.vipLevel || 'none',
         isVip: !!membership.isVip,
         isSvip: !!membership.isSvip,
-        vipLabel: membership.vipLabel || (membership.isVip ? 'VIP' : '无VIP'),
+        vipLabel: membership.vipLabel || (membership.isVip ? 'VIP' : 'No VIP'),
         rawError: err && err.message || String(err),
       });
     }

@@ -262,10 +262,10 @@ function getSpotifyConfig() {
   const tokenConfigured = !!(token.accessToken || token.refreshToken);
   const localConfigMissing = !tokenConfigured && !oauth.clientId && !credentialsFileExists;
   const spotifyConfigMessage = clientCredentialsConfigured || tokenConfigured
-    ? 'Spotify Web API 已接入；播放仍会按匹配源自动换源。'
+    ? 'Spotify Web API connected; playback still auto-switches to a playable source.'
     : (localConfigMissing
-      ? 'Spotify 未连接：请先粘贴一次 Client ID 保存配置，再打开官方 OAuth 授权。'
-      : 'Spotify 已保存 Client ID，可直接打开官方 OAuth 授权；桌面端使用 PKCE，不保存 Client Secret。');
+      ? 'Spotify not connected: paste a Client ID once and save the configuration, then open the official OAuth authorization.'
+      : 'Spotify Client ID saved — official OAuth authorization can be opened directly; desktop uses PKCE and never stores the Client Secret.');
   const missing = [];
   if (!oauth.clientId) missing.push('SPOTIFY_CLIENT_ID');
   const clientCredentialsMissing = [];
@@ -373,21 +373,21 @@ function spotifyErrorDetails(err) {
   const statusCode = Number(err.statusCode || apiStatus || 0) || 0;
   const oauthCode = normalizeText(spotifyTokenErrorBody(err).error);
   const code = normalizeText(err.code || oauthCode || (statusCode ? ('SPOTIFY_HTTP_' + statusCode) : err.message)) || 'SPOTIFY_ERROR';
-  let message = apiMessage || normalizeText(err.message) || 'Spotify 请求失败';
+  let message = apiMessage || normalizeText(err.message) || 'Spotify request failed';
   const reauthRequired = !!err.reauthRequired || code === 'SPOTIFY_REAUTH_REQUIRED' || oauthCode === 'invalid_grant';
   if (reauthRequired || statusCode === 401 || code === 'SPOTIFY_REFRESH_TOKEN_MISSING') {
-    message = 'Spotify 登录已过期，请重新连接 Spotify。';
+    message = 'Your Spotify login has expired — please reconnect Spotify.';
   } else if (statusCode === 429) {
     const seconds = Math.max(1, Math.ceil(Number(err.retryAfterMs || spotifyRetryAfterMs(err)) / 1000));
-    message = 'Spotify 请求过于频繁，请约 ' + seconds + ' 秒后重试。';
+    message = 'Spotify requests are too frequent — retry in about ' + seconds + ' seconds.';
   } else if (statusCode === 403) {
-    message = 'Spotify 授权权限不够，请在 Spotify 登录面板里重新连接一次。';
+    message = 'Spotify permissions are insufficient — reconnect once from the Spotify login panel.';
   } else if (statusCode === 404) {
-    message = 'Spotify 没找到这个歌单，可能已删除、未公开或当前账号无权访问。';
+    message = 'Spotify could not find this playlist — it may have been deleted, made private, or this account has no access.';
   } else if (statusCode === 500 || statusCode === 502 || statusCode === 503) {
-    message = 'Spotify 服务暂时不可用，Mineradio 已完成有限重试，请稍后再试。';
+    message = 'Spotify is temporarily unavailable; Mineradio finished its limited retries — please try again later.';
   } else if (/scope|permission|insufficient/i.test(apiMessage || code)) {
-    message = 'Spotify 授权权限不够，请重新连接 Spotify 后再同步歌单。';
+    message = 'Spotify permissions are insufficient — reconnect Spotify before syncing playlists.';
   }
   return {
     error: code,
@@ -729,7 +729,7 @@ function mapSpotifyTrack(track, index, query) {
     restriction: {
       category: 'provider_limited',
       reason: 'spotify_metadata_only',
-      message: 'Spotify 官方 Web API 当前作为搜索/歌单资料源接入，播放会自动寻找其它可播版本。',
+      message: 'The official Spotify Web API is connected as a search/playlist metadata source; playback will automatically find a playable version.',
       action: 'switch_source',
     },
   };
@@ -760,7 +760,7 @@ function normalizeSpotifyProfile(profile) {
     product: product || 'unknown',
     vipType: isPremium ? 1 : 0,
     vipLevel: isPremium ? 'vip' : 'none',
-    vipLabel: isPremium ? 'Premium' : (product ? product.toUpperCase() : '方案未知'),
+    vipLabel: isPremium ? 'Premium' : (product ? product.toUpperCase() : 'Unknown plan'),
     membershipKnown: !!product,
     isVip: isPremium,
     isSvip: false,
@@ -888,8 +888,8 @@ async function handleSpotifyStatus() {
     accountWriteReady: loggedIn && missingWriteScopes.length === 0,
     message: loggedIn
       ? (missingWriteScopes.length
-        ? 'Spotify 已连接；重新授权一次后可写入喜欢和歌单。播放仍会自动换源。'
-        : 'Spotify 登录态已保存，可同步会员状态、喜欢和歌单；播放仍会自动换源。')
+        ? 'Spotify connected — re-authorize once to enable writing likes and playlists. Playback still auto-switches sources.'
+        : 'Spotify login saved — membership, likes, and playlists can be synced; playback still auto-switches sources.')
       : config.message,
   });
 }
@@ -945,7 +945,7 @@ async function handleSpotifySearch(keywords, limit, offset) {
       limit,
       nextOffset: offset + pages.length,
       hasMore,
-      message: songs.length ? '' : 'Spotify 没有返回匹配结果。',
+      message: songs.length ? '' : 'Spotify returned no matching results.',
     };
   });
 }
@@ -963,7 +963,7 @@ async function handleSpotifyRecommendations(limit) {
       mode: 'unavailable',
       provenance: 'spotify-web-api',
       error: 'SPOTIFY_AUTH_REQUIRED',
-      message: '连接 Spotify 后显示你的常听歌曲。',
+      message: 'Connect Spotify to see your top tracks.',
     };
   }
   let items = [];
@@ -1003,7 +1003,7 @@ async function handleSpotifyRecommendations(limit) {
     mode: mode || 'unavailable',
     provenance: 'spotify-web-api',
     updatedAt: Date.now(),
-    message: songs.length ? '' : '当前授权没有可读取的常听或喜欢歌曲；重新连接 Spotify 可启用个人推荐。',
+    message: songs.length ? '' : 'This authorization has no readable top or liked tracks yet; reconnect Spotify to enable personal recommendations.',
   };
 }
 
@@ -1042,7 +1042,7 @@ async function buildSpotifyLikedPlaylistCard(profile) {
       source: 'spotify',
       id: SPOTIFY_LIKED_PLAYLIST_ID,
       virtual: true,
-      name: 'Spotify 喜欢的歌曲',
+      name: 'Spotify Liked Songs',
       cover: first ? spotifyImage(first.album && first.album.images) : '',
       creator: normalizeText(profile && (profile.display_name || profile.id)) || 'Spotify',
       trackCount: Number(json && json.total) || 0,
@@ -1057,7 +1057,7 @@ async function buildSpotifyLikedPlaylistCard(profile) {
       source: 'spotify',
       id: SPOTIFY_LIKED_PLAYLIST_ID,
       virtual: true,
-      name: 'Spotify 喜欢的歌曲',
+      name: 'Spotify Liked Songs',
       cover: '',
       creator: normalizeText(profile && (profile.display_name || profile.id)) || 'Spotify',
       trackCount: 0,
@@ -1141,7 +1141,7 @@ async function handleSpotifyPlaylistTracks(playlistId, opts) {
         playlist: {
           provider: 'spotify',
           id: SPOTIFY_LIKED_PLAYLIST_ID,
-          name: 'Spotify 喜欢的歌曲',
+          name: 'Spotify Liked Songs',
           trackCount: 0,
         },
         tracks: [],
@@ -1161,7 +1161,7 @@ async function handleSpotifyPlaylistTracks(playlistId, opts) {
       playlist: {
         provider: 'spotify',
         id: SPOTIFY_LIKED_PLAYLIST_ID,
-        name: 'Spotify 喜欢的歌曲',
+        name: 'Spotify Liked Songs',
         trackCount: Number(json && json.total) || tracks.length,
       },
       tracks,
@@ -1183,11 +1183,11 @@ async function handleSpotifyPlaylistTracks(playlistId, opts) {
       const requiredScopes = ['playlist-read-private', 'playlist-read-collaborative'];
       const missingScopes = requiredScopes.filter(scope => !storedScopes.includes(scope));
       if (missingScopes.length) {
-        detail.message = 'Spotify 当前授权缺少歌单读取范围，请在账号页重新授权后再试。';
+        detail.message = 'The current Spotify authorization lacks playlist read scopes — re-authorize once on the account page and try again.';
         detail.error = 'SPOTIFY_PLAYLIST_SCOPE_REQUIRED';
         detail.missingScopes = missingScopes;
       } else {
-        detail.message = 'Spotify 当前只允许展开本账号自己创建或参与协作的歌单；关注的他人歌单只能同步名称和封面。';
+        detail.message = 'Spotify only allows expanding playlists you created or collaborate on; followed playlists sync names and covers only.';
         detail.error = 'SPOTIFY_PLAYLIST_ITEMS_RESTRICTED';
       }
     }
@@ -1422,7 +1422,7 @@ async function handleSpotifySongUrl(track) {
     restriction: {
       category: 'provider_limited',
       reason: 'spotify_metadata_only',
-      message: 'Spotify 官方 Web API 不提供可交给 Mineradio 播放的音频直链，正在自动换源。',
+      message: "The official Spotify Web API doesn't provide an audio direct link Mineradio can play — switching source automatically.",
       action: 'switch_source',
     },
   };
@@ -1437,7 +1437,7 @@ async function handleSpotifyLyric(id) {
     yrc: '',
     ytlrc: '',
     source: 'none',
-    message: 'Spotify Web API 不提供歌词，Mineradio 会沿用跨平台歌词兜底。',
+    message: 'The Spotify Web API provides no lyrics; Mineradio will fall back to cross-platform lyrics.',
   };
 }
 

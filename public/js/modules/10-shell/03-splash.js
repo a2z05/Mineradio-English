@@ -649,7 +649,7 @@ function markSplashReadyToEnter() {
   s.classList.add('ready');
   s.setAttribute('role', 'button');
   s.setAttribute('tabindex', '0');
-  s.setAttribute('aria-label', '点击进入 Mineradio');
+  s.setAttribute('aria-label', 'Click to enter Mineradio');
 }
 
 document.addEventListener('DOMContentLoaded', function () {

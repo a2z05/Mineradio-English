@@ -32,29 +32,20 @@ const ALLOWLIST = [
 // Files whose remaining Han is tolerated only until these are cleaned up.
 // Keep shrinking this list; new entries require a comment explaining why.
 const TEMPORARY_ALLOWLIST = [
-  // TODO(i18n): user-facing strings still to translate (secondary screens):
-  // update preview panel, idle onboarding toasts, gesture-control toasts/HUD,
-  // desktop-overlay lock buttons, splash aria-label, provider status messages.
-  'public/js/modules/08-account/00-update-preview.js',
-  'public/js/modules/09-idle-toast-libraries.js',
-  'public/js/modules/10-shell/00-gesture-control.js',
-  'public/js/modules/10-shell/01-viewport-resize-shortcuts.js',
-  'public/js/modules/10-shell/03-splash.js',
-  'public/js/modules/10-shell/04-desktop-overlay-fullscreen.js',
-  'spotify-api.js',
-  'qishui-api.js',
-  'kugou-api.js',
-  'qq-vip-api.js',
+  // TODO(i18n): Soda login security-verify page (secondary flow)
   'qishui-auth-v6.js',
   'qishui-auth-v6/',
-  'public/css/index.css',
+  'public/css/index.css', // CSS content badges + font-family names
+  // Functional-only CJK: provider regexes matching Chinese API values
+  // (VIP keywords, favorite-list names), dev scripts asserting upstream text.
+  'kugou-api.js',
+  'qq-vip-api.js',
+  'scripts/',
   // Upstream reference docs kept verbatim (merge compatibility / legal text):
   'NOTICE.md',
   'PRIVACY.md',
   'SECURITY.md',
   'RELEASE.md',
-  // Dev tooling that asserts against upstream Chinese content:
-  'scripts/',
   // Functional CJK that MUST stay Chinese to work:
   // - regexes matching provider/UI content in Chinese APIs (登录, 会员, 现场...)
   // - the login easter-egg password 世界和平

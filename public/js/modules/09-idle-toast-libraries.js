@@ -496,76 +496,76 @@ var visualGuideSteps = [
   {
     target: 'stage',
     kicker: '01 / Welcome',
-    title: 'Mineradio 是用来听歌的视觉播放器',
-    body: '它不是单纯歌单页：搜索或导入一首歌后，封面、歌词、粒子和镜头会跟着音乐一起动。'
+    title: 'Mineradio is a visual player made for listening',
+    body: 'More than a playlist page: search or import a song and the cover, lyrics, particles and camera move with the music.'
   },
   {
     selector: '#search-box',
     kicker: '02 / Play',
-    title: '从搜索或导入开始',
-    body: '输入歌名、歌手或关键词即可播放；如果有本地音乐，也可以用导入入口直接放进舞台。'
+    title: 'Start with search or import',
+    body: 'Type a song name, artist or keyword to start playing. For local music, use the import entry to put tracks straight onto the stage.'
   },
   {
     selector: '#bottom-bar',
     kicker: '03 / Control',
-    title: '播放以后看底部控制台',
-    body: '播放、切歌、进度、队列和歌词都集中在底部，先把它当作一个正常播放器使用就可以。'
+    title: 'Once playing, look to the bottom console',
+    body: 'Play, skip, progress, queue and lyrics all live at the bottom. Just treat it like any normal player to begin.'
   },
   {
     selector: '#user-btn',
     kicker: '04 / Account',
-    title: '登录只是为了同步你的音乐库',
-    body: '登录后会同步歌单、红心和播客；不登录也可以搜索和播放，不会强制卡住你。'
+    title: 'Signing in only syncs your music library',
+    body: 'Playlists, liked songs and podcasts sync when you sign in. Search and playback work without an account too — you are never forced to log in.'
   },
   {
     target: 'shelf',
     kicker: '05 / Visual',
-    title: '进阶视觉都放在舞台周围',
-    body: '右侧 3D 歌单架和 DIY 玩家模式是进阶入口；先播放一首歌，再慢慢调视觉效果。'
+    title: 'Advanced visuals sit around the stage',
+    body: 'The 3D playlist shelf on the right and DIY player mode are the advanced entries. Play a song first, then tune the visuals at your own pace.'
   },
   {
     selector: '#diy-mode-btn',
     kicker: '06 / DIY',
-    title: '高级功能在 DIY 玩家模式',
-    body: '视觉控制台、上传/封面、自定义歌词、音质和更多面板都会在这里展开。'
+    title: 'Advanced features live in DIY player mode',
+    body: 'The visual console, upload/cover, custom lyrics, audio quality and more panels unfold here.'
   }
 ];
 var visualGuideStepsDiy = [
   {
     selector: '#diy-mode-btn',
     kicker: '01 / DIY',
-    title: 'DIY 玩家模式已展开',
-    body: '这里可以随时切回默认模式。DIY 模式会显示完整控制台、上传、视觉面板和高级调参。'
+    title: 'DIY player mode is now expanded',
+    body: 'You can switch back to the default mode anytime. DIY mode shows the full console, upload, visual panels and advanced tuning.'
   },
   {
     selector: '#search-box',
     kicker: '02 / Search',
-    title: '搜索源和导入入口会展开',
-    body: '顶部搜索支持更多来源切换，上传歌曲、封面等入口也会在 DIY 模式中显示。'
+    title: 'Search sources and import expand here',
+    body: 'The top search supports more source switching, and entries for uploading songs, covers and more appear in DIY mode.'
   },
   {
     selector: '#playlist-panel',
     kicker: '03 / Library',
-    title: '左侧是完整歌单和队列',
-    body: '靠近左侧边缘可以打开歌单/队列面板，在这里管理队列、个人歌单和播客。'
+    title: 'Full playlists and queue on the left',
+    body: 'Move toward the left edge to open the playlist/queue panel, where you manage the queue, your playlists and podcasts.'
   },
   {
     selector: '#fx-panel',
     kicker: '04 / Visual Lab',
-    title: '右侧是视觉控制台',
-    body: '靠近右下角或点击视觉按钮，可以调节粒子、歌词、镜头、3D 歌单架和更多视觉参数。'
+    title: 'Visual console on the right',
+    body: 'Hover near the bottom-right corner or click the visual button to adjust particles, lyrics, camera, the 3D playlist shelf and more visual parameters.'
   },
   {
     selector: '#quality-control',
     kicker: '05 / Controls',
-    title: '高级播放控制会补全',
-    body: '音质、播放顺序、收藏、歌词源和更多按钮会在 DIY 模式中完整显示。'
+    title: 'Advanced playback controls fill in',
+    body: 'Audio quality, play order, favorites, lyrics source and more buttons appear in full in DIY mode.'
   },
   {
     target: 'shelf',
     kicker: '06 / Shelf',
-    title: '3D 歌单架支持直接打开',
-    body: '右侧的 3D 歌单架会在靠近时半透明浮现，点击卡片可打开歌单，点卡片里的播放按钮可直接播放整张歌单。'
+    title: 'The 3D playlist shelf opens directly',
+    body: 'The 3D playlist shelf on the right fades in as you approach. Click a card to open its playlist, or press the play button on a card to play the whole playlist.'
   }
 ];
 function activeVisualGuideSteps() {
@@ -652,9 +652,9 @@ function showVisualGuideStep(index) {
   if (title) title.textContent = step.title;
   if (body) body.textContent = step.body;
   if (kicker) kicker.textContent = step.kicker;
-  if (hint) hint.textContent = visualGuideStep === steps.length - 1 ? '点击空白处完成引导' : '点击空白处也可以继续';
+  if (hint) hint.textContent = visualGuideStep === steps.length - 1 ? 'Click anywhere empty to finish the tour' : 'You can also click anywhere empty to continue';
   if (progress) progress.textContent = (visualGuideStep + 1) + ' / ' + steps.length;
-  if (next) next.textContent = visualGuideStep === steps.length - 1 ? '完成' : '下一步';
+  if (next) next.textContent = visualGuideStep === steps.length - 1 ? 'Finish' : 'Next';
   scheduleVisualGuidePositioning();
 }
 function guideTargetRect(step) {
@@ -785,7 +785,7 @@ function handleVisualGuideSurfaceClick(e) {
 })();
 
 // ============================================================
-//  动态库加载
+//  dynamic library loading
 // ============================================================
 function loadScriptOnce(src) {
   return new Promise(function (resolve, reject) {
@@ -798,9 +798,9 @@ function loadScriptOnce(src) {
 }
 
 // ============================================================
-//  摄像头 / 手势 v8 — 仅保留手势, 头部追踪已下线
-//   - 21 个关键点用 EMA 平滑滤波, 消除抖动
-//   - 食指尖 + 手掌中心 共同推开粒子 (真实手感, 不再是单点小球)
-//   - 在 hand-canvas 上画出手掌骨架, 视觉跟随手
-//   - 捏合 = 拖动旋转封面 (Y 反向修正)
-//   - 没有挥扫 / 没有手势切歌
+//  Camera / gesture v8 - gestures only, head tracking retired
+//   - 21 keypoints smoothed with an EMA filter to remove jitter
+//   - Fingertip + palm center both push particles away (real feel, not a single dot)
+//   - Palm skeleton drawn on hand-canvas so visuals follow the hand
+//   - Pinch = drag to rotate the cover (Y-axis inverted correction)
+//   - No swipe / no track-skipping gestures
