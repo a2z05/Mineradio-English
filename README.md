@@ -19,12 +19,18 @@
 | Feature | Description |
 | --- | --- |
 | 🇬🇧 **Full English UI** | Every screen translated: player, home, settings, login flows, dialogs, installer |
+| 🎮 **In-game overlay** | Steam-style Ctrl+Alt+M deck over any game — transport, seek, volume, lyric, queue. No alt-tab |
+| 🖥️ **Second screen** | Big now-playing display (art, lyrics, progress) for a second monitor |
+| 📊 **Mini overlay bar** | Compact always-on-top now-playing strip (Ctrl+Alt+B) |
 | 🎧 **Spotify integration** | Sign in with PKCE OAuth. Search, playlists and likes alongside NetEase / QQ / Kugou / Soda Music |
-| 🔀 **Spotify-only proxy** | Route just Spotify through an HTTP/SOCKS proxy where it's geo-blocked — easy on/off toggle + Test button |
+| 🔀 **Per-app proxy** | Route Spotify/Kugou/Soda/QQ through an HTTP/SOCKS proxy where geo-blocked — titlebar toggle + per-service checkboxes |
 | 🎤 **Word-by-word lyrics** | Apple-Music-style karaoke (AMLL/TTML), Japanese/Korean romanization, decoded QQ QRC, instant lyric cache |
 | 📱 **Phone remote** | Scan a QR → control playback from your phone browser. PWA-installable, live progress |
 | 🔄 **Music transfer** | Upload songs/folders phone→PC, download PC→phone (folder = ZIP) |
-| ⬆️ **Update-safe** | Daily auto-PRs merge upstream updates; nothing gets overwritten silently |
+| 📂 **Folder & default player** | Batch-import a folder of tracks; audio files open straight into Mineradio from Explorer |
+| ⌨️ **Rebindable hotkeys** | Every action (incl. overlays) configurable in the built-in Hotkeys settings |
+| ⚡ **Fast startup** | Cached module loading — cold start only pays full cost once |
+| ⬆️ **Auto-updating releases** | Tag-push CI builds installers automatically; in-app updater points at this repo |
 
 ## 📦 Download
 
@@ -58,6 +64,13 @@ Both devices need to share a network; allow Node/Electron through Windows Firewa
 3. Paste your **Client ID** into Mineradio → Spotify panel → Connect
 
 Behind a firewall? Open **Proxy…**, enter your proxy, hit **Test**, toggle on/off anytime.
+
+### Overlays & hotkeys
+
+- **In-game overlay**: `Ctrl+Alt+M` (rebindable) — glass control deck over any game; `Esc` closes
+- **Mini bar**: `Ctrl+Alt+B` — compact now-playing strip; position/opacity/content in overlay settings
+- **Second screen**: right-click the titlebar **phone icon** → *Overlay & second screen* → open it and drag to your other display
+- All hotkeys are viewable and rebindable in **Hotkeys** settings
 
 ## 🔃 Upstream updates
 
