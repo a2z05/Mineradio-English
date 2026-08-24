@@ -57,6 +57,50 @@
       "public/index.html"
     ],
     "asar": false,
+    "fileAssociations": [
+      {
+        "ext": "mp3",
+        "name": "Mineradio Audio",
+        "description": "MP3 audio — open with Mineradio",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "flac",
+        "name": "Mineradio Audio",
+        "description": "FLAC audio — open with Mineradio",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "m4a",
+        "name": "Mineradio Audio",
+        "description": "M4A audio — open with Mineradio",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "wav",
+        "name": "Mineradio Audio",
+        "description": "WAV audio — open with Mineradio",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "ogg",
+        "name": "Mineradio Audio",
+        "description": "OGG audio — open with Mineradio",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "opus",
+        "name": "Mineradio Audio",
+        "description": "Opus audio — open with Mineradio",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "aac",
+        "name": "Mineradio Audio",
+        "description": "AAC audio — open with Mineradio",
+        "icon": "build/icon.ico"
+      }
+    ],
     "win": {
       "executableName": "Mineradio",
       "icon": "build/icon.ico",

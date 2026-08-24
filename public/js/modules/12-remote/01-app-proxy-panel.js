@@ -170,4 +170,65 @@
   window.closeAppProxyPanel = function () {
     if (panelEl) panelEl.style.display = 'none';
   };
+
+  // ---------- Titlebar quick toggle ----------
+  // One-click master on/off for the proxy; long label click opens settings.
+  var toggleBusy = false;
+
+  function refreshProxyToggle(status) {
+    var btn = el('proxy-toggle-btn');
+    if (!btn) return;
+    var configured = !!(status && status.configured);
+    var enabled = !!(status && status.enabled);
+    btn.classList.toggle('on', enabled);
+    btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    btn.title = configured
+      ? (enabled ? 'Proxy: ON — click to disable' : 'Proxy: OFF — click to enable')
+      : 'Proxy not configured — click to set up';
+  }
+
+  function syncProxyToggle() {
+    apiJson('/api/spotify/proxy').then(function (data) {
+      refreshProxyToggle(data && data.status);
+    }).catch(function () { /* titlebar state stays neutral */ });
+  }
+
+  function toggleProxyFromTitlebar() {
+    if (toggleBusy) return;
+    toggleBusy = true;
+    apiJson('/api/spotify/proxy').then(function (data) {
+      var status = (data && data.status) || {};
+      if (!status.configured) { window.openAppProxyPanel(); return null; }
+      return apiJson('/api/spotify/proxy/toggle', {
+        method: 'POST',
+        body: JSON.stringify({ enabled: !status.enabled })
+      });
+    }).then(function (r) {
+      if (r && r.status) refreshProxyToggle(r.status);
+      else syncProxyToggle();
+    }).catch(function () { }).finally(function () {
+      toggleBusy = false;
+    });
+  }
+
+  // ---------- Overlay quick actions (right-click the Proxy button) ----------
+  function bindOverlayQuickActions() {
+    var btn = el('proxy-toggle-btn');
+    if (!btn || !window.desktopWindow || typeof window.desktopWindow.openNowPlayingOverlay !== 'function') return;
+    btn.title = 'Proxy: click toggles · right-click for overlay & second screen';
+    btn.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      var api = window.desktopWindow;
+      api.openNowPlayingOverlay('screen').catch(function () { });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var btn = el('proxy-toggle-btn');
+    if (!btn) return;
+    btn.addEventListener('click', toggleProxyFromTitlebar);
+    btn.addEventListener('dblclick', window.openAppProxyPanel);
+    syncProxyToggle();
+    bindOverlayQuickActions();
+  });
 })();

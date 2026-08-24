@@ -163,7 +163,9 @@ var HOTKEY_ACTIONS = [
   { key: 'volumeDown', label: 'Volume Down', category: 'Volume', local: 'ArrowDown', global: 'Ctrl+Alt+ArrowDown' },
   { key: 'toggleFullscreen', label: 'Fullscreen', category: 'Window', local: 'KeyF', global: 'Ctrl+Alt+KeyF' },
   { key: 'toggleDesktopInteraction', label: 'Toggle Full Desktop Mode', category: 'Window', local: '', global: 'Ctrl+Shift+KeyM' },
-  { key: 'toggleDesktopLyrics', label: 'Desktop Lyrics', category: 'Lyrics', local: 'Alt+KeyL', global: 'Ctrl+Alt+KeyL' }
+  { key: 'toggleDesktopLyrics', label: 'Desktop Lyrics', category: 'Lyrics', local: 'Alt+KeyL', global: 'Ctrl+Alt+KeyL' },
+  { key: 'toggleOverlayBar', label: 'Mini Overlay Bar', category: 'Overlay', local: '', global: 'Ctrl+Alt+KeyB' },
+  { key: 'toggleGameOverlay', label: 'In-Game Overlay (full controls)', category: 'Overlay', local: '', global: 'Ctrl+Alt+KeyM' }
 ];
 var hotkeyCaptureState = null;
 var hotkeyGlobalStatus = {};

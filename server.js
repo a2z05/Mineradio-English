@@ -317,13 +317,20 @@ function generatePairingToken() {
 
 function detectLanAddress() {
   const nets = os.networkInterfaces();
+  const candidates = [];
   for (const name of Object.keys(nets)) {
-    const addrs = nets[name] || [];
-    for (const addr of addrs) {
-      if (addr && addr.family === 'IPv4' && !addr.internal) return addr.address;
+    for (const addr of (nets[name] || [])) {
+      if (!addr || addr.family !== 'IPv4' || addr.internal) continue;
+      const ip = addr.address;
+      // Skip dead link-local (APIPA) addresses — phones can never reach them.
+      if (/^169\.254\./.test(ip)) continue;
+      // Prefer routable private ranges first, keep others as fallback.
+      const isPrivate = /^10\./.test(ip) || /^192\.168\./.test(ip) || /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+      candidates.push({ ip, isPrivate });
     }
   }
-  return '127.0.0.1';
+  candidates.sort((a, b) => Number(b.isPrivate) - Number(a.isPrivate));
+  return candidates.length ? candidates[0].ip : '127.0.0.1';
 }
 
 const remotePairingToken = generatePairingToken();
@@ -764,17 +771,29 @@ function clearAllRuntimeLoginCredentials(reason) {
 }
 
 // ---------- 工具 ----------
-function serveStatic(res, filePath) {
+function serveStatic(res, filePath, req) {
   const ext = path.extname(filePath);
-  fs.readFile(filePath, (err, data) => {
-    if (err) { res.writeHead(404); res.end('Not Found'); return; }
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] || 'text/plain',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
+  fs.stat(filePath, (statErr, stat) => {
+    if (statErr) { res.writeHead(404); res.end('Not Found'); return; }
+    // EN-FORK perf: cache static assets by mtime ETag instead of no-store.
+    // Unchanged files return 304 / come from disk cache, cutting multi-MB
+    // module loads out of every cold start.
+    const etag = `"${stat.size}-${String(stat.mtimeMs)}"`;
+    const inm = req && req.headers['if-none-match'];
+    if (inm && inm === etag) {
+      res.writeHead(304, { ETag: etag });
+      res.end();
+      return;
+    }
+    fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); res.end('Not Found'); return; }
+      res.writeHead(200, {
+        'Content-Type': MIME[ext] || 'text/plain',
+        'Cache-Control': 'public, max-age=604800, must-revalidate',
+        ETag: etag,
+      });
+      res.end(data);
     });
-    res.end(data);
   });
 }
 function sendJSON(res, data, status) {
@@ -7328,6 +7347,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pn.startsWith('/api/remote/')) {
+    // Local (desktop) requests may read playback state without a device
+    // token — the QR modal uses this to show the phone URL.
+    if (remoteRequestIsLocal(req) && pn === '/api/remote/state') {
+      sendJSON(res, Object.assign({}, global.__mineradioRemoteSnapshot || {}, {
+        lanUrl: `http://${detectLanAddress()}:${PORT}/remote/#pair=${remotePairingToken}`,
+      }));
+      return;
+    }
     const deviceToken = remoteRequestToken(req);
     if (!deviceToken || !remoteDeviceTokens.has(deviceToken)) {
       sendJSON(res, { ok: false, error: 'REMOTE_UNAUTHORIZED' }, 401);
@@ -7542,13 +7569,13 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pn === '/remote' || pn === '/remote/') {
-    serveStatic(res, path.join(__dirname, 'public', 'remote', 'index.html'));
+    serveStatic(res, path.join(__dirname, "public", "remote", "index.html"), req);
     return;
   }
 
   if (pn.startsWith('/remote/')) {
     const relative = path.normalize(pn.replace(/^\/remote\//, '')).replace(/^(\.\.(\/|\\|$))+/, '');
-    serveStatic(res, path.join(__dirname, 'public', 'remote', relative));
+    serveStatic(res, path.join(__dirname, "public", "remote", relative), req);
     return;
   }
 
@@ -7589,13 +7616,13 @@ const server = http.createServer(async (req, res) => {
 
   // ---------- 静态资源 ----------
   if (pn === '/favicon.ico') {
-    serveStatic(res, path.join(__dirname, 'build', 'icon.ico'));
+    serveStatic(res, path.join(__dirname, "build", "icon.ico"), req);
     return;
   }
 
   let filePath = pn === '/' ? '/index.html' : pn;
   filePath = path.join(__dirname, 'public', filePath);
-  serveStatic(res, filePath);
+  serveStatic(res, filePath, req);
 });
 
 server.listen(PORT, HOST, () => {

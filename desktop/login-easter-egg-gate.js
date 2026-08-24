@@ -7,6 +7,8 @@ const crypto = require('crypto');
 const LOGIN_EASTER_EGG_GATE_VERSION = 'world-peace-v1';
 const LOGIN_EASTER_EGG_STATE_FILE = 'login-easter-egg.json';
 const LOGIN_EASTER_EGG_PASSWORD = '世界和平';
+// The on-screen glyphs spell W/I/S/H — the romanization is accepted as an alias.
+const LOGIN_EASTER_EGG_PASSWORD_ALIAS = 'wish';
 const LOGIN_EASTER_EGG_CREDENTIAL_FILES = [
   '.cookie',
   '.qq-cookie',
@@ -33,9 +35,12 @@ function writeJsonAtomic(file, value) {
 }
 
 function securePasswordMatch(input) {
-  const expected = Buffer.from(LOGIN_EASTER_EGG_PASSWORD, 'utf8');
   const received = Buffer.from(String(input || ''), 'utf8');
-  return received.length === expected.length && crypto.timingSafeEqual(received, expected);
+  for (const candidate of [LOGIN_EASTER_EGG_PASSWORD, LOGIN_EASTER_EGG_PASSWORD_ALIAS]) {
+    const expected = Buffer.from(candidate, 'utf8');
+    if (received.length === expected.length && crypto.timingSafeEqual(received, expected)) return true;
+  }
+  return false;
 }
 
 class LoginEasterEggGate {

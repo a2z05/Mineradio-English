@@ -98,6 +98,11 @@ function applyRemoteCommand(cmd) {
     case 'prev':
       if (typeof prevTrack === 'function') prevTrack(true);
       break;
+    case 'overlay':
+      break;
+    case 'cyclePlayMode':
+      if (typeof cyclePlayMode === 'function') cyclePlayMode();
+      break;
     case 'seek':
       if (payload && payload.position != null && typeof commitProgressSeek === 'function' && getPlaybackDurationSeconds()) {
         commitProgressSeek(Number(payload.position), playing);
@@ -250,6 +255,44 @@ async function downloadCurrentTrack() {
 }
 window.downloadCurrentTrack = downloadCurrentTrack;
 
+// ---------- EN-FORK: in-game overlay bridge ----------
+// The game overlay / mini bar send playback commands via the main process;
+// they arrive here and reuse the remote command executor. Playback state is
+// pushed to the overlay windows on every publish tick.
+function overlayBridgeSnapshot() {
+  var snap = null;
+  try { snap = remoteBridgeSnapshot(); } catch (e) { return {}; }
+  snap = snap || {};
+  var queueTitles = [];
+  var queueIndex = -1;
+  try {
+    var queue = Array.isArray(playQueue) ? playQueue : [];
+    for (var i = 0; i < queue.length && i < REMOTE_QUEUE_TITLES_LIMIT; i++) {
+      queueTitles.push(String(queue[i] && (queue[i].name || queue[i].title) || 'Track ' + (i + 1)));
+    }
+    if (currentIdx >= 0 && currentIdx < queue.length) queueIndex = currentIdx;
+  } catch (e) { }
+  var lyricText = '';
+  try {
+    lyricText = String((typeof stageLyrics !== 'undefined' && stageLyrics && stageLyrics.currentText) || '');
+  } catch (e) { }
+  // Flatten for overlay pages: title/artist/art at top level.
+  if (snap.track) {
+    snap.title = snap.track.title || '';
+    snap.artist = snap.track.artist || '';
+    snap.art = snap.track.cover || '';
+  }
+  return Object.assign(snap, {
+    queueTitles: queueTitles,
+    queueIndex: queueIndex,
+    lyric: lyricText,
+  });
+}
+
+if (window.desktopWindow && typeof window.desktopWindow.onOverlayCommand !== 'function') {
+  // Installed via preload below; kept defensive for older builds.
+}
+
 function startRemoteServerBridge() {
   if (remoteBridgePublishTimer || remoteBridgeCmdTimer) return;
   var lastTrackKey = remoteBridgeTrackKey(remoteBridgeSnapshot());
@@ -270,6 +313,31 @@ function startRemoteServerBridge() {
     try { pollRemoteCommands(); } catch (err) { /* fail soft */ }
   }, REMOTE_POLL_INTERVAL_MS);
 }
+
+// Overlay command channel (main-process → renderer). Commands reuse the
+// remote executor; state flows back through publishRemoteSnapshot.
+if (window.desktopWindow && typeof window.desktopWindow.onOverlayCommand === 'function') {
+  window.desktopWindow.onOverlayCommand(function (cmd, payload) {
+    applyRemoteCommand({ type: cmd === 'mode' ? 'cyclePlayMode' : cmd, payload: payload || {} });
+    if (cmd === 'seek' || cmd === 'volume') {
+      setTimeout(function () { publishRemoteSnapshot('overlay:' + cmd); }, 80);
+    }
+  });
+}
+// Push overlay snapshots alongside the remote publishes.
+(function () {
+  var original = publishRemoteSnapshot;
+  if (typeof original !== 'function') return;
+  publishRemoteSnapshot = function (reason) {
+    var result = original(reason);
+    try {
+      if (window.desktopWindow && typeof window.desktopWindow.publishOverlayState === 'function') {
+        window.desktopWindow.publishOverlayState(overlayBridgeSnapshot());
+      }
+    } catch (e) { }
+    return result;
+  };
+})();
 
 setTimeout(startRemoteServerBridge, 1500);
 

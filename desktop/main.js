@@ -47,6 +47,9 @@ let desktopLyricsMousePoller = null;
 let desktopLyricsMousePollerBuffer = '';
 let desktopLyricsHotBounds = null;
 let desktopLyricsLastMiddleAt = 0;
+// EN-FORK: now-playing overlay bar (gaming) + second-screen window state.
+let overlayBarWindow = null;
+let nowPlayingScreenWindow = null;
 let htmlFullscreenActive = false;
 let windowFullscreenActive = false;
 let mainWindowStateTimer = null;
@@ -490,6 +493,35 @@ for (const [name, value, envName] of CHROMIUM_OPT_IN_PERFORMANCE_SWITCHES) {
   if (process.env[envName] === '1') appendChromiumSwitch(name, value);
 }
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+// EN-FORK: default-player support — collect audio paths passed on the command
+// line (file associations) and hand them to the running player.
+const AUDIO_OPEN_EXTENSIONS = ['.mp3', '.flac', '.m4a', '.wav', '.ogg', '.opus', '.aac'];
+const pendingOpenAudioFiles = [];
+
+function extractAudioPaths(argv) {
+  return (argv || []).slice(1).filter((arg) => {
+    const value = String(arg || '');
+    if (value.startsWith('-')) return false;
+    return AUDIO_OPEN_EXTENSIONS.includes(path.extname(value).toLowerCase());
+  });
+}
+
+function routeAudioFilesToPlayer(files) {
+  if (!files.length) return;
+  const target = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (target && startupCompleted) {
+    try {
+      target.webContents.send('mineradio-open-audio-files', files);
+      if (target.isMinimized()) target.restore();
+      focusMainWindow();
+      return;
+    } catch (error) {
+      console.warn('[OpenWith] failed to route files:', error && error.message);
+    }
+  }
+  pendingOpenAudioFiles.push(...files);
+}
 
 const QQ_LOGIN_COOKIE_PRIORITY = [
   'uin',
@@ -3650,6 +3682,255 @@ function closeDesktopLyricsWindow() {
   broadcastDesktopLyricsEnabledState(false);
 }
 
+// ---------- EN-FORK: now-playing overlay bar + second-screen window ----------
+const OVERLAY_CONFIG_FILE = 'now-playing-overlay.json';
+let overlayConfig = {
+  hotkeyToggleBar: 'Control+Alt+B',
+  hotkeyGameOverlay: 'Control+Alt+M',
+  barPosition: 'top-right',   // top-left | top-right | bottom-left | bottom-right
+  barOpacity: 0.92,
+  showArt: true,
+  showArtist: true,
+  showProgress: true,
+};
+let overlayShortcutsRegistered = false;
+
+function overlayConfigPath() {
+  try { return path.join(STABLE_USER_DATA_PATH || app.getPath('userData'), OVERLAY_CONFIG_FILE); }
+  catch (_) { return path.join(app.getPath('userData'), OVERLAY_CONFIG_FILE); }
+}
+
+function loadOverlayConfig() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(overlayConfigPath(), 'utf8'));
+    if (raw && typeof raw === 'object') overlayConfig = Object.assign(overlayConfig, raw);
+  } catch (_) {}
+}
+
+function saveOverlayConfig() {
+  try {
+    const tempFile = `${overlayConfigPath()}.${process.pid}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(overlayConfig, null, 2), 'utf8');
+    fs.renameSync(tempFile, overlayConfigPath());
+  } catch (e) {
+    console.warn('[Overlay] failed to save config:', e.message);
+  }
+}
+
+function normalizeAccelerator(value) {
+  const parts = String(value || '').split('+').map((p) => p.trim()).filter(Boolean);
+  const mods = [];
+  let key = '';
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (['control', 'ctrl', 'command', 'cmd', 'alt', 'altgr', 'shift', 'super'].includes(lower)) {
+      mods.push(lower === 'ctrl' ? 'Control' : (lower === 'cmd' ? 'Command' : part.charAt(0).toUpperCase() + part.slice(1)));
+    } else {
+      key = part;
+    }
+  }
+  if (!key) return '';
+  return [...mods, key].join('+');
+}
+
+function registerOverlayShortcuts() {
+  if (!app.isReady()) return;
+  try { globalShortcut.unregisterAll(); } catch (_) {}
+  overlayShortcutsRegistered = true;
+  const barKey = normalizeAccelerator(overlayConfig.hotkeyToggleBar);
+  const gameKey = normalizeAccelerator(overlayConfig.hotkeyGameOverlay);
+  if (barKey) {
+    try {
+      globalShortcut.register(barKey, () => {
+        if (overlayBarWindow && !overlayBarWindow.isDestroyed() && overlayBarWindow.isVisible()) closeOverlayBarWindow();
+        else createOverlayBarWindow();
+      });
+    } catch (e) { console.warn('[Overlay] bar shortcut failed:', e.message); }
+  }
+  if (gameKey) {
+    try {
+      globalShortcut.register(gameKey, () => {
+        if (gameOverlayWindow && !gameOverlayWindow.isDestroyed() && gameOverlayWindow.isVisible()) closeGameOverlayWindow();
+        else createGameOverlayWindow();
+      });
+    } catch (e) { console.warn('[Overlay] game shortcut failed:', e.message); }
+  }
+}
+
+let lastOverlaySnapshot = {};
+
+function overlaySnapshot() {
+  return lastOverlaySnapshot || {};
+}
+
+function sendOverlayState() {
+  const payload = Object.assign({}, overlaySnapshot(), { config: {
+    barPosition: overlayConfig.barPosition,
+    barOpacity: overlayConfig.barOpacity,
+    showArt: overlayConfig.showArt,
+    showArtist: overlayConfig.showArtist,
+    showProgress: overlayConfig.showProgress,
+    hotkeyToggleBar: overlayConfig.hotkeyToggleBar,
+    hotkeyGameOverlay: overlayConfig.hotkeyGameOverlay,
+  } });
+  for (const win of [overlayBarWindow, nowPlayingScreenWindow, gameOverlayWindow]) {
+    try {
+      if (win && !win.isDestroyed()) win.webContents.send('mineradio-now-playing-overlay-state', payload);
+    } catch (_) {}
+  }
+}
+
+function createOverlayBarWindow() {
+  if (overlayBarWindow && !overlayBarWindow.isDestroyed()) {
+    overlayBarWindow.showInactive();
+    return overlayBarWindow;
+  }
+  overlayBarWindow = new BrowserWindow({
+    width: 460,
+    height: 76,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    movable: true,
+    focusable: false,
+    skipTaskbar: true,
+    show: false,
+    title: 'Mineradio Overlay',
+    webPreferences: {
+      preload: path.join(__dirname, 'overlay-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false,
+    },
+  });
+  try {
+    overlayBarWindow.setAlwaysOnTop(true, 'screen-saver');
+    overlayBarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  } catch (e) {
+    console.warn('Overlay bar topmost setup skipped:', e.message);
+  }
+  const { width: screenW } = screen.getPrimaryDisplay().workAreaSize;
+  overlayBarWindow.setPosition(Math.max(0, screenW - 480), 12);
+  overlayBarWindow.once('ready-to-show', () => {
+    if (!overlayBarWindow || overlayBarWindow.isDestroyed()) return;
+    overlayBarWindow.showInactive();
+    sendOverlayState();
+  });
+  overlayBarWindow.webContents.once('did-finish-load', sendOverlayState);
+  overlayBarWindow.on('closed', () => { overlayBarWindow = null; });
+  overlayBarWindow.loadURL(overlayUrl('now-playing-overlay.html')).catch((e) => console.warn('Overlay bar load failed:', e.message));
+  return overlayBarWindow;
+}
+
+function closeOverlayBarWindow() {
+  if (overlayBarWindow && !overlayBarWindow.isDestroyed()) overlayBarWindow.close();
+  overlayBarWindow = null;
+}
+
+function createNowPlayingScreenWindow() {
+  if (nowPlayingScreenWindow && !nowPlayingScreenWindow.isDestroyed()) {
+    nowPlayingScreenWindow.show();
+    nowPlayingScreenWindow.focus();
+    return nowPlayingScreenWindow;
+  }
+  const displays = screen.getAllDisplays();
+  const primary = screen.getPrimaryDisplay();
+  const secondary = displays.find((d) => d.id !== primary.id);
+  const target = secondary || primary;
+  nowPlayingScreenWindow = new BrowserWindow({
+    x: target.workArea.x,
+    y: target.workArea.y,
+    width: target.workArea.width,
+    height: target.workArea.height,
+    fullscreen: !!secondary,
+    frame: false,
+    backgroundColor: '#05060a',
+    show: false,
+    title: 'Mineradio — Now Playing',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'overlay-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false,
+    },
+  });
+  nowPlayingScreenWindow.setMenuBarVisibility(false);
+  nowPlayingScreenWindow.once('ready-to-show', () => {
+    if (!nowPlayingScreenWindow || nowPlayingScreenWindow.isDestroyed()) return;
+    nowPlayingScreenWindow.showInactive();
+    sendOverlayState();
+  });
+  nowPlayingScreenWindow.webContents.once('did-finish-load', sendOverlayState);
+  nowPlayingScreenWindow.on('closed', () => { nowPlayingScreenWindow = null; });
+  nowPlayingScreenWindow.loadURL(overlayUrl('now-playing-screen.html')).catch((e) => console.warn('Now-playing screen load failed:', e.message));
+  return nowPlayingScreenWindow;
+}
+
+function closeNowPlayingScreenWindow() {
+  if (nowPlayingScreenWindow && !nowPlayingScreenWindow.isDestroyed()) nowPlayingScreenWindow.close();
+  nowPlayingScreenWindow = null;
+}
+
+// Steam-style Shift+Tab: a fullscreen transparent deck over the game with
+// full music control (transport, volume, seek, queue). Toggled by hotkey.
+let gameOverlayWindow = null;
+
+function createGameOverlayWindow() {
+  if (gameOverlayWindow && !gameOverlayWindow.isDestroyed()) {
+    gameOverlayWindow.showInactive();
+    return gameOverlayWindow;
+  }
+  const display = screen.getPrimaryDisplay();
+  gameOverlayWindow = new BrowserWindow({
+    x: display.bounds.x,
+    y: display.bounds.y,
+    width: display.bounds.width,
+    height: display.bounds.height,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    focusable: true,
+    skipTaskbar: true,
+    show: false,
+    title: 'Mineradio Game Overlay',
+    webPreferences: {
+      preload: path.join(__dirname, 'overlay-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false,
+    },
+  });
+  try {
+    gameOverlayWindow.setAlwaysOnTop(true, 'screen-saver');
+    gameOverlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  } catch (e) {
+    console.warn('Game overlay topmost setup skipped:', e.message);
+  }
+  gameOverlayWindow.once('ready-to-show', () => {
+    if (!gameOverlayWindow || gameOverlayWindow.isDestroyed()) return;
+    gameOverlayWindow.showInactive();
+    sendOverlayState();
+  });
+  gameOverlayWindow.webContents.once('did-finish-load', sendOverlayState);
+  gameOverlayWindow.on('closed', () => { gameOverlayWindow = null; });
+  gameOverlayWindow.loadURL(overlayUrl('game-overlay.html')).catch((e) => console.warn('Game overlay load failed:', e.message));
+  return gameOverlayWindow;
+}
+
+function closeGameOverlayWindow() {
+  if (gameOverlayWindow && !gameOverlayWindow.isDestroyed()) gameOverlayWindow.close();
+  gameOverlayWindow = null;
+}
+
 function nativeWindowHandleDecimal(win) {
   const handle = win.getNativeWindowHandle();
   if (process.arch === 'x64') return handle.readBigUInt64LE(0).toString();
@@ -4464,6 +4745,67 @@ ipcMain.handle('mineradio-local-library-import-inbox', async (event) => {
   }
 });
 
+// ---------- EN-FORK: now-playing overlay IPC ----------
+ipcMain.handle('mineradio-overlay-open', (_event, which) => {
+  if (which === 'screen') return !!createNowPlayingScreenWindow();
+  if (which === 'game') return !!createGameOverlayWindow();
+  return !!createOverlayBarWindow();
+});
+
+ipcMain.handle('mineradio-overlay-toggle', (_event, which) => {
+  const target = which === 'game' ? gameOverlayWindow : overlayBarWindow;
+  const closer = which === 'game' ? closeGameOverlayWindow : closeOverlayBarWindow;
+  if (target && !target.isDestroyed() && target.isVisible()) {
+    closer();
+    return { ok: true, visible: false };
+  }
+  if (which === 'game') createGameOverlayWindow();
+  else createOverlayBarWindow();
+  return { ok: true, visible: true };
+});
+
+ipcMain.handle('mineradio-overlay-close', (_event, which) => {
+  if (which === 'screen') closeNowPlayingScreenWindow();
+  else closeOverlayBarWindow();
+  return true;
+});
+
+ipcMain.handle('mineradio-overlay-get-config', () => Object.assign({}, overlayConfig));
+
+// Renderer publishes playback state for the overlay windows here.
+ipcMain.on('mineradio-overlay-publish-state', (_event, snapshot) => {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
+  // Keep payload small: drop huge arrays beyond what overlays render.
+  const safe = Object.assign({}, snapshot);
+  if (Array.isArray(safe.queue) && safe.queue.length > 60) safe.queue = safe.queue.slice(0, 60);
+  lastOverlaySnapshot = safe;
+  sendOverlayState();
+});
+
+ipcMain.handle('mineradio-overlay-set-config', (_event, patch) => {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return { ok: false, error: 'INVALID_PATCH' };
+  const hotkeyChanged = patch.hotkeyToggleBar != null && normalizeAccelerator(patch.hotkeyToggleBar) !== normalizeAccelerator(overlayConfig.hotkeyToggleBar)
+    || patch.hotkeyGameOverlay != null && normalizeAccelerator(patch.hotkeyGameOverlay) !== normalizeAccelerator(overlayConfig.hotkeyGameOverlay);
+  overlayConfig = Object.assign(overlayConfig, patch);
+  if (typeof overlayConfig.barOpacity === 'number') overlayConfig.barOpacity = Math.max(0.2, Math.min(1, overlayConfig.barOpacity));
+  saveOverlayConfig();
+  if (hotkeyChanged) registerOverlayShortcuts();
+  sendOverlayState();
+  return { ok: true, config: Object.assign({}, overlayConfig) };
+});
+
+// Playback commands come from the overlay windows; forward to the renderer
+// which applies them through the same path the phone remote uses.
+ipcMain.handle('mineradio-overlay-playback-cmd', (_event, cmd, payload) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  try {
+    mainWindow.webContents.send('mineradio-overlay-remote-command', String(cmd || ''), payload || {});
+    return true;
+  } catch (_) {
+    return false;
+  }
+});
+
 ipcMain.handle('mineradio-cache-read-lyric', async (_event, key) => {
   try {
     const file = lyricCacheFilePath(key);
@@ -4798,7 +5140,13 @@ ipcMain.handle('mineradio-wallpaper-get-status', async (event) => {
 });
 
 function configureLocalServerEnvironment(port) {
-  process.env.HOST = '127.0.0.1';
+  // EN-FORK: the phone remote needs the server reachable from the LAN.
+  // Bind loopback-only only if the user explicitly opted out via
+  // MINERADIO_LAN_REMOTE=0; otherwise listen on all interfaces like the
+  // pairing token + device-token auth expects. Remote API routes stay
+  // token-gated either way.
+  const lanRemoteEnabled = process.env.MINERADIO_LAN_REMOTE !== '0';
+  process.env.HOST = lanRemoteEnabled ? '0.0.0.0' : '127.0.0.1';
   process.env.PORT = String(port);
   process.env.MINERADIO_BEAT_CACHE_DIR = cacheSettings.beatmapsPath;
   process.env.CUEFIELD_FEEDBACK_FILE = path.join(STABLE_USER_DATA_PATH, 'cuefield-feedback.jsonl');
@@ -5568,6 +5916,11 @@ async function createWindowOnce() {
   await loadMainWindowWithRetry(win);
   if (win.isDestroyed()) throw new Error('Main BrowserWindow was destroyed after navigation');
   startupCompleted = true;
+  // Flush any audio files queued while the window was still starting up.
+  if (pendingOpenAudioFiles.length) {
+    const files = pendingOpenAudioFiles.splice(0);
+    setTimeout(() => routeAudioFilesToPlayer(files), 400);
+  }
   showMainWindowSafely(win, 'navigation-complete');
   writeStartupState('ready', { readyAt: Date.now(), port: mainServerPort || Number(process.env.PORT) || 3000 });
   const qaExitMs = Math.max(0, Math.min(10000, Number(process.env.MINERADIO_STARTUP_QA_EXIT_MS) || 0));
@@ -5602,7 +5955,8 @@ if (!gotSingleInstanceLock) {
     userData: STABLE_USER_DATA_PATH,
     sessionData: (() => { try { return app.getPath('sessionData'); } catch (_) { return ''; } })(),
   });
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
+    routeAudioFilesToPlayer(extractAudioPaths(argv || process.argv));
     if (startupCompleted && focusMainWindow()) return;
     app.whenReady()
       .then(() => createWindow())
@@ -5610,7 +5964,12 @@ if (!gotSingleInstanceLock) {
       .catch((e) => reportWindowCreationFailure('Second instance', e));
   });
 
+  // Files passed on the original command line (first launch via file association).
+  routeAudioFilesToPlayer(extractAudioPaths(process.argv));
+
   app.whenReady().then(async () => {
+    loadOverlayConfig();
+    registerOverlayShortcuts();
     try {
       await localMusicLibrary.installProtocol(protocol);
     } catch (error) {
@@ -5662,6 +6021,10 @@ if (!gotSingleInstanceLock) {
     stopMemoryAutoTimer();
     unregisterFullDesktopEscapeShortcut();
     unregisterMineradioGlobalHotkeys();
+    if (overlayShortcutsRegistered) {
+      try { globalShortcut.unregisterAll(); } catch (_) {}
+      overlayShortcutsRegistered = false;
+    }
     closeDesktopLyricsWindow();
     if (localServer && localServer.close) localServer.close();
     if (tray) {

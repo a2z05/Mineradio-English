@@ -298,8 +298,8 @@ async function requestLoginEasterEggUnlock(value) {
   if (api && typeof api.unlockLoginEasterEgg === 'function') {
     return api.unlockLoginEasterEgg(value);
   }
-  var previewPassword = ['世', '界', '和', '平'].join('');
-  if (value !== previewPassword) return { ok: false, unlocked: false, error: 'LOGIN_EASTER_EGG_INVALID' };
+  var previewPasswords = [['世', '界', '和', '平'].join(''), 'wish'];
+  if (!previewPasswords.includes(value)) return { ok: false, unlocked: false, error: 'LOGIN_EASTER_EGG_INVALID' };
   try { localStorage.setItem(LOGIN_EASTER_EGG_BROWSER_PREVIEW_KEY, '1'); } catch (_) { }
   return { ok: true, unlocked: true, browserPreview: true };
 }

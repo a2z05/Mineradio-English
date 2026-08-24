@@ -1,7 +1,10 @@
 'use strict';
 
 (function loadMineradioIndexModules() {
-  const moduleCacheBust = String(Date.now());
+  // EN-FORK perf: stable cache key — the server answers with ETag/304, so
+  // unchanged modules come from disk cache instead of being re-read every
+  // launch. Bump MODULE_SET_VERSION when shipping changed modules.
+  const moduleCacheBust = 'v3-en';
   const modulePaths = [
     'js/modules/00-state/00-core-stores.js',
     'js/modules/00-state/01-perf-render-state.js',
@@ -109,6 +112,7 @@
     'js/modules/12-remote/00-remote-server-bridge.js',
     'js/modules/12-remote/01-app-proxy-panel.js',
     'js/modules/12-remote/02-phone-qr-modal.js',
+    'js/modules/12-remote/03-overlay-panel.js',
     'js/modules/11-main-loop.js',
   ];
 

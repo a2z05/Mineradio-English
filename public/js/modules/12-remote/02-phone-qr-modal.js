@@ -37,9 +37,9 @@
     ensureModal();
     modalEl.style.display = 'flex';
     apiJson('/api/remote/state').then(function (state) {
-      if (state && state.lanUrl) el('phone-remote-url').value = state.lanUrl.replace(/\/remote\/?$/, '/remote/');
+      if (state && state.lanUrl) el('phone-remote-url').value = state.lanUrl;
     }).catch(function () {
-      el('phone-remote-url').value = 'Open Settings → Phone Remote for the address';
+      el('phone-remote-url').value = 'Server unreachable — restart the app and try again';
     });
   };
 
@@ -49,6 +49,16 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     var btn = el('phone-remote-btn');
-    if (btn) btn.addEventListener('click', window.openPhoneRemoteModal);
+    if (btn) {
+      btn.addEventListener('click', window.openPhoneRemoteModal);
+      // Right-click: overlay & second-screen settings.
+      btn.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        if (typeof window.openOverlaySettingsPanel === 'function') window.openOverlaySettingsPanel();
+      });
+    }
+    // Fullscreen mirror of the titlebar phone button.
+    var fsBtn = document.querySelector('#fullscreen-actions-zone .fs-phone-remote');
+    if (fsBtn) fsBtn.addEventListener('click', window.openPhoneRemoteModal);
   });
 })();

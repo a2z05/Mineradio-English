@@ -345,5 +345,38 @@ document.addEventListener('drop', function (e) {
   if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
 });
 
+// Default-player flow: audio files opened from Explorer (file associations)
+// arrive here as absolute paths via the main process, then go through the
+// same persistent-library import as picked files.
+if (window.desktopWindow && typeof window.desktopWindow.onOpenAudioFiles === 'function') {
+  var importingOpenAudio = false;
+  window.desktopWindow.onOpenAudioFiles(async function (files) {
+    if (!Array.isArray(files) || !files.length || importingOpenAudio) return;
+    importingOpenAudio = true;
+    try {
+      showToast('Opening ' + files.length + ' file' + (files.length > 1 ? 's' : '') + ' from Explorer…');
+      var songs = null;
+      if (typeof window.desktopWindow.importLocalMusicPaths === 'function') {
+        try {
+          var persisted = await window.desktopWindow.importLocalMusicPaths(files);
+          if (persisted && persisted.ok === true && Array.isArray(persisted.tracks) && persisted.tracks.length) {
+            songs = persisted.tracks.map(hydrateCustomCover);
+            persistentLocalLibraryTracks = songs.map(cloneSong);
+          }
+        } catch (e) { console.warn('[OpenWith] persistent import failed', e); }
+      }
+      if (!songs) {
+        songs = files.map(function (filePath, i) {
+          var filename = String(filePath).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || ('Track ' + (i + 1));
+          return localSongFromAudioFile({ name: filename });
+        }).filter(Boolean);
+      }
+      importLocalAudioSongs(songs, { mode: 'audio' });
+    } finally {
+      importingOpenAudio = false;
+    }
+  });
+}
+
 // ============================================================
 //  Console — preset cards + main sliders + toggles + tri-state

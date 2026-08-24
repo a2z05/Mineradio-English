@@ -118,6 +118,15 @@ function executeHotkeyAction(actionKey, source) {
     }).catch(function () { });
   }
   if (actionKey === 'toggleDesktopLyrics') return toggleFx('desktopLyrics');
+  if (actionKey === 'toggleOverlayBar' || actionKey === 'toggleGameOverlay') {
+    var overlayApi = window.desktopWindow;
+    if (!overlayApi || typeof overlayApi.toggleNowPlayingOverlay !== 'function') return;
+    return overlayApi.toggleNowPlayingOverlay(actionKey === 'toggleGameOverlay' ? 'game' : 'bar').then(function (result) {
+      if (result && result.ok && typeof showToast === 'function') {
+        showToast(result.visible ? 'Overlay shown — press the hotkey again to hide' : 'Overlay hidden');
+      }
+    }).catch(function () { });
+  }
 }
 function desktopInteractionHotkeyHint() {
   var binding = hotkeySettings && hotkeySettings.global && hotkeySettings.global.toggleDesktopInteraction;

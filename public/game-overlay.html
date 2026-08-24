@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Mineradio In-Game Overlay</title>
+  <style>
+    :root{--accent:#f4d28a;--panel:rgba(8,10,16,.86);--line:rgba(255,255,255,.09);--text:rgba(240,244,250,.92);--muted:rgba(255,255,255,.45)}
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:Inter,"Segoe UI",sans-serif;color:var(--text);user-select:none}
+    body{opacity:0;transition:opacity .18s ease}
+    body.show{opacity:1}
+    .scrim{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(4,5,9,.55),rgba(2,3,6,.78));backdrop-filter:blur(14px) saturate(1.1);-webkit-backdrop-filter:blur(14px) saturate(1.1)}
+    .deck{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(720px,92vw);
+      background:var(--panel);border:1px solid var(--line);border-radius:22px;
+      box-shadow:0 34px 110px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.07);
+      backdrop-filter:blur(40px) saturate(1.25);-webkit-backdrop-filter:blur(40px) saturate(1.25);
+      padding:26px 30px;box-sizing:border-box}
+    .np{display:flex;gap:18px;align-items:center;margin-bottom:20px}
+    .art{width:84px;height:84px;border-radius:14px;flex:0 0 auto;background:rgba(255,255,255,.06) center/cover no-repeat;
+      box-shadow:0 12px 36px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.08)}
+    .meta{flex:1;min-width:0}
+    .title{font-size:19px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .artist{font-size:13px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .lyric{margin-top:9px;font-size:13.5px;font-weight:600;color:var(--accent);opacity:.92;min-height:1.3em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 14px rgba(244,210,138,.3)}
+    .transport{display:flex;align-items:center;justify-content:center;gap:14px;padding:12px 0 4px}
+    .transport button{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.06);
+      color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+    .transport button:hover{background:rgba(255,255,255,.13);transform:scale(1.05)}
+    .transport button svg{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+    .play{width:56px !important;height:56px !important;background:rgba(244,210,138,.15) !important;border-color:rgba(244,210,138,.4) !important;color:var(--accent) !important}
+    .seek{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:11px;color:var(--muted)}
+    .seek input[type=range]{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,.12);outline:none;cursor:pointer}
+    .seek input::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px rgba(244,210,138,.5)}
+    .vol{display:flex;align-items:center;gap:10px;margin-top:14px}
+    .vol svg{width:17px;height:17px;stroke:var(--muted);stroke-width:2;fill:none;flex:0 0 auto}
+    .vol input[type=range]{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,.12);outline:none;cursor:pointer}
+    .vol input::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent)}
+    .queue{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}
+    .queue h3{margin:0 0 9px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700}
+    .qlist{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+    .qitem{display:flex;align-items:center;gap:10px;padding:7px 11px;border-radius:9px;cursor:pointer;font-size:12.5px;color:rgba(255,255,255,.72);background:rgba(255,255,255,.03);border:1px solid transparent}
+    .qitem:hover{background:rgba(255,255,255,.08)}
+    .qitem.active{color:var(--accent);border-color:rgba(244,210,138,.35);background:rgba(244,210,138,.07)}
+    .qitem .qn{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hintbar{margin-top:16px;text-align:center;font-size:11px;color:rgba(255,255,255,.32)}
+    .hintbar b{color:rgba(244,210,138,.65);font-weight:700}
+    ::-webkit-scrollbar{width:7px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:4px}
+  </style>
+</head>
+<body>
+  <div class="scrim"></div>
+  <div class="deck">
+    <div class="np">
+      <div class="art" id="art"></div>
+      <div class="meta">
+        <div class="title" id="title">Mineradio</div>
+        <div class="artist" id="artist">Nothing playing</div>
+        <div class="lyric" id="lyric"></div>
+      </div>
+    </div>
+    <div class="transport">
+      <button id="shuffle" title="Play mode"><svg viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg></button>
+      <button id="prev"><svg viewBox="0 0 24 24"><path d="M19 20L9 12l10-8z"/><line x1="5" y1="4" x2="5" y2="20"/></svg></button>
+      <button id="play" class="play"><svg id="pi" viewBox="0 0 24 24"><polygon points="7,4 20,12 7,20"/></svg></button>
+      <button id="next"><svg viewBox="0 0 24 24"><path d="M5 4l10 8-10 8z"/><line x1="19" y1="4" x2="19" y2="20"/></svg></button>
+      <button id="closeBtn" title="Close overlay (hotkey)"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="seek">
+      <span id="tCur">0:00</span>
+      <input type="range" id="seekBar" min="0" max="1000" value="0">
+      <span id="tDur">0:00</span>
+    </div>
+    <div class="vol">
+      <svg viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>
+      <input type="range" id="volBar" min="0" max="100" value="70">
+    </div>
+    <div class="queue">
+      <h3>Queue</h3>
+      <div class="qlist" id="queue"></div>
+    </div>
+    <div class="hintbar">Press <b>Ctrl + Alt + M</b> anytime to open / close this overlay in-game · Esc also closes</div>
+  </div>
+  <script>
+    'use strict';
+    function fmt(t){t=Math.max(0,t|0);return (t/60|0)+':'+String(t%60).padStart(2,'0')}
+    var seeking=false;
+    document.getElementById('play').onclick=function(){ov('toggle')};
+    document.getElementById('prev').onclick=function(){ov('prev')};
+    document.getElementById('next').onclick=function(){ov('next')};
+    document.getElementById('closeBtn').onclick=function(){if(window.desktopOverlay)window.desktopOverlay.closeOverlay()};
+    document.getElementById('shuffle').onclick=function(){ov('mode')};
+    var seekBar=document.getElementById('seekBar'),volBar=document.getElementById('volBar');
+    seekBar.addEventListener('input',function(){seeking=true});
+    seekBar.addEventListener('change',function(){ov('seek',{position:+this.value/1000*(state.duration||0)});seeking=false});
+    volBar.addEventListener('change',function(){ov('volume',{value:+this.value/100})});
+    volBar.addEventListener('input',function(){if(Math.random()<.15)ov('volume',{value:+this.value/100})});
+    function ov(cmd,payload){if(window.desktopOverlay&&window.desktopOverlay.sendOverlayCommand){window.desktopOverlay.sendOverlayCommand(cmd,payload||{})}}
+    var state={};
+    function applyState(s){
+      if(!s)return;state=s;
+      document.getElementById('title').textContent=s.title||'Mineradio';
+      document.getElementById('artist').textContent=s.artist||'Nothing playing';
+      if(s.art!==undefined)document.getElementById('art').style.backgroundImage=s.art?'url("'+s.art+'")':'';
+      document.getElementById('lyric').textContent=s.lyric||'';
+      var pi=document.getElementById('pi');
+      pi.innerHTML=s.playing?'<line x1="8" y1="5" x2="8" y2="19"/><line x1="16" y1="5" x2="16" y2="19"/>':'<polygon points="7,4 20,12 7,20"/>';
+      if(!seeking){
+        var pct=s.duration>0?(s.position/s.duration*1000):0;
+        seekBar.value=Math.round(pct);
+        document.getElementById('tCur').textContent=fmt(s.position||0);
+        document.getElementById('tDur').textContent=fmt(s.duration||0);
+      }
+      volBar.value=Math.round((s.volume!=null?s.volume:.7)*100);
+      var q=document.getElementById('queue');q.innerHTML='';
+      (s.queueTitles||[]).forEach(function(name,i){
+        var d=document.createElement('div');d.className='qitem'+(i===s.queueIndex?' active':'');
+        d.innerHTML='<span class="qn"></span>';d.querySelector('.qn').textContent=name||('Track '+(i+1));
+        (function(idx){d.onclick=function(){ov('playIndex',{index:idx})}})(i);
+        q.appendChild(d);
+      });
+      document.body.classList.add('show');
+    }
+    window.addEventListener('keydown',function(e){if(e.key==='Escape'){if(window.desktopOverlay)window.desktopOverlay.closeOverlay()}});
+    if(window.desktopOverlay&&window.desktopOverlay.onOverlayState)window.desktopOverlay.onOverlayState(applyState);
+    window.addEventListener('message',function(e){if(e.data&&e.data.type==='mineradio-overlay-state')applyState(e.data.payload||{})});
+  </script>
+</body>
+</html>

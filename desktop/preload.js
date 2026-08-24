@@ -60,6 +60,34 @@ contextBridge.exposeInMainWorld('desktopWindow', {
     return ipcRenderer.invoke('mineradio-local-library-import', { token: authorization.token });
   },
   importInboxMusicFiles: () => ipcRenderer.invoke('mineradio-local-library-import-inbox'),
+  // Default-player flow: import absolute file paths opened from Explorer.
+  importLocalMusicPaths: async (paths) => {
+    const entries = (Array.isArray(paths) ? paths : [])
+      .map((p) => ({ path: String(p || ''), relativePath: '' }))
+      .filter((entry) => entry.path);
+    if (!entries.length) return { ok: false, count: 0, tracks: [], error: 'NO_AUTHORIZED_LOCAL_AUDIO' };
+    const authorization = await ipcRenderer.invoke('mineradio-local-library-authorize', { files: entries });
+    if (!authorization || authorization.ok !== true || !authorization.token) return authorization;
+    return ipcRenderer.invoke('mineradio-local-library-import', { token: authorization.token });
+  },
+  onOpenAudioFiles: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, files) => callback(Array.isArray(files) ? files : []);
+    ipcRenderer.on('mineradio-open-audio-files', listener);
+    return () => ipcRenderer.removeListener('mineradio-open-audio-files', listener);
+  },
+  toggleNowPlayingOverlay: (which) => ipcRenderer.invoke('mineradio-overlay-toggle', which === 'game' ? 'game' : 'bar'),
+  openNowPlayingOverlay: (which) => ipcRenderer.invoke('mineradio-overlay-open', String(which || 'bar')),
+  closeNowPlayingOverlay: (which) => ipcRenderer.invoke('mineradio-overlay-close', String(which || 'bar')),
+  getOverlayConfig: () => ipcRenderer.invoke('mineradio-overlay-get-config'),
+  setOverlayConfig: (patch) => ipcRenderer.invoke('mineradio-overlay-set-config', patch || {}),
+  onOverlayCommand: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, cmd, payload) => callback(String(cmd || ''), payload || {});
+    ipcRenderer.on('mineradio-overlay-remote-command', listener);
+    return () => ipcRenderer.removeListener('mineradio-overlay-remote-command', listener);
+  },
+  publishOverlayState: (snapshot) => ipcRenderer.send('mineradio-overlay-publish-state', snapshot || {}),
   readLyricCache: (key) => ipcRenderer.invoke('mineradio-cache-read-lyric', key || ''),
   writeLyricCache: (key, payload) => ipcRenderer.invoke('mineradio-cache-write-lyric', key || '', payload || {}),
   close: (behavior) => ipcRenderer.invoke('desktop-window-close', behavior),
