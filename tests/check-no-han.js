@@ -23,6 +23,8 @@ const ALLOWLIST = [
   '.git/',
   'dist/',
   'CONFLICTS.md',
+  'CLAUDE.md',
+  'CC-Session-Logs/',
   // historical upstream release notes (kept verbatim for merge compatibility)
   'CHANGELOG.md',
   // upstream's internal-beta installer (unused by this fork's builds)

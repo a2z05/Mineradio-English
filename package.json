@@ -1,7 +1,7 @@
 {
   "name": "mineradio",
   "productName": "Mineradio English",
-  "version": "2.1.0-en.2",
+  "version": "2.1.0-en.3",
   "description": "Immersive Windows music player blending desktop mode, a lyrics stage, particle visuals and a 3D playlist shelf — full English edition.",
   "author": "Mineradio",
   "license": "GPL-3.0-only",
@@ -30,6 +30,7 @@
       "build/**/*",
       "cuefield/**/*",
       "server.js",
+      "app-proxy.js",
       "*-api.js",
       "spotify-auth-session.js",
       "spotify-secure-auth-store.js",
@@ -88,7 +89,8 @@
       {
         "provider": "github",
         "owner": "a2z05",
-        "repo": "Mineradio-English"
+        "repo": "Mineradio-English",
+        "releaseType": "release"
       }
     ]
   },

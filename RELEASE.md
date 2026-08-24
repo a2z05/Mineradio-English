@@ -1,42 +1,45 @@
-# Mineradio 2.1.0 发布流程
+# Mineradio English — Release Pipeline
 
-## 发布边界
+## Two ways to release
 
-- 正式版本：`2.1.0`
-- Git tag：`v2.1.0`
-- Release 标题：`Mineradio 2.1.0`
-- 安装包：`Mineradio-2.1.0-Setup.exe`
-- 仅从当前可信源码完整构建，不复用旧安装包或旧 `dist/`。
-- 正式 Release 不混入 Mineradio_Beat 产物。
-- GitHub Release 仅附带完整安装包 `Mineradio-2.1.0-Setup.exe`，供用户手动下载；不上传 `latest.yml`、blockmap 或补丁。
-- `2.0.3+` 客户端不得从 Release assets 识别或下载安装包，软件内更新仍只读取正文中的网盘线路。
-- Release 正文使用 `<!-- mineradio-download-page: 线路名称|https://... -->` 写入 HTTPS 网盘地址，可配置多条线路。
+### 1. GitHub Actions (automatic)
 
-## 网盘分发
+Push a version tag — Actions builds and publishes the release:
 
-- 夸克盘：<https://pan.quark.cn/s/f40289e1c5d3>
-- 百度云：<https://pan.baidu.com/s/14fgTABgbfseOg9QuX0Um7Q?pwd=sjhp>（提取码 `sjhp`）
-- 蓝奏云：<https://xxhuber.lanzout.com/mineradio2>
+```bash
+# version in package.json must match the tag (without the "v")
+git add package.json
+git commit -m "chore: bump version"
+git push origin english
+git tag vX.Y.Z-en.N
+git push origin vX.Y.Z-en.N
+```
 
-## 公开更新说明
+- Workflow: `.github/workflows/release.yml` (windows-latest, Node 22, `npm ci`)
+- On tags: `electron-builder --publish always` → non-draft release with Setup.exe + blockmap + latest.yml (~5–10 min)
+- On manual runs (`workflow_dispatch`, Actions tab): build only; installer uploaded as workflow artifact
 
-- 优化 Wallpaper Engine 壁纸与全屏模式的兼容性。
-- 改进登录、账号状态和本地曲库体验。
-- 提升长时间运行与连续播放稳定性。
+### 2. Local build
 
-## 发布资产
+```bash
+npx electron-builder --win nsis
+gh release create vX.Y.Z-en.N dist/*-Setup.exe dist/*.blockmap dist/latest.yml --title "..." --notes "..."
+```
 
-- `dist/Mineradio-2.1.0-Setup.exe`
-- `dist/Mineradio-2.1.0-Setup.exe.blockmap`
-- `dist/latest.yml`
-- `dist/Mineradio-2.1.0-SHA256SUMS.txt`
+## Notes
 
-GitHub Release 只上传 `dist/Mineradio-2.1.0-Setup.exe`；其余产物只用于本地验收和校验，不作为 Release 资产发布。
+- `releaseType: "release"` in `build.publish` → tagged CI runs publish non-draft. Change to `"draft"` for review-before-publish.
+- Auto-updater reads `latest.yml`; mirrors under `mineradio.update.mirrors` unaffected.
+- Tag name must equal the `version` field with a `v` prefix.
 
-## 发布前检查
+---
 
-- 运行完整回归检查与 Electron 启动检查。
-- 构建并检查 `win-unpacked/resources/app` 内容。
-- 验证安装包启动、退出、重启和用户数据恢复。
-- 确认仓库不包含 Cookie、Token、凭据、缓存或本机日志。
-- 生成并核对 SHA256。
+## Upstream release process (kept for reference)
+
+The sections below describe how upstream XxHuberrr/Mineradio ships releases (Chinese cloud-drive
+distribution). The English fork does not follow this process; it is retained because merges from
+`main` may touch this file.
+
+- 正式版本：`2.1.0`；Git tag：`v2.1.0`
+- 上游 Release 只附完整安装包，不附 latest.yml/blockmap；正文写入网盘线路。
+- 网盘分发：夸克盘 <https://pan.quark.cn/s/f40289e1c5d3> · 百度云 <https://pan.baidu.com/s/14fgTABgbfseOg9QuX0Um7Q?pwd=sjhp>（提取码 `sjhp`）· 蓝奏云 <https://xxhuber.lanzout.com/mineradio2>
