@@ -753,6 +753,7 @@ function updateLoginProviderUi() {
       '<div class="spotify-guide-actions">' +
         '<button type="button" class="spotify-guide-link" onclick="openSpotifyDeveloperDashboard()">Open dashboard</button>' +
         '<button type="button" class="spotify-guide-link" onclick="copySpotifyRedirectUri()">Copy callback</button>' +
+        '<button type="button" class="spotify-guide-link" onclick="openAppProxyPanel()">Proxy…</button>' +
         '<span>PKCE needs no Client Secret</span>' +
       '</div>';
     if (qqCookieSaveBtn) {

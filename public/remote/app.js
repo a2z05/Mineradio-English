@@ -30,10 +30,17 @@
     btnPrev: $('btn-prev'), btnToggle: $('btn-toggle'), btnNext: $('btn-next'),
     volume: $('volume'),
     tabQueue: $('tab-queue'), tabSearch: $('tab-search'),
+    tabLibrary: $('tab-library'), tabTransfer: $('tab-transfer'),
     secQueue: $('sec-queue'), secSearch: $('sec-search'),
+    secLibrary: $('sec-library'), secTransfer: $('sec-transfer'),
     queueList: $('queue-list'), queueEmpty: $('queue-empty'),
     searchForm: $('search-form'), searchInput: $('search-input'),
-    searchStatus: $('search-status'), searchResults: $('search-results')
+    searchStatus: $('search-status'), searchResults: $('search-results'),
+    libUp: $('lib-up'), libPath: $('lib-path'), libNote: $('lib-note'),
+    libraryList: $('library-list'), libraryEmpty: $('library-empty'),
+    uploadFiles: $('upload-files'), uploadFolder: $('upload-folder'),
+    uploadPause: $('upload-pause'), uploadList: $('upload-progress-list'),
+    transferNote: $('transfer-note')
   };
 
   // ---------- helpers ----------
@@ -327,14 +334,229 @@
 
   // ---------- tabs ----------
   function selectTab(which) {
-    var q = which === 'queue';
-    el.tabQueue.classList.toggle('active', q);
-    el.tabSearch.classList.toggle('active', !q);
-    el.secQueue.hidden = !q;
-    el.secSearch.hidden = q;
+    var tabs = ['queue', 'search', 'library', 'transfer'];
+    tabs.forEach(function (name) {
+      var active = name === which;
+      el['tab' + name.charAt(0).toUpperCase() + name.slice(1)].classList.toggle('active', active);
+      el['sec' + name.charAt(0).toUpperCase() + name.slice(1)].hidden = !active;
+    });
+    if (which === 'library') refreshLibrary();
   }
   el.tabQueue.addEventListener('click', function () { selectTab('queue'); });
   el.tabSearch.addEventListener('click', function () { selectTab('search'); });
+  el.tabLibrary.addEventListener('click', function () { selectTab('library'); });
+  el.tabTransfer.addEventListener('click', function () { selectTab('transfer'); });
+
+  // ---------- library (PC -> phone browsing) ----------
+  var libDir = '';
+  var libraryCache = { dirs: [], files: [] };
+
+  function refreshLibrary() {
+    api('/api/remote/library').then(function (r) {
+      if (r.status === 401) { logout(); return; }
+      if (!r.ok || !r.data) return;
+      libraryCache = r.data;
+      renderLibrary();
+    }).catch(function () {});
+  }
+
+  function renderLibrary() {
+    var dirs = libraryCache.dirs || [];
+    var files = libraryCache.files || [];
+    var prefix = libDir ? libDir + '/' : '';
+    var visibleDirs = dirs.filter(function (d) {
+      return d.path.indexOf(prefix) === 0 && d.path.slice(prefix.length).indexOf('/') === -1;
+    });
+    var visibleFiles = files.filter(function (f) {
+      return f.path.indexOf(prefix) === 0 && f.path.slice(prefix.length).indexOf('/') === -1;
+    });
+    var rootName = (libraryCache.roots && libraryCache.roots[1]) || 'PC';
+    var inExtraRoot = false;
+    for (var i = 1; i < (libraryCache.roots || []).length; i++) {
+      if (libDir === libraryCache.roots[i] || libDir.indexOf(libraryCache.roots[i] + '/') === 0) inExtraRoot = true;
+    }
+
+    el.libPath.textContent = libDir ? decodeURIComponent(libDir.split('/').pop()) : rootName + ' inbox';
+    el.libUp.hidden = !libDir;
+    el.libraryList.textContent = '';
+    el.libraryEmpty.hidden = visibleDirs.length + visibleFiles.length > 0;
+
+    visibleDirs.forEach(function (d) {
+      var li = document.createElement('li');
+      li.className = 'tap';
+      li.innerHTML =
+        '<span class="idx">&#128193;</span>' +
+        '<span class="rmain"><div class="rt">' + esc(d.name) + '</div></span>' +
+        '<button class="ract" type="button" aria-label="Download folder as ZIP">&#8681;</button>';
+      li.addEventListener('click', function () { libDir = d.path; renderLibrary(); });
+      li.querySelector('.ract').addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        location.href = '/api/remote/zip?dir=' + encodeURIComponent(d.path) +
+          '&token=' + encodeURIComponent(deviceToken);
+      });
+      el.libraryList.appendChild(li);
+    });
+
+    visibleFiles.forEach(function (f) {
+      var li = document.createElement('li');
+      li.innerHTML =
+        '<span class="idx">&#9835;</span>' +
+        '<span class="rmain"><div class="rt">' + esc(f.name.replace(/\.[^.]+$/, '')) + '</div>' +
+        '<div class="ra">' + fmtSize(f.size) + '</div></span>' +
+        '<button class="ract" type="button" aria-label="Play on PC">&#9654;</button>' +
+        '<button class="ract" type="button" aria-label="Download">&#8681;</button>';
+      var buttons = li.querySelectorAll('.ract');
+      buttons[0].addEventListener('click', function () {
+        cmd('enqueueLocal', { path: f.path, name: f.name.replace(/\.[^.]+$/, '') });
+      });
+      buttons[1].addEventListener('click', function () {
+        location.href = '/api/remote/download?path=' + encodeURIComponent(f.path) +
+          '&token=' + encodeURIComponent(deviceToken);
+      });
+      el.libraryList.appendChild(li);
+    });
+
+    if (!visibleDirs.length && !visibleFiles.length) {
+      el.libNote.textContent = inExtraRoot
+        ? 'This PC folder is read-only.'
+        : 'Upload songs from the Transfer tab, then they appear here.';
+    } else {
+      el.libNote.textContent = '';
+    }
+  }
+
+  el.libUp.addEventListener('click', function () {
+    libDir = libDir.indexOf('/') >= 0 ? libDir.slice(0, libDir.lastIndexOf('/')) : '';
+    renderLibrary();
+  });
+
+  function fmtSize(bytes) {
+    bytes = Number(bytes) || 0;
+    if (bytes > 1024 * 1024 * 1024) return (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+    if (bytes > 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    if (bytes > 1024) return Math.round(bytes / 1024) + ' KB';
+    return bytes + ' B';
+  }
+
+  // ---------- transfer (phone -> PC uploads) ----------
+  var uploadQueue = [];
+  var uploadActive = null;
+  var uploadPaused = false;
+
+  function queueUploads(fileList) {
+    var files = Array.prototype.slice.call(fileList || []);
+    if (!files.length) return;
+    el.transferNote.textContent = '';
+    files.forEach(function (file) {
+      uploadQueue.push({
+        file: file,
+        rel: String(file.webkitRelativePath || file.name || 'upload.bin'),
+        li: null, bar: null, retried: false,
+      });
+    });
+    renderUploadItems();
+    pumpUploads();
+  }
+
+  function renderUploadItems() {
+    el.uploadList.textContent = '';
+    uploadQueue.concat(uploadActive ? [uploadActive] : []).forEach(function (item) {
+      if (item.li && item.li.parentNode === el.uploadList) return;
+    });
+    uploadQueue.forEach(function (item) { attachUploadRow(item); });
+    if (uploadActive) attachUploadRow(uploadActive);
+    updatePauseButton();
+  }
+
+  function attachUploadRow(item) {
+    if (item.li) return;
+    var li = document.createElement('li');
+    var name = item.rel.split('/').pop();
+    li.innerHTML = '<div class="uname">' + esc(item.rel) + '</div>' +
+      '<div class="ubar"><i></i></div>';
+    item.bar = li.querySelector('.ubar i');
+    item.li = li;
+    el.uploadList.appendChild(li);
+  }
+
+  function setUploadProgress(item, pct, cls) {
+    if (!item.li) attachUploadRow(item);
+    item.bar.style.width = pct.toFixed(1) + '%';
+    if (cls) item.li.className = cls;
+  }
+
+  function updatePauseButton() {
+    var busy = !!uploadActive || uploadQueue.length > 0;
+    el.uploadPause.hidden = !busy;
+    el.uploadPause.textContent = uploadPaused ? 'Resume uploads' : 'Pause uploads';
+  }
+
+  function pumpUploads() {
+    if (uploadPaused || uploadActive || !uploadQueue.length) return;
+    uploadActive = uploadQueue.shift();
+    var item = uploadActive;
+    attachUploadRow(item);
+
+    var xhr = new XMLHttpRequest();
+    item.xhr = xhr;
+    var url = '/api/remote/upload?path=' + encodeURIComponent(item.rel) +
+      '&token=' + encodeURIComponent(deviceToken);
+    xhr.open('POST', url);
+    xhr.upload.onprogress = function (ev) {
+      if (ev.lengthComputable) setUploadProgress(item, (ev.loaded / ev.total) * 100);
+    };
+    xhr.onload = function () {
+      var ok = xhr.status >= 200 && xhr.status < 300;
+      if ((xhr.status === 0 || xhr.status >= 500) && !item.retried) {
+        item.retried = true;
+        item.li.className = '';
+        uploadQueue.push(item); // retry once
+      } else {
+        setUploadProgress(item, ok ? 100 : 100, ok ? 'done' : 'err');
+      }
+      finishItem();
+    };
+    xhr.onerror = function () {
+      if (!item.retried) {
+        item.retried = true;
+        uploadQueue.push(item);
+      } else {
+        setUploadProgress(item, 100, 'err');
+      }
+      finishItem();
+    };
+    try { xhr.send(item.file); }
+    catch (_) { finishItem(); }
+
+    function finishItem() {
+      uploadActive = null;
+      updatePauseButton();
+      pumpUploads();
+      if (!uploadQueue.length && !uploadActive) {
+        el.transferNote.textContent = 'Uploads finished — files are in the PC inbox. Use "Import inbox to library" below.';
+      }
+    }
+  }
+
+  el.uploadPause.addEventListener('click', function () {
+    uploadPaused = !uploadPaused;
+    if (uploadActive && uploadPaused) {
+      try { uploadActive.xhr.abort(); } catch (_) {}
+      uploadQueue.unshift(uploadActive); // re-queue at front, progress restarts
+      uploadActive = null;
+    }
+    updatePauseButton();
+    pumpUploads();
+  });
+
+  el.uploadFiles.addEventListener('change', function () {
+    queueUploads(el.uploadFiles.files);
+    el.uploadFiles.value = '';
+  });
+  el.uploadFolder.addEventListener('change', function () {
+    queueUploads(el.uploadFolder.files);
+    el.uploadFolder.value = '';
+  });
 
   // ---------- transport ----------
   el.btnToggle.addEventListener('click', function () { cmd('toggle'); });

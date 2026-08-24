@@ -92,7 +92,7 @@ const KUGOU_QUALITY_CHAIN = [
 ];
 
 function requestText(targetUrl, opts, body) {
-  opts = opts || {};
+  opts = require('./app-proxy').applyToOptions(opts || {}, 'kugou');
   return new Promise((resolve, reject) => {
     const u = new URL(targetUrl);
     const lib = u.protocol === 'https:' ? https : http;

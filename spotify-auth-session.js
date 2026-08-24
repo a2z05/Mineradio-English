@@ -41,6 +41,7 @@ class SpotifyAuthSession {
   constructor(options = {}) {
     this.store = options.store;
     this.fetch = options.fetch || global.fetch;
+    this.applyToFetchOptions = typeof options.applyToFetchOptions === 'function' ? options.applyToFetchOptions : null;
     this.now = options.now || Date.now;
     this.randomBytes = options.randomBytes || crypto.randomBytes;
     this.redirectUri = String(options.redirectUri || '');
@@ -117,11 +118,13 @@ class SpotifyAuthSession {
   }
 
   async requestToken(fields) {
-    const response = await this.fetch(SPOTIFY_ACCOUNTS_TOKEN, {
+    let fetchOptions = {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(fields).toString(),
-    });
+    };
+    if (this.applyToFetchOptions) fetchOptions = this.applyToFetchOptions(fetchOptions, 'spotify');
+    const response = await this.fetch(SPOTIFY_ACCOUNTS_TOKEN, fetchOptions);
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.error) {
       const error = authError(data.error_description || data.error || 'Spotify token request failed', response.status || 502, data.error || 'SPOTIFY_TOKEN_FAILED');
@@ -176,7 +179,9 @@ class SpotifyAuthSession {
     const request = async forceRefresh => {
       const accessToken = await this.getAccessToken({ forceRefresh });
       const headers = Object.assign({}, options.headers || {}, { Authorization: `Bearer ${accessToken}` });
-      return this.fetch(SPOTIFY_WEB_API + normalizedPath, Object.assign({}, options, { headers }));
+      let fetchOptions = Object.assign({}, options, { headers });
+      if (this.applyToFetchOptions) fetchOptions = this.applyToFetchOptions(fetchOptions, 'spotify');
+      return this.fetch(SPOTIFY_WEB_API + normalizedPath, fetchOptions);
     };
     let response = await request(false);
     if (response.status === 401 && this.refreshToken) response = await request(true);

@@ -1207,6 +1207,8 @@ async function playQueueAt(idx, opts) {
       }
       markPlayPhase('audio-element');
       var proxyAudioUrl = opts.preloadedProxyAudioUrl || '/api/audio?url=' + encodeURIComponent(data.url);
+      window.__mineradioLastSourceUrl = data.url; // remembered for track download
+      window.__mineradioLastSourceSong = song;
       if (albumGaplessHandoff) {
         audioFadeSerial++;
         clearAudioFadeTimers();

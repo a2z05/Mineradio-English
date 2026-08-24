@@ -198,12 +198,45 @@ const WEATHER_DEFAULT_LOCATION = {
 // ====================================================================
 //  Spotify PKCE 授权会话 + 手机遥控状态
 // ====================================================================
+const appProxy = require('./app-proxy');
 const spotifyAuthState = SpotifyAuthSession && createMemorySpotifyAuthStore
   ? new SpotifyAuthSession({
     store: global.__mineradioSpotifyAuthStore || createMemorySpotifyAuthStore(),
     redirectUri: `http://127.0.0.1:${PORT}/api/spotify/callback`,
+    applyToFetchOptions: (opts, appName) => appProxy.applyToOptions(opts, appName),
   })
   : null;
+
+async function testProxyForApp(appName) {
+  const targets = {
+    spotify: 'https://api.spotify.com/v1/',
+    netease: 'https://music.163.com/',
+    qq: 'https://u.y.qq.com/',
+    kugou: 'https://www.kugou.com/',
+    qishui: 'https://luna.bytedance.com/',
+  };
+  const target = targets[appName] || targets.spotify;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    let fetchOptions = { signal: controller.signal };
+    fetchOptions = appProxy.applyToOptions(fetchOptions, appName);
+    const resp = await fetch(target, fetchOptions);
+    return { ok: true, httpStatus: resp.status };
+  } catch (err) {
+    return { ok: false, error: (err && err.name === 'AbortError') ? 'timeout after 5s' : String(err && err.message || err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function normalizeProxyApps(rawApps) {
+  const apps = {};
+  for (const app of appProxy.PROXY_APPS) {
+    apps[app] = !!(rawApps && typeof rawApps === 'object' && rawApps[app] === true);
+  }
+  return apps;
+}
 
 function escapeSpotifyCallbackText(value) {
   return String(value || '')
@@ -299,6 +332,179 @@ const remoteCommandQueue = [];
 const remoteSseClients = new Set();
 const remotePairAttemptsByIp = new Map();
 
+// ---------- Phone transfer (music inbox) ----------
+let REMOTE_MUSIC_DIR;
+try {
+  REMOTE_MUSIC_DIR = require('./desktop/server-remote-music-dir').REMOTE_MUSIC_DIR;
+} catch (_) {
+  REMOTE_MUSIC_DIR = path.join(process.env.MINERADIO_MUSIC_DIR || path.join(__dirname, 'data'), 'music-inbox');
+}
+const REMOTE_LIBRARY_EXTRA_DIRS = String(process.env.MINERADIO_LIBRARY_DIRS || '')
+  .split(',').map(s => s.trim()).filter(Boolean);
+const REMOTE_UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
+const REMOTE_ZIP_MAX_BYTES = 800 * 1024 * 1024;
+const REMOTE_UPLOAD_CONCURRENCY_PER_TOKEN = 3;
+const remoteUploadsInFlight = new Map(); // deviceToken -> count
+fs.mkdirSync(REMOTE_MUSIC_DIR, { recursive: true });
+
+function sanitizeRelativeRemotePath(raw) {
+  let rel = String(raw || '').replace(/\\/g, '/').trim();
+  rel = rel.replace(/^[A-Za-z]:/, '');          // strip drive letters
+  rel = rel.replace(/^\/+/, '');                // no absolute paths
+  const parts = [];
+  for (const part of rel.split('/')) {
+    const p = part.trim();
+    if (!p || p === '.') continue;
+    if (p === '..') return null;                 // traversal attempt
+    if (/[:*?"<>|]/.test(p)) return null;
+    parts.push(p.replace(/[ -]/g, ''));
+  }
+  if (!parts.length) return null;
+  return parts.join('/');
+}
+
+function resolveRemoteMusicPath(relPath) {
+  const safe = sanitizeRelativeRemotePath(relPath);
+  if (!safe) return null;
+  const abs = path.join(REMOTE_MUSIC_DIR, ...safe.split('/'));
+  if (!abs.startsWith(REMOTE_MUSIC_DIR)) return null; // belt & suspenders
+  return { abs, rel: safe };
+}
+
+// Read-only library roots: the inbox itself plus optional extra dirs.
+function resolveLibraryPath(relPath) {
+  const clean = sanitizeRelativeRemotePath(relPath);
+  if (!clean) return null;
+  const roots = [[REMOTE_MUSIC_DIR, '']];
+  for (const dir of REMOTE_LIBRARY_EXTRA_DIRS) roots.push([dir, path.basename(dir)]);
+  for (const [rootDir, prefix] of roots) {
+    const abs = path.join(rootDir, ...(prefix ? [prefix] : []), ...clean.split('/'));
+    if (abs.startsWith(rootDir)) return { abs, rel: prefix ? prefix + '/' + clean : clean };
+  }
+  return null;
+}
+
+let remoteLibraryCache = { at: 0, data: null };
+function walkRemoteLibrary() {
+  if (remoteLibraryCache.data && Date.now() - remoteLibraryCache.at < 10000) return remoteLibraryCache.data;
+  const dirs = [];
+  const files = [];
+  const roots = [[REMOTE_MUSIC_DIR, '', true]];
+  for (const extra of REMOTE_LIBRARY_EXTRA_DIRS) {
+    roots.push([extra, path.basename(extra), false]);
+  }
+  for (const [rootDir, rootPrefix] of roots) {
+    const walk = (dir, prefix) => {
+      let entries;
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+      for (const entry of entries) {
+        if (files.length >= 2000 && dirs.length >= 2000) return;
+        const name = entry.name;
+        if (name.startsWith('.')) continue;
+        const relPath = prefix ? `${prefix}/${name}` : name;
+        const absPath = path.join(dir, name);
+        if (entry.isDirectory()) {
+          dirs.push({ path: relPath, name });
+          walk(absPath, relPath);
+        } else if (entry.isFile()) {
+          let size = 0, mtime = 0;
+          try {
+            const st = fs.statSync(absPath);
+            size = st.size; mtime = Math.round(st.mtimeMs);
+          } catch (_) {}
+          files.push({ path: relPath, name, size, mtime });
+        }
+      }
+    };
+    walk(rootDir, rootPrefix);
+  }
+  const data = { dirs: dirs.slice(0, 2000), files: files.slice(0, 2000), roots: roots.map(r => r[1]) };
+  remoteLibraryCache = { at: Date.now(), data };
+  return data;
+}
+
+// Minimal STORE-only ZIP writer (no compression) — enough for phone downloads.
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+function crc32(buf) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i += 1) c = CRC32_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function buildZipFromDirectory(dirAbs, zipRootLabel) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  let totalBytes = 0;
+  const addEntry = (absPath, entryName) => {
+    const data = fs.readFileSync(absPath); // throws on read error -> caller handles
+    totalBytes += data.length;
+    if (totalBytes > REMOTE_ZIP_MAX_BYTES) throw new Error('ZIP_TOO_LARGE');
+    const nameBuf = Buffer.from(entryName, 'utf8');
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);        // version needed
+    local.writeUInt16LE(0x0800, 6);    // UTF-8 flag
+    local.writeUInt16LE(0, 8);         // store
+    local.writeUInt16LE(0, 10); local.writeUInt16LE(0, 12); // time/date
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    local.writeUInt16LE(0, 28);
+    localParts.push(local, nameBuf, data);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt16LE(0, 12); central.writeUInt16LE(0, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centralParts.push(Buffer.concat([central, nameBuf]));
+    offset += 30 + nameBuf.length + data.length;
+  };
+  const walkZip = (dir, prefix) => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+    for (const entry of entries) {
+      const absPath = path.join(dir, entry.name);
+      const entryName = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walkZip(absPath, entryName);
+      else if (entry.isFile()) addEntry(absPath, entryName);
+    }
+  };
+  walkZip(dirAbs, '');
+  const centralBuf = Buffer.concat(centralParts);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(centralParts.length, 8);
+  end.writeUInt16LE(centralParts.length, 10);
+  end.writeUInt32LE(centralBuf.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...localParts, centralBuf, end]);
+}
+
+function rfc5987Filename(name) {
+  return encodeURIComponent(name).replace(/['()*]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase());
+}
+
+function sanitizeFilename(name) {
+  const base = String(name || '').replace(/[\\/:*?"<>|\r\n\0]/g, '_').trim();
+  return (base.slice(0, 180) || 'track').replace(/\s+/g, ' ');
+}
+
 function remoteRequestToken(req) {
   const header = String(req.headers.authorization || '').trim();
   const match = header.match(/^Bearer\s+(.+)$/i);
@@ -390,10 +596,17 @@ const MIME = {
   '.js':   'application/javascript',
   '.css':  'text/css',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
   '.png':  'image/png',
   '.jpg':  'image/jpeg',
   '.ico':  'image/x-icon',
   '.svg':  'image/svg+xml',
+  '.mp3':  'audio/mpeg',
+  '.m4a':  'audio/mp4',
+  '.flac': 'audio/flac',
+  '.wav':  'audio/wav',
+  '.ogg':  'audio/ogg',
+  '.opus': 'audio/ogg',
 };
 
 // ---------- Cookie 持久化 ----------
@@ -1919,7 +2132,7 @@ const QQ_VIP_INFO_CACHE_TTL_MS = 2 * 60 * 1000;
 const qqVipInfoCache = new Map();
 
 function requestText(targetUrl, opts, body) {
-  opts = opts || {};
+  opts = appProxy.applyToOptions(opts || {}, 'qq');
   return new Promise((resolve, reject) => {
     const u = new URL(targetUrl);
     const lib = u.protocol === 'https:' ? https : http;
@@ -5255,6 +5468,128 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ---------- Per-app proxy settings (one proxy, checkbox per service) ----------
+  if (pn === '/api/spotify/proxy' && req.method === 'GET') {
+    const config = appProxy.loadConfig();
+    sendJSON(res, {
+      ok: true,
+      status: appProxy.status(),
+      config: Object.assign({}, config, { password: config.password ? '********' : '' }),
+    });
+    return;
+  }
+
+  // ---------- Track download to the user's Downloads folder ----------
+  if (pn === '/api/download/track' && req.method === 'POST') {
+    if (!remoteRequestIsLocal(req)) {
+      sendJSON(res, { ok: false, error: 'LOCAL_ONLY' }, 403);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const audioUrl = String(body.url || '').trim();
+      const suggestedName = sanitizeFilename(body.name || 'track');
+      if (!/^https?:\/\//i.test(audioUrl)) {
+        sendJSON(res, { ok: false, error: 'INVALID_URL' }, 400);
+        return;
+      }
+      const downloadsDir = path.join(os.homedir(), 'Downloads', 'Mineradio');
+      fs.mkdirSync(downloadsDir, { recursive: true });
+      let ext = path.extname(new URL(audioUrl).pathname) || '.mp3';
+      if (!/^\.(mp3|flac|m4a|wav|ogg|aac|opus)$/i.test(ext)) ext = '.mp3';
+      let finalPath = path.join(downloadsDir, suggestedName + ext);
+      for (let n = 2; fs.existsSync(finalPath); n += 1) {
+        finalPath = path.join(downloadsDir, `${suggestedName} (${n})${ext}`);
+      }
+      const up = await fetchWithTimeout(audioUrl, { headers: { 'User-Agent': UA } }, 30000);
+      if (!up.ok) {
+        sendJSON(res, { ok: false, error: 'SOURCE_HTTP_' + up.status }, 502);
+        return;
+      }
+      const buf = Buffer.from(await up.arrayBuffer());
+      if (buf.length > 500 * 1024 * 1024) {
+        sendJSON(res, { ok: false, error: 'FILE_TOO_LARGE' }, 413);
+        return;
+      }
+      fs.writeFileSync(finalPath, buf);
+      broadcastRemoteEvent('download', { saved: finalPath, bytes: buf.length });
+      sendJSON(res, { ok: true, saved: finalPath, bytes: buf.length });
+    } catch (err) {
+      console.error('[TrackDownload]', err);
+      sendJSON(res, { ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/spotify/proxy' && req.method === 'POST') {
+    if (!spotifyRequestHasExpectedOrigin(req)) {
+      sendJSON(res, { ok: false, error: 'ORIGIN_REJECTED' }, 403);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const next = appProxy.saveConfig({
+        enabled: body.enabled,
+        protocol: body.protocol,
+        host: body.host,
+        port: body.port,
+        username: body.username,
+        password: body.password === '********' ? undefined : body.password,
+        apps: body.apps,
+      });
+      sendJSON(res, { ok: true, status: appProxy.status(), saved: next.host ? true : false });
+    } catch (err) {
+      sendJSON(res, { ok: false, error: err.message }, 400);
+    }
+    return;
+  }
+
+  if (pn === '/api/spotify/proxy/toggle' && req.method === 'POST') {
+    if (!spotifyRequestHasExpectedOrigin(req)) {
+      sendJSON(res, { ok: false, error: 'ORIGIN_REJECTED' }, 403);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const next = appProxy.saveConfig({ enabled: body.enabled === true });
+      sendJSON(res, { ok: true, status: appProxy.status(), enabled: next.enabled });
+    } catch (err) {
+      sendJSON(res, { ok: false, error: err.message }, 400);
+    }
+    return;
+  }
+
+  if (pn === '/api/spotify/proxy/apps' && req.method === 'POST') {
+    if (!spotifyRequestHasExpectedOrigin(req)) {
+      sendJSON(res, { ok: false, error: 'ORIGIN_REJECTED' }, 403);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const current = appProxy.loadConfig();
+      const next = appProxy.saveConfig(Object.assign({}, current, { apps: normalizeProxyApps(body.apps) }));
+      sendJSON(res, { ok: true, status: appProxy.status() });
+    } catch (err) {
+      sendJSON(res, { ok: false, error: err.message }, 400);
+    }
+    return;
+  }
+
+  if (pn === '/api/spotify/proxy/test' && req.method === 'POST') {
+    if (!spotifyRequestHasExpectedOrigin(req)) {
+      sendJSON(res, { ok: false, error: 'ORIGIN_REJECTED' }, 403);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const result = await testProxyForApp(String(body.app || 'spotify').toLowerCase());
+      sendJSON(res, result);
+    } catch (err) {
+      sendJSON(res, { ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
   if (pn.startsWith('/api/spotify/web-api/')) {
     await proxySpotifyWebApi(req, res, url);
     return;
@@ -7041,6 +7376,149 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // ---------- Phone transfer: upload / library / download / zip ----------
+    if (pn === '/api/remote/upload' && req.method === 'POST') {
+      const inFlight = remoteUploadsInFlight.get(deviceToken) || 0;
+      if (inFlight >= REMOTE_UPLOAD_CONCURRENCY_PER_TOKEN) {
+        sendJSON(res, { ok: false, error: 'TOO_MANY_UPLOADS' }, 429);
+        return;
+      }
+      const relParam = url.searchParams.get('path') || '';
+      const target = resolveRemoteMusicPath(relParam);
+      if (!target) {
+        sendJSON(res, { ok: false, error: 'INVALID_PATH' }, 400);
+        return;
+      }
+      let declaredSize = Number(req.headers['content-length']) || 0;
+      if (declaredSize > REMOTE_UPLOAD_MAX_BYTES) {
+        sendJSON(res, { ok: false, error: 'FILE_TOO_LARGE', maxBytes: REMOTE_UPLOAD_MAX_BYTES }, 413);
+        return;
+      }
+      fs.mkdirSync(path.dirname(target.abs), { recursive: true });
+      // Collision: append " (2)", " (3)"... before the extension.
+      let finalAbs = target.abs;
+      if (fs.existsSync(finalAbs)) {
+        const ext = path.extname(finalAbs);
+        const base = finalAbs.slice(0, finalAbs.length - ext.length);
+        for (let n = 2; n < 1000; n += 1) {
+          const candidate = `${base} (${n})${ext}`;
+          if (!fs.existsSync(candidate)) { finalAbs = candidate; break; }
+        }
+      }
+      const tmpAbs = finalAbs + '.tmp';
+      remoteUploadsInFlight.set(deviceToken, inFlight + 1);
+      const releaseSlot = () => {
+        const count = remoteUploadsInFlight.get(deviceToken) || 1;
+        if (count <= 1) remoteUploadsInFlight.delete(deviceToken);
+        else remoteUploadsInFlight.set(deviceToken, count - 1);
+      };
+      const writeStream = fs.createWriteStream(tmpAbs);
+      let received = 0;
+      let aborted = false;
+      req.on('data', chunk => {
+        received += chunk.length;
+        if (received > REMOTE_UPLOAD_MAX_BYTES) {
+          aborted = true;
+          writeStream.destroy();
+          try { req.destroy(); } catch (_) {}
+          fs.promises.unlink(tmpAbs).catch(() => {});
+          releaseSlot();
+          sendJSON(res, { ok: false, error: 'FILE_TOO_LARGE', maxBytes: REMOTE_UPLOAD_MAX_BYTES }, 413);
+        }
+      });
+      req.pipe(writeStream);
+      writeStream.on('finish', async () => {
+        if (aborted) return;
+        releaseSlot();
+        try { await fs.promises.rename(tmpAbs, finalAbs); } catch (_) {}
+        const savedRel = path.relative(REMOTE_MUSIC_DIR, finalAbs).replace(/\\/g, '/');
+        broadcastRemoteEvent('inbox', { saved: savedRel, bytes: received });
+        sendJSON(res, { ok: true, saved: savedRel, bytes: received });
+      });
+      writeStream.on('error', () => {
+        if (aborted) return;
+        releaseSlot();
+        fs.promises.unlink(tmpAbs).catch(() => {});
+        sendJSON(res, { ok: false, error: 'UPLOAD_WRITE_FAILED' }, 500);
+      });
+      req.on('error', () => {
+        if (aborted) return;
+        aborted = true;
+        releaseSlot();
+        writeStream.destroy();
+        fs.promises.unlink(tmpAbs).catch(() => {});
+      });
+      return;
+    }
+
+    if (pn === '/api/remote/library' && req.method === 'GET') {
+      const data = walkRemoteLibrary();
+      sendJSON(res, Object.assign({}, data, {
+        lanUrl: `http://${detectLanAddress()}:${PORT}/remote/`,
+        inboxCount: (data.files || []).filter(f => !f.path.includes('/')).length,
+      }));
+      return;
+    }
+
+    if (pn === '/api/remote/download' && req.method === 'GET') {
+      const resolved = resolveLibraryPath(url.searchParams.get('path'));
+      if (!resolved || !fs.existsSync(resolved.abs) || !fs.statSync(resolved.abs).isFile()) {
+        sendJSON(res, { ok: false, error: 'FILE_NOT_FOUND' }, 404);
+        return;
+      }
+      const name = path.basename(resolved.abs);
+      res.writeHead(200, {
+        'Content-Type': MIME[path.extname(name).toLowerCase()] || 'application/octet-stream',
+        'Content-Disposition': `attachment; filename*=UTF-8''${rfc5987Filename(name)}`,
+        'Content-Length': fs.statSync(resolved.abs).size,
+      });
+      fs.createReadStream(resolved.abs).pipe(res);
+      return;
+    }
+
+    if (pn === '/api/remote/zip' && req.method === 'GET') {
+      const resolved = resolveLibraryPath(url.searchParams.get('dir'));
+      if (!resolved || !fs.existsSync(resolved.abs) || !fs.statSync(resolved.abs).isDirectory()) {
+        sendJSON(res, { ok: false, error: 'DIR_NOT_FOUND' }, 404);
+        return;
+      }
+      try {
+        const zipBuf = buildZipFromDirectory(resolved.abs, path.basename(resolved.abs));
+        const zipName = (path.basename(resolved.abs) || 'library') + '.zip';
+        res.writeHead(200, {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename*=UTF-8''${rfc5987Filename(zipName)}`,
+        });
+        res.end(zipBuf);
+      } catch (err) {
+        if (err.message === 'ZIP_TOO_LARGE') sendJSON(res, { ok: false, error: 'ZIP_TOO_LARGE' }, 413);
+        else { console.error('[RemoteZip]', err); sendJSON(res, { ok: false, error: 'ZIP_FAILED' }, 500); }
+      }
+      return;
+    }
+
+    if (pn === '/api/remote/upload/delete' && req.method === 'POST') {
+      try {
+        const body = await readRequestBody(req);
+        const target = resolveRemoteMusicPath(body.path);
+        if (!target || !fs.existsSync(target.abs)) {
+          sendJSON(res, { ok: false, error: 'FILE_NOT_FOUND' }, 404);
+          return;
+        }
+        // Inbox cleanup only — refuse paths outside the inbox root.
+        if (path.dirname(target.abs) !== REMOTE_MUSIC_DIR && target.rel.includes('/')) {
+          sendJSON(res, { ok: false, error: 'ONLY_INBOX_ROOT_ALLOWED' }, 400);
+          return;
+        }
+        await fs.promises.unlink(target.abs);
+        sendJSON(res, { ok: true });
+      } catch (err) {
+        console.error('[RemoteUploadDelete]', err);
+        sendJSON(res, { ok: false, error: err.message }, 500);
+      }
+      return;
+    }
+
     sendJSON(res, { ok: false, error: 'REMOTE_ROUTE_NOT_FOUND' }, 404);
     return;
   }
@@ -7071,6 +7549,41 @@ const server = http.createServer(async (req, res) => {
   if (pn.startsWith('/remote/')) {
     const relative = path.normalize(pn.replace(/^\/remote\//, '')).replace(/^(\.\.(\/|\\|$))+/, '');
     serveStatic(res, path.join(__dirname, 'public', 'remote', relative));
+    return;
+  }
+
+  // Inbox audio streaming for the PC player (local request only).
+  if (pn === '/api/remote/inbox-audio') {
+    if (!remoteRequestIsLocal(req)) {
+      sendJSON(res, { ok: false, error: 'LOCAL_ONLY' }, 403);
+      return;
+    }
+    const resolved = resolveRemoteMusicPath(url.searchParams.get('path'));
+    if (!resolved || !fs.existsSync(resolved.abs) || !fs.statSync(resolved.abs).isFile()) {
+      res.writeHead(404); res.end(); return;
+    }
+    const stat = fs.statSync(resolved.abs);
+    const range = req.headers.range || '';
+    const headers = {
+      'Content-Type': MIME[path.extname(resolved.abs).toLowerCase()] || 'audio/mpeg',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-store',
+    };
+    if (range) {
+      const match = range.match(/bytes=(\d*)-(\d*)/);
+      let start = match && match[1] ? parseInt(match[1], 10) : 0;
+      let end = match && match[2] ? Math.min(parseInt(match[2], 10), stat.size - 1) : stat.size - 1;
+      if (isNaN(start) || start >= stat.size) { res.writeHead(416); res.end(); return; }
+      res.writeHead(206, Object.assign(headers, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Content-Length': end - start + 1,
+      }));
+      fs.createReadStream(resolved.abs, { start, end }).pipe(res);
+    } else {
+      headers['Content-Length'] = stat.size;
+      res.writeHead(200, headers);
+      fs.createReadStream(resolved.abs).pipe(res);
+    }
     return;
   }
 

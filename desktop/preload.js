@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('desktopWindow', {
     if (!authorization || authorization.ok !== true || !authorization.token) return authorization;
     return ipcRenderer.invoke('mineradio-local-library-import', { token: authorization.token });
   },
+  importInboxMusicFiles: () => ipcRenderer.invoke('mineradio-local-library-import-inbox'),
   readLyricCache: (key) => ipcRenderer.invoke('mineradio-cache-read-lyric', key || ''),
   writeLyricCache: (key, payload) => ipcRenderer.invoke('mineradio-cache-write-lyric', key || '', payload || {}),
   close: (behavior) => ipcRenderer.invoke('desktop-window-close', behavior),

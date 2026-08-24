@@ -183,7 +183,7 @@ const qishuiTrackMetadataCache = createTtlCache(120, 20 * 1000);
 const qishuiPlaybackCache = createTtlCache(120, 4 * 60 * 1000);
 
 function requestText(targetUrl, opts, body) {
-  opts = opts || {};
+  opts = require('./app-proxy').applyToOptions(opts || {}, 'qishui');
   return new Promise((resolve, reject) => {
     const u = new URL(targetUrl);
     const lib = u.protocol === 'https:' ? https : http;

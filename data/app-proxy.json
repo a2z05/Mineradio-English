@@ -1,0 +1,15 @@
+{
+  "enabled": false,
+  "protocol": "http",
+  "host": "127.0.0.1",
+  "port": 8888,
+  "username": "",
+  "password": "",
+  "apps": {
+    "spotify": true,
+    "netease": false,
+    "qq": false,
+    "kugou": false,
+    "qishui": false
+  }
+}

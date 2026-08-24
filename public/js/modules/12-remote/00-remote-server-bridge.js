@@ -132,6 +132,29 @@ function applyRemoteCommand(cmd) {
     case 'search':
       remoteBridgeHandleSearchCommand(payload);
       break;
+    case 'enqueueLocal': {
+      // Play a phone-uploaded inbox file on the PC via the local-only
+      // inbox-audio stream route.
+      var relPath = String(payload && payload.path || '').trim();
+      if (!relPath || relPath.indexOf('..') >= 0) break;
+      var fileName = String(payload && payload.name || relPath.split('/').pop() || 'Inbox track');
+      var localSong = {
+        type: 'local',
+        source: 'local',
+        provider: 'local',
+        name: fileName,
+        artist: 'Local file',
+        album: 'Phone inbox',
+        localKey: ['inbox', relPath].join(':'),
+        localUrl: '/api/remote/inbox-audio?path=' + encodeURIComponent(relPath),
+        duration: 0,
+        __inboxTrack: true,
+      };
+      if (typeof queueItemKey !== 'function' || typeof queueSongNext !== 'function') break;
+      queueSongNext(localSong);
+      if (typeof showToast === 'function') showToast('Playing from inbox: ' + fileName);
+      break;
+    }
   }
   setTimeout(function () { publishRemoteSnapshot('cmd:' + String(cmd.type || '')); }, 120);
 }
@@ -183,6 +206,49 @@ async function pollRemoteCommands() {
     remoteBridgePollBusy = false;
   }
 }
+
+// Save the currently playing track to Downloads/Mineradio via the local
+// server. Uses the source URL captured at playback start.
+async function downloadCurrentTrack() {
+  var song = typeof playQueue !== 'undefined' && Array.isArray(playQueue) ? playQueue[currentIdx] : null;
+  if (!song) {
+    if (typeof showToast === 'function') showToast('No track selected to download');
+    return false;
+  }
+  if (song.type === 'local' || song.source === 'local' || song.localUrl) {
+    if (typeof showToast === 'function') showToast('Already a local file');
+    return false;
+  }
+  var url = String(window.__mineradioLastSourceUrl || '');
+  var playedSong = window.__mineradioLastSourceSong || {};
+  if (playedSong.id !== undefined && song.id !== undefined && String(playedSong.id) !== String(song.id)) {
+    // Stale capture from a different track — refuse rather than save the wrong file.
+    if (typeof showToast === 'function') showToast('Play the track once, then download');
+    return false;
+  }
+  if (!url) {
+    if (typeof showToast === 'function') showToast('Play the track once, then download');
+    return false;
+  }
+  var name = [song.name || song.title || 'track', song.artist || ''].filter(Boolean).join(' - ');
+  try {
+    var result = await apiJson('/api/download/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url, name: name })
+    });
+    if (result && result.ok) {
+      if (typeof showToast === 'function') showToast('Saved to Downloads/Mineradio ✓');
+      return true;
+    }
+    if (typeof showToast === 'function') showToast('Download failed: ' + ((result && result.error) || 'unknown'));
+    return false;
+  } catch (err) {
+    if (typeof showToast === 'function') showToast('Download failed: ' + (err && err.message || err));
+    return false;
+  }
+}
+window.downloadCurrentTrack = downloadCurrentTrack;
 
 function startRemoteServerBridge() {
   if (remoteBridgePublishTimer || remoteBridgeCmdTimer) return;

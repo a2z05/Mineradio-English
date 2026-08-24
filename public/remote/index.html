@@ -183,6 +183,32 @@
     }
     #search-status { color: var(--muted); font-size: 12px; margin: 8px 2px 0; min-height: 15px; }
     [hidden] { display: none !important; }
+
+    /* Library + Transfer */
+    .crumbs { display: flex; align-items: center; gap: 6px; margin: 10px 2px 0; font-size: 13px; color: var(--muted); }
+    .crumbs button {
+      border: none; background: var(--surface-2); color: var(--text);
+      border-radius: 8px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+    }
+    .lib-note { color: var(--muted); font-size: 12px; margin: 6px 2px 0; }
+    .upload-box { margin-top: 10px; padding: 14px; border-radius: var(--radius);
+      background: var(--surface); border: 1px dashed var(--line); text-align: center; }
+    .upload-box p { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+    .upload-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .upload-actions button {
+      border: none; cursor: pointer; color: #fff; font-weight: 700; font-size: 13px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 11px; padding: 10px 16px;
+    }
+    .upload-actions button.ghost { background: var(--surface-2); color: var(--text); }
+    #upload-progress-list { list-style: none; margin-top: 10px; }
+    #upload-progress-list li { background: var(--surface); border-radius: 10px; padding: 7px 10px; margin-bottom: 5px; font-size: 12px; }
+    #upload-progress-list .ubar { height: 4px; border-radius: 2px; background: var(--surface-2); margin-top: 5px; overflow: hidden; }
+    #upload-progress-list .ubar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); width: 0%; }
+    #upload-progress-list li.done .ubar i { background: #35d07f; }
+    #upload-progress-list li.err .ubar i { background: var(--danger); }
+    .import-btn { width: 100%; margin-top: 10px; border: none; cursor: pointer; color: var(--text);
+      background: var(--surface-2); border-radius: 11px; padding: 10px 0; font-size: 13px; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -242,6 +268,8 @@
       <div class="tabs">
         <button id="tab-queue" class="active" type="button">Queue</button>
         <button id="tab-search" type="button">Search</button>
+        <button id="tab-library" type="button">Library</button>
+        <button id="tab-transfer" type="button">Transfer</button>
       </div>
 
       <section id="sec-queue" class="panel">
@@ -256,6 +284,31 @@
         </form>
         <p id="search-status"></p>
         <ul id="search-results" class="rowlist"></ul>
+      </section>
+
+      <section id="sec-library" class="panel" hidden>
+        <div class="crumbs">
+          <button id="lib-up" type="button" hidden>&#8592; Up</button>
+          <span id="lib-path"></span>
+        </div>
+        <p id="lib-note" class="lib-note"></p>
+        <ul id="library-list" class="rowlist"></ul>
+        <p id="library-empty" class="empty">PC library is empty — upload music from the Transfer tab.</p>
+      </section>
+
+      <section id="sec-transfer" class="panel" hidden>
+        <div class="upload-box">
+          <p>Pick songs or a whole folder — uploads land in the PC's inbox (<code>data/music-inbox</code>).</p>
+          <div class="upload-actions">
+            <button type="button" onclick="document.getElementById('upload-files').click()">Pick files</button>
+            <button type="button" class="ghost" onclick="document.getElementById('upload-folder').click()">Pick folder</button>
+            <input id="upload-files" type="file" multiple accept="audio/*" hidden>
+            <input id="upload-folder" type="file" multiple webkitdirectory hidden>
+          </div>
+        </div>
+        <button id="upload-pause" class="import-btn" type="button" hidden>Pause uploads</button>
+        <ul id="upload-progress-list"></ul>
+        <p id="transfer-note" class="empty"></p>
       </section>
     </div>
   </div>

@@ -4430,6 +4430,40 @@ ipcMain.handle('mineradio-local-library-import', async (event, payload = {}) => 
   }
 });
 
+// Import phone-uploaded files from the server's music-inbox into the
+// persistent local library. Inbox root only — no user-supplied paths.
+ipcMain.handle('mineradio-local-library-import-inbox', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, count: 0, tracks: [], error: 'UNTRUSTED_SENDER' };
+  try {
+    const { REMOTE_MUSIC_DIR: inboxDir } = require('./server-remote-music-dir');
+    const fsMod = require('fs');
+    const pathMod = require('path');
+    const files = [];
+    const walkInbox = (dir) => {
+      let entries;
+      try { entries = fsMod.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+      for (const entry of entries) {
+        const absPath = pathMod.join(dir, entry.name);
+        if (entry.isDirectory()) { walkInbox(absPath); continue; }
+        if (!entry.isFile() || !/\.(mp3|flac|wav|ogg|m4a|aac|opus)$/i.test(entry.name)) continue;
+        let filePath = '';
+        try {
+          filePath = fsMod.realpathSync.native ? fsMod.realpathSync.native(absPath) : fsMod.realpathSync(absPath);
+        } catch (_) { continue; }
+        files.push({
+          path: filePath,
+          relativePath: pathMod.relative(inboxDir, absPath).replace(/\\/g, '/'),
+        });
+      }
+    };
+    walkInbox(inboxDir);
+    if (!files.length) return { ok: true, count: 0, tracks: [] };
+    return await localMusicLibrary.importFiles(files.slice(0, 50000), { replace: false });
+  } catch (error) {
+    return { ok: false, count: 0, tracks: [], error: error.code || error.message || 'INBOX_IMPORT_FAILED' };
+  }
+});
+
 ipcMain.handle('mineradio-cache-read-lyric', async (_event, key) => {
   try {
     const file = lyricCacheFilePath(key);

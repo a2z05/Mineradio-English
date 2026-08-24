@@ -1,7 +1,7 @@
 'use strict';
 // Mineradio Remote service worker — cache-first app shell, network-only for /api/*.
 
-var CACHE_VERSION = 'mr-remote-v1';
+var CACHE_VERSION = 'mr-remote-v2';
 var SHELL = ['index.html', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', function (event) {

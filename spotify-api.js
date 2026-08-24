@@ -20,6 +20,7 @@ const DEFAULT_SPOTIFY_SCOPES = [
   'playlist-modify-public',
 ];
 const SPOTIFY_LIKED_PLAYLIST_ID = 'spotify-liked';
+const spotifyProxy = require('./app-proxy');
 const SPOTIFY_UA = 'Mineradio/2.1.0 (Spotify Web API bridge)';
 const SPOTIFY_SEARCH_LIMIT_MAX = 10;
 const SPOTIFY_PLAYLIST_PAGE_LIMIT = 50;
@@ -308,12 +309,19 @@ function getSpotifyConfig() {
 }
 
 function requestText(targetUrl, opts, body) {
-  opts = opts || {};
+  opts = spotifyProxy.applyToOptions(opts || {}, 'spotify');
   const timeoutMs = Number(opts.timeoutMs) || 10000;
   const method = opts.method || (body == null ? 'GET' : 'POST');
   const headers = Object.assign({ 'User-Agent': SPOTIFY_UA }, opts.headers || {});
   return new Promise((resolve, reject) => {
-    const req = https.request(targetUrl, { method, headers, timeout: timeoutMs }, (res) => {
+    const reqOpts = { method, headers, timeout: timeoutMs };
+    if (opts.dispatcher && typeof opts.dispatcher.createConnection === 'function') {
+      // Route through the proxy dispatcher (undici-style agent).
+      reqOpts.createConnection = (options, cb) => opts.dispatcher.createConnection(options, cb);
+    } else if (opts.agent) {
+      reqOpts.agent = opts.agent;
+    }
+    const req = https.request(targetUrl, reqOpts, (res) => {
       const chunks = [];
       res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
