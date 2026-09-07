@@ -1,7 +1,7 @@
 'use strict';
 // app-proxy — one shared HTTP(S)/SOCKS proxy with per-app selection.
-// Lets the user route individual music services (Spotify, NetEase, QQ,
-// Kugou, Soda/Qishui) through a proxy where they're geo-blocked, while
+// Lets the user route individual music services (Spotify, YouTube Music,
+// Deezer, SoundCloud) through a proxy where they're geo-blocked, while
 // everything else connects directly. Master `enabled` switch kills all of it.
 //
 // Two transport mechanisms are provided because the codebase has two kinds
@@ -18,7 +18,7 @@ const tls = require('tls');
 
 const PROXY_CONFIG_FILE = path.join(__dirname, 'data', 'app-proxy.json');
 
-const PROXY_APPS = ['spotify', 'netease', 'qq', 'kugou', 'qishui'];
+const PROXY_APPS = ['spotify', 'ytmusic', 'deezer', 'soundcloud'];
 const PROXY_PROTOCOLS = ['http', 'https', 'socks5'];
 
 const DEFAULT_CONFIG = {
@@ -28,7 +28,7 @@ const DEFAULT_CONFIG = {
   port: 0,
   username: '',
   password: '',
-  apps: { spotify: true, netease: false, qq: false, kugou: false, qishui: false },
+  apps: { spotify: true, ytmusic: true, deezer: true, soundcloud: true },
 };
 
 let cachedConfig = null;

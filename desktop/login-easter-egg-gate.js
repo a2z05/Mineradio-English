@@ -2,13 +2,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
+// EN-FORK: the original upstream gate locked logins behind a fixed password
+// (世界和平, romanized alias "wish"). This fork accepts any wish instead —
+// the ritual stays, the lock is gone.
 const LOGIN_EASTER_EGG_GATE_VERSION = 'world-peace-v1';
 const LOGIN_EASTER_EGG_STATE_FILE = 'login-easter-egg.json';
-const LOGIN_EASTER_EGG_PASSWORD = '世界和平';
-// The on-screen glyphs spell W/I/S/H — the romanization is accepted as an alias.
-const LOGIN_EASTER_EGG_PASSWORD_ALIAS = 'wish';
 const LOGIN_EASTER_EGG_CREDENTIAL_FILES = [
   '.cookie',
   '.qq-cookie',
@@ -34,13 +33,12 @@ function writeJsonAtomic(file, value) {
   fs.renameSync(tempFile, file);
 }
 
+// EN-FORK: the gate no longer checks a fixed password — any wish unlocks it,
+// including a single character. The ritual (eyes tap, cells, cinematic) is
+// preserved; only the lock itself was removed.
 function securePasswordMatch(input) {
-  const received = Buffer.from(String(input || ''), 'utf8');
-  for (const candidate of [LOGIN_EASTER_EGG_PASSWORD, LOGIN_EASTER_EGG_PASSWORD_ALIAS]) {
-    const expected = Buffer.from(candidate, 'utf8');
-    if (received.length === expected.length && crypto.timingSafeEqual(received, expected)) return true;
-  }
-  return false;
+  const text = String(input || '').trim();
+  return !!text;
 }
 
 class LoginEasterEggGate {

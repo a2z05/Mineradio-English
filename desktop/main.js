@@ -2153,6 +2153,33 @@ function writeStartupState(phase, detail = {}) {
   }
 }
 
+// EN-FORK: purge Chromium's HTTP cache once per app version. Static assets are
+// served with week-long max-age by older installed builds; without this, an
+// upgraded exe can keep rendering the previous version's cached CSS/JS until
+// the cache ages out. Runs before any window exists, so the first load always
+// re-fetches current assets from the local server.
+async function purgeHttpCacheIfAppVersionChanged() {
+  const markerFile = path.join(app.getPath('userData'), 'http-cache-purged-for.json');
+  let lastPurgedFor = '';
+  try {
+    if (fs.existsSync(markerFile)) lastPurgedFor = fs.readFileSync(markerFile, 'utf8').trim();
+  } catch (_) { }
+  if (lastPurgedFor === app.getVersion()) return false;
+  try {
+    await session.defaultSession.clearCache();
+  } catch (error) {
+    console.warn('[StartupState] HTTP cache clear failed:', error && error.message || error);
+    return false;
+  }
+  try {
+    fs.writeFileSync(markerFile, app.getVersion(), 'utf8');
+  } catch (error) {
+    console.warn('[StartupState] cache marker write skipped:', error.message);
+  }
+  writeStartupState('http-cache-purged', { purgedForVersion: app.getVersion(), previousMarker: lastPurgedFor || null });
+  return true;
+}
+
 function writeStartupErrorLog(context, code, error) {
   const file = startupErrorLogPath();
   const detail = startupErrorText(error);
@@ -4248,6 +4275,18 @@ ipcMain.handle('mineradio-cache-set-settings', async (_event, payload = {}) => {
   }
 });
 
+// EN-FORK: manual "Reload cache" action — clears Chromium's HTTP cache for the
+// default session (covers, CSS/JS, audio chunks). The renderer reloads itself
+// afterwards so every asset re-fetches from the local server.
+ipcMain.handle('mineradio-cache-clear-http', async () => {
+  try {
+    await session.defaultSession.clearCache();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || 'CACHE_CLEAR_FAILED' };
+  }
+});
+
 ipcMain.handle('mineradio-wallpaper-engine-list', async (event, payload = {}) => {
   try {
     if (!isTrustedWallpaperEngineIpc(event)) return { ok: false, projects: [], count: 0, error: 'WALLPAPER_ENGINE_UNTRUSTED_CALLER' };
@@ -4716,7 +4755,10 @@ ipcMain.handle('mineradio-local-library-import', async (event, payload = {}) => 
 ipcMain.handle('mineradio-local-library-import-inbox', async (event) => {
   if (!isTrustedMainWindowIpc(event)) return { ok: false, count: 0, tracks: [], error: 'UNTRUSTED_SENDER' };
   try {
-    const { REMOTE_MUSIC_DIR: inboxDir } = require('./server-remote-music-dir');
+    // Prefer the configured phone-transfer folder; fall back to the env-based default.
+    let inboxDir = '';
+    try { inboxDir = require('./remote-config-store').effective().inboxDir || ''; } catch (_) {}
+    if (!inboxDir) inboxDir = require('./server-remote-music-dir').REMOTE_MUSIC_DIR;
     const fsMod = require('fs');
     const pathMod = require('path');
     const files = [];
@@ -4743,6 +4785,18 @@ ipcMain.handle('mineradio-local-library-import-inbox', async (event) => {
   } catch (error) {
     return { ok: false, count: 0, tracks: [], error: error.code || error.message || 'INBOX_IMPORT_FAILED' };
   }
+});
+
+// Native folder picker for phone-remote settings. mode 'library' picks a
+// read-only music library root; anything else picks the transfer inbox.
+// Resolves to the chosen absolute path, or null when canceled.
+ipcMain.handle('mineradio-remote-pick-folder', async (_event, mode) => {
+  const result = await dialog.showOpenDialog({
+    title: mode === 'library' ? 'Choose a Music Library Folder' : 'Choose the Phone Transfer Folder',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (!result || result.canceled || !Array.isArray(result.filePaths) || !result.filePaths[0]) return null;
+  return result.filePaths[0];
 });
 
 // ---------- EN-FORK: now-playing overlay IPC ----------
@@ -5680,6 +5734,27 @@ async function createWindowOnce() {
   hookExplorerRestartForFullDesktop(win);
   writeStartupState('window-created', { windowCreatedAt: Date.now() });
 
+  // EN-FORK DEBUG: F12 toggles DevTools docked in the app window. Handy for
+  // inspecting the login modal / remote UI with the element picker.
+  const openDevToolsIfRequested = () => {
+    if (process.env.MINERADIO_DEVTOOLS !== '1') return;
+    try {
+      if (win.webContents.isDevToolsOpened()) win.webContents.closeDevTools();
+      else win.webContents.openDevTools({ mode: 'detach' });
+    } catch (_) {}
+  };
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F12') {
+      event.preventDefault();
+      openDevToolsIfRequested();
+    }
+  });
+  if (process.env.MINERADIO_DEVTOOLS === '1') {
+    win.webContents.once('did-finish-load', () => {
+      try { win.webContents.openDevTools({ mode: 'detach' }); } catch (_) {}
+    });
+  }
+
   win.__mineradioStartupShowTimer = setTimeout(() => {
     showMainWindowSafely(win, 'watchdog');
   }, STARTUP_SHOW_WATCHDOG_MS);
@@ -5968,6 +6043,11 @@ if (!gotSingleInstanceLock) {
   routeAudioFilesToPlayer(extractAudioPaths(process.argv));
 
   app.whenReady().then(async () => {
+    try {
+      await purgeHttpCacheIfAppVersionChanged();
+    } catch (error) {
+      console.warn('[StartupState] version-guarded cache purge failed:', error && error.message || error);
+    }
     loadOverlayConfig();
     registerOverlayShortcuts();
     try {

@@ -58,38 +58,18 @@ function setLoginEasterEggMode(locked) {
 }
 
 function bindLoginEasterEggGate() {
-  var input = document.getElementById('login-easter-egg-input');
-  var shell = input && input.closest ? input.closest('.login-easter-input-shell') : null;
-  if (!input || input.__loginEasterEggBound) return;
-  input.__loginEasterEggBound = true;
-  input.addEventListener('compositionstart', function () {
-    clearLoginEasterEggFocusRetries();
-    loginEasterEggState.composing = true;
-  });
-  input.addEventListener('compositionend', function (event) {
-    loginEasterEggState.composing = false;
-    handleLoginEasterEggInput(event);
-  });
-  input.addEventListener('beforeinput', function (event) {
-    clearLoginEasterEggFocusRetries();
-    if (!loginEasterEggState.prefixLocked || !/^delete/.test(String(event.inputType || ''))) return;
-    if ((input.selectionStart || 0) <= 2 && (input.selectionEnd || 0) <= 2) event.preventDefault();
-  });
-  input.addEventListener('input', handleLoginEasterEggInput);
-  input.addEventListener('keydown', function (event) {
-    clearLoginEasterEggFocusRetries();
-    if (event.isComposing || loginEasterEggState.composing || event.keyCode === 229) return;
-    if (event.key === 'Enter') {
+  // EN-FORK: the typing ritual is gone. The whole gate is now:
+  // tap the eyes five times -> "press any key" -> unlock.
+  if (!bindLoginEasterEggGate._bound) {
+    bindLoginEasterEggGate._bound = true;
+    document.addEventListener('keydown', function (event) {
+      if (!loginEasterEggState.revealed || loginEasterEggState.cinematicActive) return;
+      var modal = document.getElementById('login-modal');
+      if (!modal || !modal.classList.contains('show')) return;
       event.preventDefault();
-      validateLoginEasterEggValue();
-    }
-  });
-  if (shell) {
-    shell.addEventListener('pointerdown', function () {
-      clearLoginEasterEggFocusRetries();
-      window.requestAnimationFrame(function () { focusLoginEasterEggInput('wish-pointerdown-frame'); });
-    });
-    shell.addEventListener('click', function () { focusLoginEasterEggInput('wish-click'); });
+      event.stopPropagation();
+      finishLoginEasterEggAnyKey();
+    }, true);
   }
   var cinematic = document.getElementById('login-easter-unlock-cinematic');
   if (cinematic && !cinematic.__loginEasterEggBound) {
@@ -125,8 +105,9 @@ function replayLoginEasterEggClass(node, className) {
 }
 
 function handleLoginEasterEggTap() {
+  // EN-FORK: a tap after the reveal counts as the "any key" finisher.
   if (loginEasterEggState.revealed) {
-    focusLoginEasterEggInput();
+    finishLoginEasterEggAnyKey();
     return;
   }
   loginEasterEggState.clickCount = Math.min(5, loginEasterEggState.clickCount + 1);
@@ -148,12 +129,39 @@ function handleLoginEasterEggTap() {
   if (loginEasterEggState.clickCount >= 5) revealLoginEasterEggWish();
 }
 
+// EN-FORK: after five taps the ritual ends with a single keypress — no more
+// typing a wish into cells. Any key (or another tap on the eyes) unlocks.
 function revealLoginEasterEggWish() {
   loginEasterEggState.revealed = true;
-  restoreLoginEasterEggInputSurface(false);
   var gate = document.getElementById('login-easter-egg-gate');
-  if (gate) gate.classList.add('is-revealed');
-  scheduleLoginEasterEggInputFocus();
+  if (gate) {
+    gate.classList.add('is-revealed');
+    gate.classList.add('any-key');
+  }
+  var hint = document.getElementById('login-easter-hint');
+  if (hint) hint.textContent = '';
+}
+
+async function finishLoginEasterEggAnyKey() {
+  if (!loginEasterEggState.revealed || loginEasterEggState.cinematicActive || loginEasterEggState.validating) return;
+  loginEasterEggState.validating = true;
+  var result;
+  try { result = await requestLoginEasterEggUnlock('wish'); }
+  catch (error) { result = { ok: false, error: String(error && error.message || error) }; }
+  if (result && result.ok && result.unlocked) {
+    playLoginEasterEggUnlockCinematic();
+    return;
+  }
+  loginEasterEggState.validating = false;
+  if (result && result.error === 'LOGIN_EASTER_EGG_RESET_INCOMPLETE') {
+    setLoginEasterEggStatus('Credential cleanup incomplete. Restart and try again', 'error');
+    return;
+  }
+  if (result && result.error === 'LOGIN_EASTER_EGG_STATE_WRITE_FAILED') {
+    setLoginEasterEggStatus('Could not save unlock state. Free up disk space and try again', 'error');
+    return;
+  }
+  setLoginEasterEggStatus('The wish could not be granted — try again', 'error');
 }
 
 function clearLoginEasterEggFocusRetries() {
@@ -177,105 +185,11 @@ function requestLoginEasterEggKeyboardFocus(reason) {
   }
 }
 
-function scheduleLoginEasterEggInputFocus() {
-  clearLoginEasterEggFocusRetries();
-  [0, 180, 920, 1480].forEach(function (delay) {
-    loginEasterEggState.focusRetryTimers.push(window.setTimeout(function () {
-      focusLoginEasterEggInput('reveal-' + delay);
-    }, delay));
-  });
-}
-
-function restoreLoginEasterEggInputSurface(clearValue) {
-  var input = document.getElementById('login-easter-egg-input');
-  if (!input) return null;
-  input.disabled = false;
-  input.readOnly = false;
-  input.tabIndex = 0;
-  input.removeAttribute('disabled');
-  input.removeAttribute('readonly');
-  input.removeAttribute('inert');
-  input.removeAttribute('aria-disabled');
-  input.style.removeProperty('pointer-events');
-  var shell = input.closest ? input.closest('.login-easter-input-shell') : null;
-  var wish = document.getElementById('login-easter-egg-wish');
-  [shell, wish].forEach(function (node) {
-    if (!node) return;
-    node.removeAttribute('inert');
-    node.removeAttribute('aria-disabled');
-  });
-  if (clearValue) input.value = '';
-  return input;
-}
-
-function focusLoginEasterEggInput(reason) {
-  var input = restoreLoginEasterEggInputSurface(false);
-  if (!input || !loginEasterEggState.revealed || loginEasterEggState.composing) return;
-  clearLoginEasterEggFocusRetries();
-  if (document.activeElement === input && document.hasFocus()) {
-    return;
-  }
-  if (document.hasFocus()) {
-    input.focus({ preventScroll: true });
-    try {
-      var end = input.value.length;
-      input.setSelectionRange(end, end);
-    } catch (_) { }
-    return;
-  }
-  var requestId = (Number(loginEasterEggState.focusRequestId) || 0) + 1;
-  loginEasterEggState.focusRequestId = requestId;
-  function applyInputFocus() {
-    if (requestId !== loginEasterEggState.focusRequestId ||
-        !loginEasterEggState.revealed ||
-        loginEasterEggState.cinematicActive ||
-        loginEasterEggState.composing) return;
-    input.focus({ preventScroll: true });
-    try {
-      var end = input.value.length;
-      input.setSelectionRange(end, end);
-    } catch (_) { }
-  }
-  requestLoginEasterEggKeyboardFocus(reason || 'focus').then(function () {
-    applyInputFocus();
-    window.requestAnimationFrame(applyInputFocus);
-  });
-}
-
-function normalizeLoginEasterEggCharacters(value) {
-  return Array.from(String(value || '').replace(/\s+/g, '')).slice(0, 4);
-}
-
-function loginEasterEggVisibleValue(inputType) {
-  var input = document.getElementById('login-easter-egg-input');
-  var chars = normalizeLoginEasterEggCharacters(input ? input.value : '');
-  if (!loginEasterEggState.prefixLocked) return chars.join('');
-  var suffix;
-  if (chars[0] === '世' && chars[1] === '界') suffix = chars.slice(2, 4);
-  else if (/^delete/.test(String(inputType || '')) && chars.length < 2) suffix = [];
-  else suffix = chars.slice(-2);
-  return '世界' + suffix.join('');
-}
-
-function renderLoginEasterEggCells(value) {
-  var chars = Array.from(String(value || ''));
-  var cells = document.querySelectorAll('#login-easter-egg-cells .login-easter-cell');
-  for (var i = 0; i < cells.length; i++) {
-    cells[i].textContent = chars[i] || '';
-    cells[i].classList.toggle('filled', !!chars[i]);
-    cells[i].classList.toggle('fixed', loginEasterEggState.prefixLocked && i < 2);
-  }
-}
-
-function handleLoginEasterEggInput(event) {
-  if (loginEasterEggState.composing || loginEasterEggState.validating) return;
-  var input = document.getElementById('login-easter-egg-input');
-  if (!input) return;
-  var value = loginEasterEggVisibleValue(event && event.inputType);
-  input.value = value;
-  renderLoginEasterEggCells(value);
-  if (Array.from(value).length === 4) validateLoginEasterEggValue();
-}
+// EN-FORK: the typing ritual was removed — no input surface to restore or
+// focus. Kept as no-ops so any straggler callers stay harmless.
+function scheduleLoginEasterEggInputFocus() { }
+function restoreLoginEasterEggInputSurface(clearValue) { return null; }
+function focusLoginEasterEggInput(_reason) { }
 
 function setLoginEasterEggStatus(message, mode) {
   var status = document.getElementById('login-easter-status');
@@ -284,22 +198,13 @@ function setLoginEasterEggStatus(message, mode) {
   status.dataset.mode = mode || '';
 }
 
-function resetLoginEasterEggInputAfterError() {
-  var input = document.getElementById('login-easter-egg-input');
-  if (!input) return;
-  input.value = loginEasterEggState.prefixLocked ? '世界' : '';
-  renderLoginEasterEggCells(input.value);
-  loginEasterEggState.validating = false;
-  focusLoginEasterEggInput();
-}
-
 async function requestLoginEasterEggUnlock(value) {
   var api = window.desktopWindow;
   if (api && typeof api.unlockLoginEasterEgg === 'function') {
     return api.unlockLoginEasterEgg(value);
   }
-  var previewPasswords = [['世', '界', '和', '平'].join(''), 'wish'];
-  if (!previewPasswords.includes(value)) return { ok: false, unlocked: false, error: 'LOGIN_EASTER_EGG_INVALID' };
+  // EN-FORK: any wish unlocks in browser preview too.
+  if (!value) return { ok: false, unlocked: false, error: 'LOGIN_EASTER_EGG_INVALID' };
   try { localStorage.setItem(LOGIN_EASTER_EGG_BROWSER_PREVIEW_KEY, '1'); } catch (_) { }
   return { ok: true, unlocked: true, browserPreview: true };
 }
@@ -335,11 +240,9 @@ function resetLoginEasterEggUiForReplay() {
   if (active && typeof active.blur === 'function') {
     try { active.blur(); } catch (_) { }
   }
-  var input = restoreLoginEasterEggInputSurface(true);
-  renderLoginEasterEggCells('');
   setLoginEasterEggStatus('', '');
   var gate = document.getElementById('login-easter-egg-gate');
-  if (gate) gate.classList.remove('is-revealed');
+  if (gate) gate.classList.remove('is-revealed', 'any-key');
   var trigger = document.getElementById('login-easter-eye-trigger');
   if (trigger) {
     trigger.classList.remove('tap-feedback');
@@ -362,38 +265,9 @@ function resetLoginEasterEggUiForReplay() {
 }
 
 async function validateLoginEasterEggValue() {
-  if (loginEasterEggState.validating || loginEasterEggState.composing) return;
-  var input = document.getElementById('login-easter-egg-input');
-  if (!input) return;
-  var value = loginEasterEggVisibleValue('');
-  if (Array.from(value).length !== 4) return;
-  loginEasterEggState.validating = true;
-  var result;
-  try { result = await requestLoginEasterEggUnlock(value); }
-  catch (error) { result = { ok: false, error: String(error && error.message || error) }; }
-  if (result && result.ok && result.unlocked) {
-    playLoginEasterEggUnlockCinematic();
-    return;
-  }
-  if (result && result.error === 'LOGIN_EASTER_EGG_RESET_INCOMPLETE') {
-    setLoginEasterEggStatus('Credential cleanup incomplete. Restart and try again', 'error');
-    loginEasterEggState.validating = false;
-    return;
-  }
-  if (result && result.error === 'LOGIN_EASTER_EGG_STATE_WRITE_FAILED') {
-    setLoginEasterEggStatus('Could not save unlock state. Free up disk space and try again', 'error');
-    loginEasterEggState.validating = false;
-    return;
-  }
-  loginEasterEggState.attempts += 1;
-  if (loginEasterEggState.attempts === 3) {
-    loginEasterEggState.prefixLocked = true;
-    setLoginEasterEggStatus("We've picked the first two characters for you", 'hint');
-  } else {
-    setLoginEasterEggStatus(loginEasterEggState.attempts < 3 ? 'Not quite the wish' : 'Think about the last two characters', 'error');
-  }
-  replayLoginEasterEggClass(document.getElementById('login-easter-egg-wish'), 'error-shake');
-  window.setTimeout(resetLoginEasterEggInputAfterError, 430);
+  // EN-FORK: kept for compatibility — the typing ritual is gone; the unlock
+  // path is finishLoginEasterEggAnyKey(). This stub just forwards to it.
+  return finishLoginEasterEggAnyKey();
 }
 
 function prepareLoginEasterEggPixelPhrase(phrase) {
@@ -441,9 +315,9 @@ function playLoginEasterEggUnlockCinematic() {
   var cinematic = document.getElementById('login-easter-unlock-cinematic');
   var phrase = document.getElementById('login-easter-unlock-phrase');
   prepareLoginEasterEggPixelPhrase(phrase);
-  var sourceCells = Array.prototype.slice.call(document.querySelectorAll('#login-easter-egg-cells .login-easter-cell'));
+  // EN-FORK: the typing cells are gone — the letters just float in.
   var phraseChars = phrase ? Array.prototype.slice.call(phrase.querySelectorAll('span')) : [];
-  if (!cinematic || sourceCells.length !== 4 || phraseChars.length !== 4) {
+  if (!cinematic || phraseChars.length !== 4) {
     completeLoginEasterEggUnlock();
     return;
   }
@@ -456,28 +330,18 @@ function playLoginEasterEggUnlockCinematic() {
     charNode.style.removeProperty('--extract-y');
   });
   window.requestAnimationFrame(function () {
-    phraseChars.forEach(function (charNode, index) {
-      var sourceRect = sourceCells[index].getBoundingClientRect();
-      var targetRect = charNode.getBoundingClientRect();
-      var fromX = sourceRect.left + sourceRect.width / 2 - (targetRect.left + targetRect.width / 2);
-      var fromY = sourceRect.top + sourceRect.height / 2 - (targetRect.top + targetRect.height / 2);
-      charNode.style.setProperty('--extract-x', fromX.toFixed(2) + 'px');
-      charNode.style.setProperty('--extract-y', fromY.toFixed(2) + 'px');
-    });
-    cinematic.classList.add('is-positioned');
+    // No cell extraction anymore — go straight to the float-in.
+    cinematic.classList.add('is-positioned', 'is-extracting');
     void cinematic.offsetWidth;
-    window.requestAnimationFrame(function () {
-      cinematic.classList.add('is-extracting');
-      window.setTimeout(function () {
-        if (modal) modal.classList.add('login-easter-egg-unlocking');
-      }, 520);
-      window.setTimeout(function () {
-        if (!loginEasterEggState.cinematicActive) return;
-        loginEasterEggState.cinematicReady = true;
-        cinematic.classList.add('is-ready');
-        try { cinematic.focus({ preventScroll: true }); } catch (_) { }
-      }, 2700);
-    });
+    window.setTimeout(function () {
+      if (modal) modal.classList.add('login-easter-egg-unlocking');
+    }, 520);
+    window.setTimeout(function () {
+      if (!loginEasterEggState.cinematicActive) return;
+      loginEasterEggState.cinematicReady = true;
+      cinematic.classList.add('is-ready');
+      try { cinematic.focus({ preventScroll: true }); } catch (_) { }
+    }, 2700);
   });
 }
 
@@ -579,5 +443,5 @@ if (typeof document !== 'undefined') {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { normalizeLoginEasterEggCharacters: normalizeLoginEasterEggCharacters };
+  module.exports = { finishLoginEasterEggAnyKey: finishLoginEasterEggAnyKey };
 }

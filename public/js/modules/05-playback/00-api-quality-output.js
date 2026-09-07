@@ -27,12 +27,17 @@ function normalizePlaybackQuality(value) {
   if (value === 'standard' || value === 'normal' || value === 'std') return 'standard';
   return 'hires';
 }
+// EN-FORK global swap: YouTube Music is the default playback provider.
 function normalizePlaybackProvider(provider) {
+  if (provider === 'ytmusic') return 'ytmusic';
+  if (provider === 'deezer') return 'deezer';
+  if (provider === 'soundcloud') return 'soundcloud';
+  if (provider === 'spotify') return 'spotify';
   if (provider === 'qq') return 'qq';
   if (provider === 'kugou') return 'kugou';
   if (provider === 'qishui') return 'qishui';
-  if (provider === 'spotify') return 'spotify';
-  return 'netease';
+  if (provider === 'netease') return 'netease';
+  return 'ytmusic';
 }
 function normalizePlaybackQualityForProvider(value, provider) {
   provider = normalizePlaybackProvider(provider);
@@ -67,6 +72,9 @@ function getPlaybackQualityForSong(song) {
 function playbackQualityLabel(value, provider) {
   provider = normalizePlaybackProvider(provider || currentPlaybackQualityProvider());
   value = normalizePlaybackQualityForProvider(value, provider);
+  if (provider === 'ytmusic') return 'YT Music Stream';
+  if (provider === 'deezer') return 'Deezer Preview';
+  if (provider === 'soundcloud') return 'SoundCloud Stream';
   if (provider === 'spotify') return 'Spotify Match Source';
   if (provider === 'qishui') return 'Soda Music Quality';
   if (provider === 'qq') {
@@ -93,6 +101,9 @@ function playbackQualityLabel(value, provider) {
 function playbackQualityShortLabel(value, provider) {
   provider = normalizePlaybackProvider(provider || currentPlaybackQualityProvider());
   value = normalizePlaybackQualityForProvider(value, provider);
+  if (provider === 'ytmusic') return 'YT';
+  if (provider === 'deezer') return 'DZ';
+  if (provider === 'soundcloud') return 'SC';
   if (provider === 'spotify') return 'SP';
   if (provider === 'qishui') return 'QS';
   if (provider === 'qq') {

@@ -13,7 +13,7 @@
     modalEl.id = 'phone-remote-modal';
     modalEl.style.cssText = 'position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(5,7,12,.55);backdrop-filter:blur(8px)';
     modalEl.innerHTML =
-      '<div style="width:min(360px,92vw);border-radius:18px;border:1px solid rgba(255,255,255,.09);background:rgba(16,19,28,.9);box-shadow:0 24px 70px rgba(0,0,0,.5);padding:22px;color:#eef1f7;text-align:center">' +
+      '<div style="width:min(430px,92vw);border-radius:18px;border:1px solid rgba(255,255,255,.09);background:rgba(16,19,28,.9);box-shadow:0 24px 70px rgba(0,0,0,.5);padding:22px;color:#eef1f7;text-align:center">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
           '<b style="font-size:15px">Control from your phone</b>' +
           '<button id="phone-remote-close" type="button" style="background:none;border:0;color:#9aa3b5;font-size:18px;cursor:pointer">✕</button>' +
@@ -24,6 +24,7 @@
         '<div style="margin-bottom:10px;font-size:12px;opacity:.75">Scan with your phone camera → the paired remote opens in the browser.</div>' +
         '<input id="phone-remote-url" readonly onclick="this.select()" value="" style="width:100%;box-sizing:border-box;text-align:center;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:8px 10px;color:#bfc8da;font-size:12px">' +
         '<div id="phone-remote-note" style="margin-top:10px;font-size:11px;opacity:.55">Tip: "Add to Home Screen" on your phone installs it as an app.</div>' +
+        '<div id="remote-folders-settings" style="margin-top:14px;padding-top:13px;border-top:1px solid rgba(255,255,255,.08);text-align:left"></div>' +
       '</div>';
     document.body.appendChild(modalEl);
     modalEl.addEventListener('click', function (ev) {
@@ -41,6 +42,8 @@
     }).catch(function () {
       el('phone-remote-url').value = 'Server unreachable — restart the app and try again';
     });
+    // Folders & devices section (03-remote-folders-settings.js).
+    if (typeof window.initRemoteFoldersSettings === 'function') window.initRemoteFoldersSettings(el('remote-folders-settings'));
   };
 
   window.closePhoneRemoteModal = function () {

@@ -144,11 +144,10 @@
         <div id="search-mode-tabs" class="search-mode-tabs" role="tablist" aria-label="Search mode">
           <button id="search-mode-song" class="active" type="button" onclick="setSearchMode('song')"
             aria-selected="true">All</button>
-          <button id="search-mode-netease" type="button" onclick="setSearchMode('netease')"
-            aria-selected="false">NE</button>
-          <button id="search-mode-qq" type="button" onclick="setSearchMode('qq')" aria-selected="false">QQ</button>
-          <button id="search-mode-kugou" type="button" onclick="setSearchMode('kugou')" aria-selected="false">KG</button>
-          <button id="search-mode-qishui" type="button" onclick="setSearchMode('qishui')" aria-selected="false">QS</button>
+          <button id="search-mode-ytmusic" type="button" onclick="setSearchMode('ytmusic')"
+            aria-selected="false">YT</button>
+          <button id="search-mode-deezer" type="button" onclick="setSearchMode('deezer')" aria-selected="false">DZ</button>
+          <button id="search-mode-soundcloud" type="button" onclick="setSearchMode('soundcloud')" aria-selected="false">SC</button>
           <button id="search-mode-spotify" type="button" onclick="setSearchMode('spotify')" aria-selected="false">SP</button>
           <button id="search-mode-podcast" type="button" onclick="setSearchMode('podcast')"
             aria-selected="false">Podcast</button>
@@ -325,11 +324,10 @@
         </div>
         <div id="home-platform-recommend-tabs" class="home-platform-recommend-tabs" role="tablist"
           aria-label="Recommendation platforms">
-          <button type="button" role="tab" data-home-recommend-source="netease" aria-selected="true">NetEase</button>
-          <button type="button" role="tab" data-home-recommend-source="qishui" aria-selected="false">Soda</button>
-          <button type="button" role="tab" data-home-recommend-source="qq" aria-selected="false">QQ</button>
-          <button type="button" role="tab" data-home-recommend-source="kugou" aria-selected="false">Kugou</button>
-          <button type="button" role="tab" data-home-recommend-source="spotify" aria-selected="false">Spotify</button>
+          <button type="button" role="tab" data-home-recommend-source="spotify" aria-selected="true">Spotify</button>
+          <button type="button" role="tab" data-home-recommend-source="ytmusic" aria-selected="false">YouTube Music</button>
+          <button type="button" role="tab" data-home-recommend-source="deezer" aria-selected="false">Deezer</button>
+          <button type="button" role="tab" data-home-recommend-source="soundcloud" aria-selected="false">SoundCloud</button>
         </div>
         <div id="home-platform-recommend-status" class="home-platform-recommend-status" role="status"
           aria-live="polite"></div>
@@ -1057,6 +1055,7 @@
             <div class="cache-storage-actions">
               <button class="fx-mini-btn ghost" type="button" onclick="chooseMineradioCacheRoot()">Change folder</button>
               <button class="fx-mini-btn ghost" type="button" onclick="refreshMineradioCacheSettings()">Refresh usage</button>
+              <button class="fx-mini-btn ghost" type="button" id="cache-storage-clear-http" onclick="clearMineradioHttpCacheAndReload()">Reload cache</button>
               <button class="fx-mini-btn ghost" type="button" id="cache-storage-restart" onclick="restartMineradioForCachePath()" hidden>Restart to apply</button>
             </div>
             <div class="cache-storage-row"><span>Lyrics / translation cache</span><b id="cache-storage-lyrics-size">—</b></div>
@@ -1134,7 +1133,7 @@
       </div>
       <div id="pl-pane" style="display:none">
         <div class="queue-toolbar">
-          <div class="queue-chip">Sign in to show NetEase / QQ playlists</div>
+          <div class="queue-chip">Connect Spotify to show playlists</div>
           <button class="fx-mini-btn ghost" onclick="refreshUserPlaylists(true)"
             style="height:26px;padding:0 10px;font-size:11px">Refresh</button>
         </div>
@@ -1488,33 +1487,22 @@
           <div id="login-easter-hint" class="login-easter-hint" aria-live="polite"></div>
           <div id="login-easter-egg-wish" class="login-easter-egg-wish">
             <h1>Your wish is</h1>
-            <div class="login-easter-input-shell">
-              <div id="login-easter-egg-cells" class="login-easter-cells" aria-hidden="true">
-                <span class="login-easter-cell"></span>
-                <span class="login-easter-cell"></span>
-                <span class="login-easter-cell"></span>
-                <span class="login-easter-cell"></span>
-              </div>
-              <input id="login-easter-egg-input" class="login-easter-input" type="text"
-                inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false"
-                aria-label="Type the four-character wish">
-            </div>
+            <div id="login-easter-anykey" class="login-easter-anykey">Press any key</div>
             <div id="login-easter-status" class="login-easter-status" aria-live="polite"></div>
           </div>
         </section>
-        <div id="login-node-graph" class="login-node-graph" data-provider="netease">
+        <div id="login-node-graph" class="login-node-graph" data-provider="spotify">
           <svg id="login-workflow-svg" class="workflow-link-layer login-link-layer" aria-hidden="true"></svg>
           <div class="login-platform-tabs login-node-providers" id="login-platform-tabs">
-            <button id="login-provider-netease" class="netease active workflow-node" type="button" data-login-provider="netease"
-              onclick="selectLoginProviderNode('netease')"><span class="provider-logo">NE</span><b>NetEase</b><small>Official QR / Cookie</small><span class="flow-port out" data-login-provider-output="netease" title="Drag into the MR port"></span></button>
-            <button id="login-provider-qq" class="qq workflow-node" type="button" data-login-provider="qq" onclick="selectLoginProviderNode('qq')"><span
-                class="provider-logo">QQ</span><b>QQ Music</b><small>Official QR / Cookie</small><span class="flow-port out" data-login-provider-output="qq" title="Drag into the MR port"></span></button>
-            <button id="login-provider-kugou" class="kugou workflow-node" type="button" data-login-provider="kugou" onclick="selectLoginProviderNode('kugou')"><span
-                class="provider-logo">KG</span><b>Kugou Music</b><small>Official window / Cookie</small><span class="flow-port out" data-login-provider-output="kugou" title="Drag into the MR port"></span></button>
-            <button id="login-provider-qishui" class="qishui workflow-node" type="button" data-login-provider="qishui" onclick="selectLoginProviderNode('qishui')"><span
-                class="provider-logo">QS</span><b>Soda Music</b><small>Official QR / Douyin confirm</small><span class="flow-port out" data-login-provider-output="qishui" title="Drag into the MR port"></span></button>
-            <button id="login-provider-spotify" class="spotify workflow-node" type="button" data-login-provider="spotify" onclick="selectLoginProviderNode('spotify')"><span
-                class="provider-logo">SP</span><b>Spotify</b><small>Official OAuth</small><span class="flow-port out" data-login-provider-output="spotify" title="Drag into the MR port"></span></button>
+            <!-- EN-FORK global-only login providers -->
+            <button id="login-provider-spotify" class="spotify active workflow-node" type="button" data-login-provider="spotify"
+              onclick="selectLoginProviderNode('spotify')"><span class="provider-logo">SP</span><b>Spotify</b><small>Official OAuth — sync playlists &amp; likes</small><span class="flow-port out" data-login-provider-output="spotify" title="Drag into the MR port"></span></button>
+            <button id="login-provider-ytmusic" class="ytmusic workflow-node" type="button" data-login-provider="ytmusic" onclick="selectLoginProviderNode('ytmusic')"><span
+                class="provider-logo">YT</span><b>YouTube Music</b><small>No account needed</small><span class="flow-port out" data-login-provider-output="ytmusic" title="Drag into the MR port"></span></button>
+            <button id="login-provider-deezer" class="deezer workflow-node" type="button" data-login-provider="deezer" onclick="selectLoginProviderNode('deezer')"><span
+                class="provider-logo">DZ</span><b>Deezer</b><small>No account needed</small><span class="flow-port out" data-login-provider-output="deezer" title="Drag into the MR port"></span></button>
+            <button id="login-provider-soundcloud" class="soundcloud workflow-node" type="button" data-login-provider="soundcloud" onclick="selectLoginProviderNode('soundcloud')"><span
+                class="provider-logo">SC</span><b>SoundCloud</b><small>No account needed</small><span class="flow-port out" data-login-provider-output="soundcloud" title="Drag into the MR port"></span></button>
           </div>
           <div class="login-node-hub workflow-node" data-login-node="mr">
             <span class="flow-port in" data-login-mr-target="mr" title="MR input port"></span>
@@ -1530,8 +1518,8 @@
         </div>
         <div id="login-auth-drawer" class="login-auth-drawer">
           <div class="login-auth-copy">
-            <h2 id="login-modal-title">Scan to sign in to NetEase Music</h2>
-            <div id="login-modal-desc" class="desc">Scan with the <b>NetEase Cloud Music app</b> to sync playlists, liked songs and podcasts.</div>
+            <h2 id="login-modal-title">Connect your music platforms</h2>
+            <div id="login-modal-desc" class="desc">Select a platform above and connect to sync playlists, liked songs and podcasts.</div>
             <div id="qr-status">Drag a port into the MR port, then start signing in.</div>
           </div>
           <div class="login-auth-body">
@@ -1607,30 +1595,27 @@
     <div id="user-modal" class="modal-mask">
       <div class="modal dual-user-modal">
         <h2>Account info</h2>
-        <div id="account-provider-chip" class="account-provider-chip netease"><span
-            class="account-source-dot netease"></span><span>NetEase Music</span></div>
+        <div id="account-provider-chip" class="account-provider-chip spotify"><span
+            class="account-source-dot spotify"></span><span>Spotify</span></div>
         <img id="user-modal-avatar" src=""
           style="width:72px;height:72px;border-radius:50%;margin:0 auto 12px;object-fit:cover;background:rgba(255,255,255,0.1);display:block">
         <div id="user-modal-name" style="font-size:15px;margin-bottom:4px"></div>
         <div id="user-modal-vip"
           style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:20px;letter-spacing:.5px"></div>
         <div class="user-platform-tabs" id="user-platform-tabs">
-          <button id="user-provider-netease" class="netease active" type="button"
-            onclick="setActiveAccountProvider('netease')">NetEase</button>
-          <button id="user-provider-qq" class="qq" type="button" onclick="setActiveAccountProvider('qq')">QQ Music</button>
-          <button id="user-provider-kugou" class="kugou" type="button" onclick="setActiveAccountProvider('kugou')">Kugou Music</button>
-          <button id="user-provider-qishui" class="qishui" type="button" onclick="setActiveAccountProvider('qishui')">Soda Music</button>
-          <button id="user-provider-spotify" class="spotify" type="button" onclick="setActiveAccountProvider('spotify')">Spotify</button>
-          <button id="user-provider-both" class="both" type="button" onclick="enableDualAccountView()">Keep both</button>
+          <button id="user-provider-spotify" class="spotify active" type="button" onclick="setActiveAccountProvider('spotify')">Spotify</button>
+          <button id="user-provider-ytmusic" class="ytmusic" type="button" onclick="setActiveAccountProvider('ytmusic')">YouTube Music</button>
+          <button id="user-provider-deezer" class="deezer" type="button" onclick="setActiveAccountProvider('deezer')">Deezer</button>
+          <button id="user-provider-soundcloud" class="soundcloud" type="button" onclick="setActiveAccountProvider('soundcloud')">SoundCloud</button>
+          <button id="user-provider-both" class="both" type="button" onclick="enableDualAccountView()">Keep all</button>
         </div>
         <div class="account-modal-actions">
-          <button id="account-add-netease" class="modal-btn" onclick="openProviderLogin('netease')">Add NetEase</button>
-          <button id="account-add-qq" class="modal-btn" onclick="openProviderLogin('qq')">Add QQ Music</button>
-          <button id="account-add-kugou" class="modal-btn" onclick="openProviderLogin('kugou')">Add Kugou Music</button>
-          <button id="account-add-qishui" class="modal-btn" onclick="openProviderLogin('qishui')">Sign in to Soda Music</button>
           <button id="account-add-spotify" class="modal-btn" onclick="openProviderLogin('spotify')">Connect Spotify</button>
+          <button id="account-add-ytmusic" class="modal-btn" onclick="openProviderLogin('ytmusic')">YouTube Music — ready</button>
+          <button id="account-add-deezer" class="modal-btn" onclick="openProviderLogin('deezer')">Deezer — ready</button>
+          <button id="account-add-soundcloud" class="modal-btn" onclick="openProviderLogin('soundcloud')">SoundCloud — ready</button>
         </div>
-        <div id="account-hint" class="account-hint">Real QQ Music sign-in is not wired up yet; dual-account interactions are shown as a preview.</div>
+        <div id="account-hint" class="account-hint">YouTube Music, Deezer and SoundCloud need no sign-in — Spotify syncs playlists and likes.</div>
         <div class="btn-row">
           <button class="modal-btn" onclick="closeUserModal()">Close</button>
           <button id="account-logout-btn" class="modal-btn primary" onclick="logoutActiveAccount()">Sign out of this platform</button>

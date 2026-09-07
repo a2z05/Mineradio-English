@@ -2,6 +2,9 @@ var firstPlayDone = false;
 
 function playbackProviderLabel(song) {
   var provider = songProviderKey(song);
+  if (provider === 'ytmusic') return 'YouTube Music';
+  if (provider === 'deezer') return 'Deezer';
+  if (provider === 'soundcloud') return 'SoundCloud';
   if (provider === 'qq') return 'QQ Music';
   if (provider === 'kugou') return 'Kugou Music';
   if (provider === 'qishui') return 'Soda Music';
@@ -300,7 +303,9 @@ function isSameTitleArtist(source, candidate) {
   return a.some(function (name) { return b.indexOf(name) >= 0; });
 }
 var SOURCE_FALLBACK_SEARCH_TIMEOUT_MS = 6500;
-var SOURCE_FALLBACK_DIRECT_PROVIDERS = ['netease', 'qq', 'kugou'];
+// EN-FORK: global free services first (no login needed), then Chinese services
+// as additional fallback targets when the user is logged in.
+var SOURCE_FALLBACK_DIRECT_PROVIDERS = ['ytmusic', 'soundcloud', 'deezer', 'netease', 'qq', 'kugou'];
 var SOURCE_FALLBACK_RECOVERY_TIMEOUT_MS = 20000;
 var SOURCE_FALLBACK_MAX_QUEUE_ADVANCES = 2;
 var SOURCE_FALLBACK_MAX_PROVIDER_ATTEMPTS = 4;
@@ -455,6 +460,10 @@ function awaitSourceFallbackBudget(promise, recovery) {
 }
 
 function sourceFallbackProviderTitle(provider) {
+  if (provider === 'ytmusic') return 'YouTube Music';
+  if (provider === 'deezer') return 'Deezer';
+  if (provider === 'soundcloud') return 'SoundCloud';
+  if (provider === 'spotify') return 'Spotify';
   if (provider === 'qq') return 'QQ Music';
   if (provider === 'kugou') return 'Kugou Music';
   return 'NetEase Cloud Music';
@@ -462,9 +471,10 @@ function sourceFallbackProviderTitle(provider) {
 function sourceFallbackProviderReady(provider) {
   provider = normalizePlaybackProvider(provider);
   if (SOURCE_FALLBACK_DIRECT_PROVIDERS.indexOf(provider) < 0) return false;
+  // Global free providers need no account or playback key.
+  if (provider === 'ytmusic' || provider === 'deezer' || provider === 'soundcloud') return true;
   var status = typeof platformStatus === 'function' ? platformStatus(provider) : null;
   if (!status || !status.loggedIn) return false;
-  if (provider === 'qq' || provider === 'kugou') return status.playbackKeyReady === true;
   return true;
 }
 function alternatePlaybackProviders(song) {
@@ -492,11 +502,17 @@ async function searchAlternatePlatformSong(song, requestedTarget, recovery) {
   var artist = artistNameParts(song)[0] || '';
   var query = [song.name || song.title || '', song.artist || artist].filter(Boolean).join(' ').trim();
   if (!query) return null;
-  var url = target === 'qq'
-    ? '/api/qq/search?keywords=' + encodeURIComponent(query) + '&limit=8'
-    : (target === 'kugou'
-      ? '/api/kugou/search?keywords=' + encodeURIComponent(query) + '&limit=8'
-      : '/api/search?keywords=' + encodeURIComponent(query) + '&limit=12');
+  var url = target === 'ytmusic'
+    ? '/api/ytmusic/search?keywords=' + encodeURIComponent(query) + '&limit=8'
+    : (target === 'deezer'
+      ? '/api/deezer/search?keywords=' + encodeURIComponent(query) + '&limit=8'
+      : (target === 'soundcloud'
+        ? '/api/soundcloud/search?keywords=' + encodeURIComponent(query) + '&limit=8'
+        : (target === 'qq'
+          ? '/api/qq/search?keywords=' + encodeURIComponent(query) + '&limit=8'
+          : (target === 'kugou'
+            ? '/api/kugou/search?keywords=' + encodeURIComponent(query) + '&limit=8'
+            : '/api/ytmusic/search?keywords=' + encodeURIComponent(query) + '&limit=12'))));
   var data = await awaitSourceFallbackBudget(
     apiJson(url, { timeoutMs: SOURCE_FALLBACK_SEARCH_TIMEOUT_MS }),
     recovery

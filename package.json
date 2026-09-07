@@ -1,7 +1,7 @@
 {
   "name": "mineradio",
   "productName": "Mineradio English",
-  "version": "2.1.0-en.4",
+  "version": "2.1.0-en.12",
   "description": "Immersive Windows music player blending desktop mode, a lyrics stage, particle visuals and a 3D playlist shelf — full English edition.",
   "author": "Mineradio",
   "license": "GPL-3.0-only",
@@ -39,6 +39,7 @@
       "apple-music-secure-auth-store.js",
       "apple-music-lyrics-provider.js",
       "lyric-cache.js",
+      "lyrics-resolver.js",
       "qq-lyric-codec.js",
       "romanization-engine.js",
       "qishui-auth-v6.js",

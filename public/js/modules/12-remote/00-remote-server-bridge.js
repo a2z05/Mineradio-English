@@ -103,6 +103,17 @@ function applyRemoteCommand(cmd) {
     case 'cyclePlayMode':
       if (typeof cyclePlayMode === 'function') cyclePlayMode();
       break;
+    case 'setPlayMode':
+      var wanted = String(payload && payload.mode || '');
+      if (['loop', 'shuffle', 'single'].indexOf(wanted) >= 0 && typeof playMode !== 'undefined' && playMode !== wanted) {
+        if (typeof cyclePlayMode === 'function') {
+          for (var mIdx = 0; mIdx < 3; mIdx++) {
+            if (playMode === wanted) break;
+            cyclePlayMode();
+          }
+        }
+      }
+      break;
     case 'seek':
       if (payload && payload.position != null && typeof commitProgressSeek === 'function' && getPlaybackDurationSeconds()) {
         commitProgressSeek(Number(payload.position), playing);
@@ -136,6 +147,9 @@ function applyRemoteCommand(cmd) {
       break;
     case 'search':
       remoteBridgeHandleSearchCommand(payload);
+      break;
+    case 'download':
+      if (typeof downloadCurrentTrack === 'function') downloadCurrentTrack();
       break;
     case 'enqueueLocal': {
       // Play a phone-uploaded inbox file on the PC via the local-only

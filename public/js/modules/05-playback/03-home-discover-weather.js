@@ -1,6 +1,6 @@
 function fallbackHomeTiles() {
   return [
-    { kind: 'login', title: 'Sign in to sync playlists', sub: 'NetEase / QQ / Kugou / Soda' },
+    { kind: 'login', title: 'Sign in to sync playlists', sub: 'Spotify / YouTube Music / Deezer / SoundCloud' },
     { kind: 'search', title: 'Search a song', sub: 'Original artists first', query: '' },
     { kind: 'local', title: 'Import local music', sub: 'Visualize local files too' },
     { kind: 'podcastSearch', title: 'Search podcasts', sub: 'Long-form / Radio' },

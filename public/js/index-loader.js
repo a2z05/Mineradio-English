@@ -112,6 +112,7 @@
     'js/modules/12-remote/00-remote-server-bridge.js',
     'js/modules/12-remote/01-app-proxy-panel.js',
     'js/modules/12-remote/02-phone-qr-modal.js',
+    'js/modules/12-remote/03-remote-folders-settings.js',
     'js/modules/12-remote/03-overlay-panel.js',
     'js/modules/11-main-loop.js',
   ];

@@ -31,12 +31,16 @@ var kugouLoginAutoRefreshTimer = null;
 var qishuiLoginAutoRefreshTimer = null;
 var spotifyLoginStatus = { provider: 'spotify', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: 'Spotify', userId: '', avatar: '', product: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match' };
 var spotifyLoginAutoRefreshTimer = null;
+// EN-FORK global providers: no login needed — always "ready".
+var ytmusicStatus = { provider: 'ytmusic', loggedIn: true, configured: true, preview: false, nickname: 'YT Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: true, playbackMode: 'direct-url' };
+var deezerStatus = { provider: 'deezer', loggedIn: true, configured: true, preview: false, nickname: 'Deezer', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: true, playbackMode: 'preview' };
+var soundcloudStatus = { provider: 'soundcloud', loggedIn: true, configured: true, preview: false, nickname: 'SoundCloud', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: true, playbackMode: 'direct-url' };
 var qqLoginWasLoggedIn = false;
 var kugouLoginWasLoggedIn = false;
 var qishuiLoginWasLoggedIn = false;
 var spotifyLoginWasLoggedIn = false;
-var loginProvider = 'netease';
-var activeAccountProvider = 'netease';
+var loginProvider = 'spotify';
+var activeAccountProvider = 'spotify';
 var dualAccountMode = false;
 var qqCookieBusy = false;
 var kugouCookieBusy = false;
@@ -109,32 +113,33 @@ var AUDIO_INPUT_BRIDGE_STORE_KEY = 'mineradio-audio-input-bridge-v1';
 var PROVIDER_VIP_AUDIT_STORE_KEY = 'mineradio-provider-vip-audit-v1';
 var QQ_PLAYBACK_VIP_EVIDENCE_STORE_KEY = 'mineradio-qq-playback-vip-evidence-v1';
 var LOGIN_COOKIE_EXPORT_STORE_KEY = 'mineradio-login-cookie-export-v1';
-var PLAYBACK_QUALITY_DEFAULTS = { netease: 'hires', qq: 'lossless', kugou: 'lossless', qishui: 'standard', spotify: 'standard' };
+// EN-FORK global swap: quality options for the global providers. YT Music and
+// SoundCloud stream real audio directly; Deezer offers the free 30s preview.
+var PLAYBACK_QUALITY_DEFAULTS = { netease: 'standard', qq: 'standard', kugou: 'standard', qishui: 'standard', spotify: 'standard', ytmusic: 'standard', deezer: 'standard', soundcloud: 'standard' };
 var PLAYBACK_QUALITY_OPTIONS = {
   netease: [
-    { key: 'jymaster', title: 'Ultra Master', sub: 'SVIP / highest tier', svip: true },
-    { key: 'hires', title: 'Hi-Res', sub: 'default / detail-first' },
-    { key: 'lossless', title: 'Lossless SQ', sub: 'FLAC preferred' },
-    { key: 'exhigh', title: 'Very High HQ', sub: '320kbps' },
-    { key: 'standard', title: 'Standard', sub: '128kbps' }
+    { key: 'standard', title: 'NetEase Lyric Source', sub: 'lyrics only / no playback' }
   ],
   qq: [
-    { key: 'hires', title: 'Hi-Res FLAC', sub: 'QQ Hi-Res / try first' },
-    { key: 'lossless', title: 'Lossless FLAC', sub: 'QQ SQ / stable pick' },
-    { key: 'exhigh', title: '320k MP3', sub: 'QQ high quality' },
-    { key: 'standard', title: '128k MP3', sub: 'max compatibility' }
+    { key: 'standard', title: 'QQ Lyric Source (QRC)', sub: 'karaoke lyrics only' }
   ],
   kugou: [
-    { key: 'hires', title: 'Hi-Res / Premium', sub: 'Kugou Hi-Res / try first' },
-    { key: 'lossless', title: 'Lossless FLAC', sub: 'Kugou SQ / stable pick' },
-    { key: 'exhigh', title: '320k MP3', sub: 'Kugou high quality' },
-    { key: 'standard', title: '128k MP3', sub: 'max compatibility' }
+    { key: 'standard', title: 'Match Source', sub: 'auto fallback on play' }
   ],
   qishui: [
     { key: 'standard', title: 'Soda Match Source', sub: 'QS recommend / auto fallback on play' }
   ],
   spotify: [
     { key: 'standard', title: 'Spotify Match Source', sub: 'SP search / auto fallback on play' }
+  ],
+  ytmusic: [
+    { key: 'standard', title: 'YT Music Stream', sub: 'free YouTube audio / direct' }
+  ],
+  deezer: [
+    { key: 'standard', title: 'Deezer Preview', sub: '30s preview / auto fallback for full track' }
+  ],
+  soundcloud: [
+    { key: 'standard', title: 'SoundCloud Stream', sub: 'free progressive MP3 / direct' }
   ]
 };
 var UPLOAD_TIP_STORE_KEY = 'mineradio-upload-tip-seen';

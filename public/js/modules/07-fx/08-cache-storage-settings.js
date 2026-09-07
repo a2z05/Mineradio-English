@@ -77,4 +77,26 @@ function restartMineradioForCachePath() {
   window.desktopWindow.restartApp();
 }
 
+// EN-FORK: "Reload cache" — clears Chromium's HTTP cache (covers, CSS/JS,
+// audio chunks) and reloads the window so every asset is re-fetched from the
+// local server. Use after an update looks stale or visuals render oddly.
+function clearMineradioHttpCacheAndReload() {
+  var button = mineradioCacheStorageNode('cache-storage-clear-http');
+  if (button) { button.disabled = true; button.textContent = 'Reloading...'; }
+  var done = function () {
+    if (button) { button.disabled = false; button.textContent = 'Reload cache'; }
+    showToast('HTTP cache cleared — reloading');
+    setTimeout(function () { window.location.reload(); }, 350);
+  };
+  if (!window.desktopWindow || typeof window.desktopWindow.clearHttpCache !== 'function') {
+    // Browser/dev fallback: a hard reload still bypasses memory cache.
+    done();
+    return;
+  }
+  window.desktopWindow.clearHttpCache().then(done).catch(function (error) {
+    if (button) { button.disabled = false; button.textContent = 'Reload cache'; }
+    showToast('Cache clear failed: ' + (error && error.message || 'unknown'));
+  });
+}
+
 setTimeout(refreshMineradioCacheSettings, 450);

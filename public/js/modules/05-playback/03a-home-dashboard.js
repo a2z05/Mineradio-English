@@ -23,13 +23,13 @@ var HOME_PLATFORM_DAILY_OVERSCAN_ROWS = 3;
 var HOME_PLATFORM_DAILY_MAX_RENDERED_CARDS = 24;
 var homePlatformRecommendationState = {
   open: false,
-  source: 'netease',
+  source: 'spotify',
   previousFocus: null,
-  neteaseLoading: false,
   feeds: {
-    qishui: { loading: false, loaded: false, songs: [], error: '', message: '', mode: '', source: '', fallback: false, provenance: '' },
-    kugou: { loading: false, loaded: false, songs: [], error: '', message: '', mode: '', source: '', fallback: false, provenance: '' },
     spotify: { loading: false, loaded: false, songs: [], error: '', message: '', mode: '', source: '', fallback: false, provenance: '' },
+    ytmusic: { loading: false, loaded: false, songs: [], error: '', message: '', mode: '', source: '', fallback: false, provenance: '' },
+    deezer: { loading: false, loaded: false, songs: [], error: '', message: '', mode: '', source: '', fallback: false, provenance: '' },
+    soundcloud: { loading: false, loaded: false, songs: [], error: '', message: '', mode: '', source: '', fallback: false, provenance: '' },
   },
 };
 
@@ -120,7 +120,10 @@ function homeDashboardUpdateClock() {
   if (!time || !date) return;
   var now = new Date();
   time.textContent = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-  date.textContent = now.toLocaleDateString('zh-CN', {
+  // EN-FORK: pin to en-US — Electron reports a zh-CN appLocale on many
+  // systems, and undefined would resolve to that instead of Windows' own
+  // display language.
+  date.textContent = now.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -853,35 +856,20 @@ function openHomeDashboardLibrary() {
 }
 
 function openHomeDashboardCharts() {
-  openHomePlatformRecommendations('netease');
+  openHomePlatformRecommendations('spotify');
 }
 
 function homePlatformRecommendationSourceLabel(source) {
   return {
-    netease: 'NetEase Cloud Music',
-    qishui: 'Soda Music',
-    qq: 'QQ Music',
-    kugou: 'Kugou Music',
     spotify: 'Spotify',
+    ytmusic: 'YouTube Music',
+    deezer: 'Deezer',
+    soundcloud: 'SoundCloud',
   }[source] || 'This platform';
 }
 
 function homePlatformRecommendationFeedConfig(source) {
   return {
-    qishui: {
-      endpoint: '/api/qishui/feed?limit=12',
-      sectionTitle: 'Recommended Feed',
-      cardLabel: 'Soda Music Feed',
-      readyText: 'From the Soda Music feed',
-      playlistName: 'Soda Music Feed',
-    },
-    kugou: {
-      endpoint: '/api/kugou/recommendations?limit=12',
-      sectionTitle: 'Recommend FM',
-      cardLabel: 'Kugou Recommend FM',
-      readyText: 'From Kugou FM recommendations',
-      playlistName: 'Kugou Recommend FM',
-    },
     spotify: {
       endpoint: '/api/spotify/recommendations?limit=12',
       sectionTitle: 'Made For You',
@@ -889,15 +877,34 @@ function homePlatformRecommendationFeedConfig(source) {
       readyText: 'From Spotify personalized recommendations',
       playlistName: 'Spotify Made For You',
     },
+    ytmusic: {
+      endpoint: '/api/ytmusic/search?keywords=trending&limit=12',
+      sectionTitle: 'Trending on YouTube Music',
+      cardLabel: 'YT Music Trending',
+      readyText: 'From YouTube Music trending',
+      playlistName: 'YouTube Music Trending',
+    },
+    deezer: {
+      endpoint: '/api/deezer/chart?limit=12',
+      sectionTitle: 'Top Charts',
+      cardLabel: 'Deezer Charts',
+      readyText: 'From Deezer top charts',
+      playlistName: 'Deezer Charts',
+    },
+    soundcloud: {
+      endpoint: '/api/soundcloud/search?keywords=popular&limit=12',
+      sectionTitle: 'Popular on SoundCloud',
+      cardLabel: 'SoundCloud Popular',
+      readyText: 'From SoundCloud popular tracks',
+      playlistName: 'SoundCloud Popular',
+    },
   }[source] || null;
 }
 
 function homePlatformRecommendationCard(kind, index, item, label) {
   item = item || {};
   var title = item.name || item.title || 'Untitled';
-  var sub = '';
-  if (kind === 'netease-playlist') sub = (item.trackCount ? item.trackCount + ' tracks' : 'Recommended playlist') + (item.playCount ? ' · ' + compactHomeCount(item.playCount) + ' plays' : '');
-  else sub = homeDashboardSubtitle(item) || label;
+  var sub = homeDashboardSubtitle(item) || label;
   var cover = item.cover || item.picUrl || homeDashboardSongCover(item, 180) || '';
   var coverStyle = cover ? ' style="background-image:url(&quot;' + escHtml(cssImageUrl(cover)) + '&quot;)"' : '';
   return '<button class="home-platform-recommend-card" type="button" data-home-recommend-kind="' + kind + '" data-home-recommend-index="' + index + '">' +
@@ -946,35 +953,8 @@ function homePlatformRecommendationSpacer(rows, position) {
 }
 
 function renderHomePlatformDailyWindow(force) {
-  if (homePlatformRecommendationState.source !== 'netease') return;
-  var list = document.getElementById('home-platform-recommend-list');
-  var grid = document.getElementById('home-platform-daily-grid');
-  if (!list || !grid) return;
-  var songs = Array.isArray(homeDiscoverState.songs) ? homeDiscoverState.songs : [];
-  var columns = homePlatformRecommendationGridColumns(grid);
-  var range = homePlatformRecommendationDailyRange(
-    songs.length,
-    columns,
-    list.scrollTop,
-    list.clientHeight,
-    grid.offsetTop
-  );
-  var signature = songs.length + '|' + columns + '|' + range.start + '|' + range.end;
-  if (!force && grid.getAttribute('data-render-window') === signature) return;
-  var html = [homePlatformRecommendationSpacer(range.topRows, 'top')];
-  for (var index = range.start; index < range.end; index += 1) {
-    html.push(homePlatformRecommendationCard('netease-song', index, songs[index], 'NetEase Daily Mix'));
-  }
-  html.push(homePlatformRecommendationSpacer(range.bottomRows, 'bottom'));
-  grid.innerHTML = html.join('');
-  grid.setAttribute('data-render-window', signature);
-  grid.setAttribute('aria-label', 'All daily recommendations, ' + songs.length + ' songs');
-  var count = document.getElementById('home-platform-daily-count');
-  if (count) {
-    count.textContent = songs.length
-      ? ' · ' + (range.start + 1) + '–' + range.end + ' / ' + songs.length
-      : '';
-  }
+  // EN-FORK: NetEase daily window removed — platform picks now use feed cards only.
+  void force;
 }
 
 function scheduleHomePlatformDailyWindowRender() {
@@ -1009,40 +989,6 @@ function renderHomePlatformRecommendations() {
   });
   status.classList.remove('is-error');
 
-  if (source === 'netease') {
-    if (homeDiscoverState.loading || homePlatformRecommendationState.neteaseLoading) {
-      status.textContent = 'Loading NetEase Cloud Music recommendations…';
-      list.innerHTML = '<div class="home-platform-recommend-loading">Syncing recommendations</div>';
-      return;
-    }
-    var sections = [];
-    var playlists = Array.isArray(homeDiscoverState.playlists) ? homeDiscoverState.playlists.slice(0, 6) : [];
-    var songs = Array.isArray(homeDiscoverState.songs) ? homeDiscoverState.songs : [];
-    if (playlists.length) {
-      sections.push('<section><h3>Recommended Playlists</h3><div class="home-platform-recommend-grid">' + playlists.map(function (item, index) {
-        return homePlatformRecommendationCard('netease-playlist', index, item, 'NetEase playlist');
-      }).join('') + '</div></section>');
-    }
-    if (songs.length) {
-      sections.push('<section><h3>Daily Mix<span id="home-platform-daily-count"></span></h3>' +
-        '<div id="home-platform-daily-grid" class="home-platform-recommend-grid" role="list" aria-label="All daily recommendations"></div></section>');
-    }
-    if (sections.length) {
-      status.textContent = songs.length
-        ? 'Loaded all ' + songs.length + ' daily recommendations; only nearby songs render while scrolling'
-        : 'From NetEase recommended playlists';
-      list.innerHTML = sections.join('');
-      if (songs.length) renderHomePlatformDailyWindow(true);
-    } else {
-      status.textContent = homeDiscoverState.error ? 'Failed to load NetEase recommendations' : 'NetEase returned no recommendations yet';
-      status.classList.toggle('is-error', !!homeDiscoverState.error);
-      list.innerHTML = homePlatformRecommendationEmptyHtml('netease', homeDiscoverState.loggedIn
-        ? 'The platform returned no recommendation content this time; search results were not used as a substitute.'
-        : 'Sign in to NetEase to load recommended playlists and the Daily Mix; keyword search was not used as a substitute.');
-    }
-    return;
-  }
-
   var feedConfig = homePlatformRecommendationFeedConfig(source);
   var feedState = homePlatformRecommendationState.feeds[source];
   if (feedConfig && feedState) {
@@ -1056,11 +1002,7 @@ function renderHomePlatformRecommendations() {
       var sectionTitle = feedConfig.sectionTitle;
       var cardLabel = feedConfig.cardLabel;
       var readyText = feedConfig.readyText;
-      if (source === 'qishui' && feedState.fallback) {
-        sectionTitle = 'Your Music';
-        cardLabel = 'Soda likes / recent plays';
-        readyText = 'The Soda Music feed is unavailable; showing your likes and recent plays';
-      } else if (source === 'spotify' && feedState.mode === 'liked-affinity') {
+      if (source === 'spotify' && feedState.mode === 'liked-affinity') {
         sectionTitle = 'Your Likes';
         cardLabel = 'Spotify liked songs';
         readyText = 'Liked songs from the Spotify Web API';
@@ -1089,30 +1031,7 @@ function renderHomePlatformRecommendations() {
   list.innerHTML = homePlatformRecommendationEmptyHtml(source);
 }
 
-async function loadHomePlatformNeteaseRecommendations(force) {
-  if (homePlatformRecommendationState.neteaseLoading) return;
-  homePlatformRecommendationState.neteaseLoading = true;
-  renderHomePlatformRecommendations();
-  try {
-    if (homeDiscoverState.loading && typeof waitForHomeDiscoverIdle === 'function') await waitForHomeDiscoverIdle(2600);
-    if (force || !homeDiscoverState.loaded) await loadHomeDiscover(!!force);
-    if (homeDiscoverState.loading && typeof waitForHomeDiscoverIdle === 'function') await waitForHomeDiscoverIdle(2600);
-    if (force || !Array.isArray(homeDiscoverState.podcasts) || !homeDiscoverState.podcasts.length) {
-      var podcastData = await apiJson('/api/podcast/hot?limit=8&t=' + Date.now(), { timeoutMs: 12000 });
-      var hotPodcasts = podcastData && Array.isArray(podcastData.podcasts) ? podcastData.podcasts : [];
-      if (hotPodcasts.length) homeDiscoverState.podcasts = hotPodcasts;
-    }
-  } catch (error) {
-    console.warn('[HomePlatformNetease]', error);
-  } finally {
-    homePlatformRecommendationState.neteaseLoading = false;
-    renderHomePlatformRecommendations();
-  }
-}
-
-async function loadHomePlatformQishuiRecommendations(force) {
-  return loadHomePlatformFeedRecommendations('qishui', force);
-}
+// EN-FORK: NetEase/Soda recommendation loaders removed — use loadHomePlatformFeedRecommendations for global providers.
 
 async function loadHomePlatformFeedRecommendations(source, force) {
   var config = homePlatformRecommendationFeedConfig(source);
@@ -1148,12 +1067,10 @@ async function loadHomePlatformFeedRecommendations(source, force) {
 }
 
 async function loadHomePlatformRecommendations(source, force) {
-  homePlatformRecommendationState.source = source || 'netease';
+  homePlatformRecommendationState.source = source || 'spotify';
   renderHomePlatformRecommendations();
   try {
-    if (homePlatformRecommendationState.source === 'netease') {
-      await loadHomePlatformNeteaseRecommendations(force);
-    } else if (homePlatformRecommendationFeedConfig(homePlatformRecommendationState.source)) {
+    if (homePlatformRecommendationFeedConfig(homePlatformRecommendationState.source)) {
       await loadHomePlatformFeedRecommendations(homePlatformRecommendationState.source, force);
     }
   } catch (error) {
@@ -1214,9 +1131,7 @@ function bindHomePlatformRecommendationControls() {
     var kind = card.getAttribute('data-home-recommend-kind');
     var index = Number(card.getAttribute('data-home-recommend-index')) || 0;
     closeHomePlatformRecommendations();
-    if (kind === 'netease-playlist' && typeof openHomePlaylist === 'function') openHomePlaylist(index);
-    else if (kind === 'netease-song' && typeof playHomeSong === 'function') playHomeSong(index);
-    else if (/^(qishui|kugou|spotify)-song$/.test(kind)) playHomePlatformFeedSong(kind.replace(/-song$/, ''), index);
+    if (/^(spotify|ytmusic|deezer|soundcloud)-song$/.test(kind)) playHomePlatformFeedSong(kind.replace(/-song$/, ''), index);
   });
   if (list) list.addEventListener('scroll', scheduleHomePlatformDailyWindowRender, { passive: true });
   window.addEventListener('resize', scheduleHomePlatformDailyWindowRender, { passive: true });
@@ -1241,14 +1156,11 @@ function openHomePlatformRecommendations(preferredSource) {
   homePlatformRecommendationState.open = true;
   mask.classList.add('show');
   mask.setAttribute('aria-hidden', 'false');
-  var defaultSource = loginStatus && loginStatus.loggedIn
-    ? 'netease'
-    : (qishuiLoginStatus && (qishuiLoginStatus.loggedIn || qishuiLoginStatus.configured)
-      ? 'qishui'
-      : (kugouLoginStatus && kugouLoginStatus.loggedIn
-        ? 'kugou'
-        : (spotifyLoginStatus && (spotifyLoginStatus.loggedIn || spotifyLoginStatus.configured) ? 'spotify' : 'netease')));
-  var source = /^(netease|qishui|qq|kugou|spotify)$/.test(String(preferredSource || '')) ? preferredSource : defaultSource;
+  var defaultSource = 'spotify';
+  if (preferredSource && /^(spotify|ytmusic|deezer|soundcloud)$/.test(String(preferredSource))) {
+    defaultSource = preferredSource;
+  }
+  var source = defaultSource;
   loadHomePlatformRecommendations(source, false);
   setTimeout(function () {
     var activeTab = mask.querySelector('[data-home-recommend-source="' + source + '"]');

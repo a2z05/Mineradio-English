@@ -77,14 +77,22 @@ function onUserBtnClick() {
   }
   showLoginModal({ provider: hasAnyPlatformLogin() ? firstLoggedProvider() : loginProvider, source: 'top-account' });
 }
-var ACCOUNT_PROVIDER_KEYS = ['netease', 'qq', 'kugou', 'qishui', 'spotify'];
+// EN-FORK global swap: account surfaces show the global providers. NetEase/QQ
+// remain lyric-only backends and are intentionally absent here.
+var ACCOUNT_PROVIDER_KEYS = ['spotify', 'ytmusic', 'deezer', 'soundcloud'];
 var ACCOUNT_PROVIDER_ORDER_STORE_KEY = 'mineradio-account-provider-order-v1';
 var ACCOUNT_PROVIDER_VISIBLE_STORE_KEY = 'mineradio-account-provider-visible-v1';
 var topAccountPillDrag = null;
 var topAccountPillClickSuppressed = false;
 
 function normalizeAccountProviderKey(provider) {
-  return provider === 'qq' ? 'qq' : (provider === 'kugou' ? 'kugou' : (provider === 'qishui' ? 'qishui' : (provider === 'spotify' ? 'spotify' : 'netease')));
+  if (provider === 'ytmusic') return 'ytmusic';
+  if (provider === 'deezer') return 'deezer';
+  if (provider === 'soundcloud') return 'soundcloud';
+  if (provider === 'spotify') return 'spotify';
+  // Legacy Chinese keys normalize to spotify so stale saved orders degrade
+  // gracefully instead of producing phantom pills.
+  return 'spotify';
 }
 function normalizeAccountProviderList(list) {
   var seen = {};
@@ -218,14 +226,19 @@ function syncAccountProviderOrderUi() {
   }
 }
 function platformMeta(provider) {
-  if (provider === 'qq') return { key: 'qq', short: 'QQ', label: 'QQ Music', app: 'QQ Music app', dot: 'qq' };
-  if (provider === 'kugou') return { key: 'kugou', short: 'KG', label: 'Kugou Music', app: 'Kugou Music app', dot: 'kugou' };
-  if (provider === 'qishui') return { key: 'qishui', short: 'QS', label: 'Soda Music', app: 'Soda Music app', dot: 'qishui' };
+  if (provider === 'ytmusic') return { key: 'ytmusic', short: 'YT', label: 'YT Music', app: 'YouTube Music', dot: 'ytmusic' };
+  if (provider === 'deezer') return { key: 'deezer', short: 'DZ', label: 'Deezer', app: 'Deezer', dot: 'deezer' };
+  if (provider === 'soundcloud') return { key: 'soundcloud', short: 'SC', label: 'SoundCloud', app: 'SoundCloud', dot: 'soundcloud' };
   if (provider === 'spotify') return { key: 'spotify', short: 'SP', label: 'Spotify', app: 'Spotify', dot: 'spotify' };
+  // Lyric-only backends keep their metadata for settings surfaces.
+  if (provider === 'qq') return { key: 'qq', short: 'QQ', label: 'QQ Music', app: 'QQ Music app', dot: 'qq' };
   return { key: 'netease', short: 'NE', label: 'NetEase Cloud Music', app: 'NetEase Cloud Music app', dot: 'netease' };
 }
 function platformStatus(provider) {
   if (provider === 'spotify') return spotifyLoginStatus;
+  if (provider === 'ytmusic') return ytmusicStatus;
+  if (provider === 'deezer') return deezerStatus;
+  if (provider === 'soundcloud') return soundcloudStatus;
   if (provider === 'qishui') return qishuiLoginStatus;
   if (provider === 'kugou') return kugouLoginStatus;
   return provider === 'qq' ? qqLoginStatus : loginStatus;
@@ -279,8 +292,9 @@ function hasPlatformLogin(provider) {
   var st = platformStatus(provider);
   return !!(st && st.loggedIn);
 }
+// EN-FORK: global-only login check — Chinese providers removed from UI.
 function hasAnyPlatformLogin() {
-  return hasPlatformLogin('netease') || hasPlatformLogin('qq') || hasPlatformLogin('kugou') || hasPlatformLogin('qishui') || hasPlatformLogin('spotify');
+  return hasPlatformLogin('spotify') || hasPlatformLogin('ytmusic') || hasPlatformLogin('deezer') || hasPlatformLogin('soundcloud');
 }
 function firstLoggedProvider() {
   if (hasPlatformLogin(activeAccountProvider)) return activeAccountProvider;
@@ -288,7 +302,7 @@ function firstLoggedProvider() {
   for (var i = 0; i < ordered.length; i += 1) {
     if (hasPlatformLogin(ordered[i])) return ordered[i];
   }
-  return 'netease';
+  return 'spotify';
 }
 function providerAvatarSrc(provider, status) {
   status = status || platformStatus(provider) || {};
@@ -345,7 +359,7 @@ function providerAccountIdentity(provider, status) {
     profile.public_name,
     profile.name
   ];
-  var syntheticPrefixes = [meta.label, meta.short, provider, 'QQ音乐', 'QQ音乐App', '酷狗音乐', '酷狗音乐App', '汽水音乐', '汽水音乐App', '网易云音乐', '网易云音乐App', 'Spotify']
+  var syntheticPrefixes = [meta.label, meta.short, provider, 'QQ音乐', 'QQ Music', 'QQ音乐App', '酷狗音乐', '酷狗音乐App', '酷狗', 'Kugou', 'Kugou Music', '汽水音乐', '汽水音乐App', 'Soda', 'Soda Music', '网易云音乐', '网易云音乐App', 'Spotify']
     .map(function (value) { return String(value || '').replace(/[\s·:_-]+/g, '').toLowerCase(); })
     .filter(Boolean);
   for (var i = 0; i < candidates.length; i += 1) {

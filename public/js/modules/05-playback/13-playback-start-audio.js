@@ -584,7 +584,21 @@ async function resolveAlbumGaplessPlaybackData(song) {
       '&uri=' + encodeURIComponent(song.spotifyUri || song.uri || '') +
       qualityParam, { timeoutMs: 9000 });
   }
-  return apiJson('/api/song/url?id=' + encodeURIComponent(song.id || '') + neteasePlaybackMatchQuery(song) + qualityParam, { timeoutMs: 14000 });
+  if (playbackProvider === 'ytmusic') {
+    return apiJson('/api/ytmusic/song/url?id=' + encodeURIComponent(song.videoId || song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 12000 });
+  }
+  if (playbackProvider === 'deezer') {
+    return apiJson('/api/deezer/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 9000 });
+  }
+  if (playbackProvider === 'soundcloud') {
+    return apiJson('/api/soundcloud/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || song.permalink || '') + qualityParam, { timeoutMs: 12000 });
+  }
+  // Legacy Chinese providers keep their endpoints for persisted queue items;
+  // the default branch now targets YouTube Music instead of NetEase.
+  if (playbackProvider === 'netease' && /^\d+$/.test(String(song.id || ''))) {
+    return apiJson('/api/song/url?id=' + encodeURIComponent(song.id || '') + neteasePlaybackMatchQuery(song) + qualityParam, { timeoutMs: 14000 });
+  }
+  return apiJson('/api/ytmusic/song/url?id=' + encodeURIComponent(song.videoId || song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 12000 });
 }
 
 function consumeAlbumGaplessPreload(preload) {
@@ -1139,8 +1153,17 @@ async function playQueueAt(idx, opts) {
           '&spotifyId=' + encodeURIComponent(song.spotifyId || '') +
           '&uri=' + encodeURIComponent(song.spotifyUri || song.uri || '') +
           qualityParam, { timeoutMs: 9000 });
-      } else {
+      } else if (playbackProvider === 'ytmusic') {
+        data = await apiJson('/api/ytmusic/song/url?id=' + encodeURIComponent(song.videoId || song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 12000 });
+      } else if (playbackProvider === 'deezer') {
+        data = await apiJson('/api/deezer/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 9000 });
+      } else if (playbackProvider === 'soundcloud') {
+        data = await apiJson('/api/soundcloud/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || song.permalink || '') + qualityParam, { timeoutMs: 12000 });
+      } else if (playbackProvider === 'netease' && /^\d+$/.test(String(song.id || ''))) {
+        // Legacy Chinese items from persisted queues keep their endpoint.
         data = await apiJson('/api/song/url?id=' + encodeURIComponent(song.id || '') + neteasePlaybackMatchQuery(song) + qualityParam, { timeoutMs: 14000 });
+      } else {
+        data = await apiJson('/api/ytmusic/song/url?id=' + encodeURIComponent(song.videoId || song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 12000 });
       }
       if (token !== trackSwitchToken) return;
       if (

@@ -1,7 +1,7 @@
 var loginRefreshRequestSeq = 0;
 var loginWorkflowDrag = null;
 var LOGIN_WORKFLOW_CONNECTION_STORE_KEY = 'mineradio-login-workflow-connections-v1';
-var LOGIN_WORKFLOW_PROVIDERS = ['netease', 'qq', 'kugou', 'qishui', 'spotify'];
+var LOGIN_WORKFLOW_PROVIDERS = ['spotify', 'ytmusic', 'deezer', 'soundcloud'];
 var loginWorkflowPendingProvider = '';
 var loginWorkflowVerifiedSession = {};
 var loginProviderPointer = null;
@@ -15,33 +15,27 @@ function isLoginRefreshCurrent(provider, seq) {
   return loginProvider === provider && loginRefreshRequestSeq === seq;
 }
 
+// EN-FORK: global-only providers — Chinese (netease/qq/kugou/qishui) removed from UI.
 function normalizeLoginProviderKey(provider) {
-  return provider === 'qq' ? 'qq' : (provider === 'kugou' ? 'kugou' : (provider === 'qishui' ? 'qishui' : (provider === 'spotify' ? 'spotify' : 'netease')));
+  return (provider === 'ytmusic' || provider === 'deezer' || provider === 'soundcloud') ? provider : 'spotify';
 }
+// EN-FORK: global-only — cookie mode not needed (Spotify uses OAuth, others are keyless).
 function loginProviderSupportsCookieMode(provider) {
   provider = normalizeLoginProviderKey(provider);
-  return provider !== 'spotify' && provider !== 'qishui';
+  return provider !== 'spotify';
 }
+// EN-FORK: global-only providers — Chinese providers removed from UI.
 function loginProviderOfficialModeText(provider) {
   provider = normalizeLoginProviderKey(provider);
   if (provider === 'spotify') return { title: 'OAuth', sub: 'Opens the Spotify authorization window' };
-  if (provider === 'qishui') return { title: 'QR code', sub: 'Official Douyin app authorization' };
-  if (provider === 'kugou') return { title: 'Website', sub: 'Opens the official Kugou window' };
-  return { title: 'QR code', sub: 'Opens the official window after connecting' };
+  return { title: 'Connect', sub: 'Connect to ' + (platformMeta(provider).label || provider) };
 }
+// EN-FORK: global-only — cookie import not needed for global providers.
 function setManualCookieOpenForProvider(provider, open) {
-  provider = normalizeLoginProviderKey(provider);
-  if (provider === 'netease') neteaseManualCookieOpen = !!open;
-  else if (provider === 'qq') qqManualCookieOpen = !!open;
-  else if (provider === 'kugou') kugouManualCookieOpen = !!open;
-  else if (provider === 'qishui') qishuiManualCookieOpen = false;
+  void provider; void open;
 }
 function isManualCookieOpenForProvider(provider) {
-  provider = normalizeLoginProviderKey(provider);
-  if (provider === 'netease') return !!neteaseManualCookieOpen;
-  if (provider === 'qq') return !!qqManualCookieOpen;
-  if (provider === 'kugou') return !!kugouManualCookieOpen;
-  if (provider === 'qishui') return false;
+  void provider;
   return false;
 }
 function readLoginWorkflowConnections() {
@@ -82,8 +76,17 @@ function markLoginWorkflowConnected(provider) {
 function setLoginAuthDrawerOpen(open) {
   var drawer = document.getElementById('login-auth-drawer');
   var modal = document.querySelector('#login-modal .dual-login-modal');
+  var panel = document.getElementById('qq-cookie-panel');
   if (modal) modal.classList.toggle('login-details-open', !!open);
-  if (drawer) drawer.classList.toggle('show', !!open);
+  if (drawer) {
+    // EN-FORK FIX: the sign-in form (cookie import / Spotify guide with the
+    // Client ID box + tutorial + Save button) needs the FULL drawer width.
+    // :has() matching proved unreliable in practice, so drive an explicit
+    // class from JS whenever the form panel is visible.
+    var formOpen = !!(panel && panel.classList.contains('show'));
+    drawer.classList.toggle('form-open', formOpen);
+    drawer.classList.toggle('show', !!open);
+  }
   if (!open) {
     loginWorkflowPendingProvider = '';
     try { stopQrPoll(); } catch (e) { }
@@ -484,10 +487,10 @@ function connectLoginProvider(provider) {
 }
 function selectLoginMode(mode) {
   if (mode === 'cookie' && !loginProviderSupportsCookieMode(loginProvider)) {
-    showToast(loginProvider === 'qishui' ? 'Soda Music only supports official QR sign-in' : 'Spotify uses official OAuth sign-in');
+    showToast('This provider uses official sign-in');
     return;
   }
-  setManualCookieOpenForProvider(loginProvider, mode === 'cookie');
+  // EN-FORK: cookie mode disabled for global providers.
   updateLoginProviderUi();
   setLoginAuthDrawerOpen(hasLoginWorkflowConnection(loginProvider) || loginWorkflowPendingProvider === loginProvider);
 }
@@ -502,17 +505,7 @@ function startSelectedLoginConnection() {
 function connectLoginMode(mode) {
   setLoginAuthDrawerOpen(true);
   markLoginNodeConnecting();
-  if (mode === 'cookie') {
-    if (!loginProviderSupportsCookieMode(loginProvider)) {
-      showToast(loginProvider === 'qishui' ? 'Soda Music only supports official QR sign-in' : 'Spotify uses official OAuth sign-in');
-      return;
-    }
-    setManualCookieOpenForProvider(loginProvider, true);
-    updateLoginProviderUi();
-    var input = document.getElementById('qq-cookie-input');
-    if (input) setTimeout(function () { try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); } }, 80);
-    return;
-  }
+  // EN-FORK: global providers use official OAuth/connect flow — cookie mode removed.
   setManualCookieOpenForProvider(loginProvider, false);
   updateLoginProviderUi();
   setTimeout(openProviderWebLogin, 120);
@@ -563,7 +556,7 @@ async function confirmCookieExportPrompt() {
 
 async function showLoginModal(opts) {
   opts = opts || {};
-  loginProvider = opts.provider ? normalizeLoginProviderKey(opts.provider) : 'netease';
+  loginProvider = opts.provider ? normalizeLoginProviderKey(opts.provider) : 'spotify';
   var modal = document.getElementById('login-modal');
   if (typeof setLoginEasterEggMode === 'function' &&
       (!loginEasterEggState || !loginEasterEggState.ready || !loginEasterEggState.unlocked)) {
@@ -592,14 +585,6 @@ function setLoginProvider(provider, silent) {
   loginRefreshRequestSeq += 1;
   updateLoginProviderUi();
   if (!silent && document.getElementById('login-modal').classList.contains('show')) refreshQr();
-}
-function qishuiPublicSearchReady() {
-  return !!(qishuiLoginStatus && (qishuiLoginStatus.searchReady || qishuiLoginStatus.publicCatalog));
-}
-function qishuiLoginStatusText(info) {
-  info = info || qishuiLoginStatus || {};
-  if (info.webSession) return 'Soda Music signed in · Syncs likes and playlists, plays with account perks';
-  return 'Scan the QR code with the Douyin app and confirm sign-in';
 }
 function spotifyLoginStatusText(info) {
   info = info || spotifyLoginStatus || {};
@@ -680,24 +665,9 @@ async function copySpotifyRedirectUri() {
   }
   showToast(ok ? 'Spotify callback URL copied' : 'Copy failed. Copy the callback URL manually');
 }
-function openQishuiPublicSearch() {
-  closeLoginModal();
-  if (typeof setSearchMode === 'function') setSearchMode('qishui');
-  var input = document.getElementById('search-input');
-  if (input) {
-    setTimeout(function () {
-      try { input.focus({ preventScroll: true }); } catch (e) { try { input.focus(); } catch (_) { } }
-    }, 60);
-  }
-  showToast('Soda search switched to match source');
-}
+// EN-FORK: openQishuiPublicSearch removed — qishui login/search hidden (global providers only).
 function updateLoginProviderUi() {
-  var meta = platformMeta(loginProvider);
-  var isQQ = loginProvider === 'qq';
-  var isKugou = loginProvider === 'kugou';
-  var isQishui = loginProvider === 'qishui';
-  var isNetease = loginProvider === 'netease';
-  var isManualCookieProvider = isNetease || isQQ || isKugou;
+  var isSpotify = loginProvider === 'spotify';
   var title = document.getElementById('login-modal-title');
   var desc = document.getElementById('login-modal-desc');
   var shell = document.getElementById('qr-shell');
@@ -708,37 +678,19 @@ function updateLoginProviderUi() {
   var qqCookieInput = document.getElementById('qq-cookie-input');
   var qqCookieNote = qqPanel ? qqPanel.querySelector('.qq-cookie-note') : null;
   var qqCard = document.getElementById('qq-web-login-card');
-  var neteaseBtn = document.getElementById('login-provider-netease');
-  var qqBtn = document.getElementById('login-provider-qq');
-  var kugouBtn = document.getElementById('login-provider-kugou');
-  var qishuiBtn = document.getElementById('login-provider-qishui');
   var qqCookieSaveBtn = document.getElementById('qq-cookie-save-btn');
-  var canOpenNeteaseWeb = !!(window.desktopWindow && typeof window.desktopWindow.openNeteaseMusicLogin === 'function');
-  var canUseQishuiQrLogin = true;
-  var qishuiSearchReady = qishuiPublicSearchReady();
-  var qishuiBusy = !!(qishuiTokenBusy || qishuiOAuthBusy);
-  var isSpotify = loginProvider === 'spotify';
   var spotifyBtn = document.getElementById('login-provider-spotify');
   var canOpenSpotifyOAuth = !!(window.desktopWindow && typeof window.desktopWindow.openSpotifyMusicLogin === 'function');
   var spotifyBusy = !!(spotifyConfigBusy || spotifyOAuthBusy);
   updateLoginNodeGraphUi();
   if (isSpotify) {
-    if (neteaseBtn) neteaseBtn.classList.toggle('active', false);
-    if (qqBtn) qqBtn.classList.toggle('active', false);
-    if (kugouBtn) kugouBtn.classList.toggle('active', false);
-    if (qishuiBtn) qishuiBtn.classList.toggle('active', false);
     if (spotifyBtn) spotifyBtn.classList.toggle('active', true);
     if (title) title.textContent = 'Connect Spotify';
     if (desc) desc.innerHTML = canOpenSpotifyOAuth
       ? 'Paste a <b>Spotify Client ID</b>, then save &amp; authorize to sync Premium/Free status, playlists and Liked Songs. Playback still auto-switches to match sources.'
       : 'The desktop authorization bridge is unavailable here; connect Spotify in the Mineradio desktop app.';
-    if (shell) {
-      shell.classList.add('web-login-preview');
-      shell.classList.remove('qq-preview', 'netease-preview');
-    }
-    if (qqPanel) {
-      qqPanel.classList.add('show', 'spotify-guide-panel');
-    }
+    if (shell) { shell.classList.add('web-login-preview'); shell.classList.remove('qq-preview', 'netease-preview'); }
+    if (qqPanel) { qqPanel.classList.add('show', 'spotify-guide-panel'); }
     if (qqCookieToggle) qqCookieToggle.classList.remove('show');
     if (qqCookieInput) qqCookieInput.placeholder = spotifyLoginStatus.oauthConfigured
       ? 'Client ID saved; paste a new one to replace it'
@@ -768,10 +720,7 @@ function updateLoginProviderUi() {
       if (spCardMark) spCardMark.textContent = 'SP';
       if (spCardLabel) spCardLabel.textContent = spotifyOAuthBusy ? 'Waiting for Spotify authorization' : (spotifyLoginStatus.oauthConfigured ? 'Open Spotify authorization' : 'Save Client ID first');
     }
-    if (st) {
-      st.className = 'preview';
-      st.textContent = spotifyLoginStatusText();
-    }
+    if (st) { st.className = 'preview'; st.textContent = spotifyLoginStatusText(); }
     if (refreshBtn) {
       refreshBtn.disabled = spotifyBusy || !canOpenSpotifyOAuth;
       refreshBtn.textContent = spotifyConfigBusy ? 'Saving…' : (spotifyOAuthBusy ? 'Waiting for authorization…' : (spotifyLoginStatus.oauthConfigured ? 'Connect Spotify' : 'Save & Authorize'));
@@ -780,66 +729,21 @@ function updateLoginProviderUi() {
     updateLoginNodeGraphUi();
     return;
   }
-  if (qqPanel) qqPanel.classList.remove('spotify-guide-panel');
-  if (spotifyBtn) spotifyBtn.classList.toggle('active', false);
-  if (neteaseBtn) neteaseBtn.classList.toggle('active', loginProvider === 'netease');
-  if (qqBtn) qqBtn.classList.toggle('active', isQQ);
-  if (kugouBtn) kugouBtn.classList.toggle('active', isKugou);
-  if (qishuiBtn) qishuiBtn.classList.toggle('active', isQishui);
-  if (title) title.textContent = isQishui ? 'Scan to sign in to Soda Music' : ('Scan to sign in - ' + meta.label);
-  if (desc) desc.innerHTML = isQQ
-    ? 'Open the <b>official QQ Music web login window</b>, scan the code, and your session syncs automatically.'
-    : (isKugou
-      ? 'Open the <b>official Kugou Music web login window</b> and sign in; your session syncs automatically.'
-    : (isQishui
-      ? 'Scan the official QR code with the signed-in <b>Douyin app</b> and confirm. Once signed in, likes and playlists sync and playback uses account perks.'
-    : (canOpenNeteaseWeb
-      ? 'Open the <b>official NetEase Cloud Music web login window</b> and scan, avoiding QR rate limits on the API. Your session syncs automatically.'
-      : 'Scan with the <b>NetEase Cloud Music app</b> to sync playlists, liked songs and podcasts.')));
-  var manualCookieOpen = isManualCookieOpenForProvider(loginProvider);
-  if (shell) {
-    var useWebPreview = isQQ || isKugou || (isNetease && (canOpenNeteaseWeb || manualCookieOpen));
-    shell.classList.toggle('web-login-preview', useWebPreview);
-    shell.classList.toggle('qq-preview', isQQ);
-    shell.classList.toggle('netease-preview', isNetease && canOpenNeteaseWeb);
-  }
-  if (qqPanel) qqPanel.classList.toggle('show', isManualCookieProvider && manualCookieOpen);
-  if (qqCookieToggle) {
-    qqCookieToggle.classList.toggle('show', isManualCookieProvider);
-    qqCookieToggle.textContent = manualCookieOpen ? 'Hide import' : 'Cookie import';
-  }
-  if (qqCookieInput) qqCookieInput.placeholder = isKugou ? 'KuGoo=...; token=...; userid=...; kg_mid=...' : (isNetease ? 'MUSIC_U=...; __csrf=...' : 'uin=...; qqmusic_key=...; qm_keyst=...');
-  if (qqCookieNote) qqCookieNote.textContent = isKugou ? 'Import from a kugou.com login session.' : (isNetease ? 'Import from a music.163.com login session.' : 'Import from a y.qq.com login session.');
-  if (qqCookieSaveBtn) qqCookieSaveBtn.textContent = 'Save Cookie';
-  if (qqCard) {
-    qqCard.style.display = '';
-    qqCard.disabled = isQishui ? (qishuiBusy || !canUseQishuiQrLogin) : (isQQ ? !!qqWebLoginBusy : (isKugou ? !!kugouWebLoginBusy : !!neteaseWebLoginBusy));
-    var cardMark = qqCard.querySelector('b');
-    var cardLabel = qqCard.querySelector('span');
-    if (cardMark) cardMark.textContent = isQQ ? 'QQ' : (isKugou ? 'KG' : (isQishui ? 'QS' : 'NE'));
-    if (cardLabel) cardLabel.textContent = isQQ
-      ? (qqWebLoginBusy ? 'Waiting for scan confirmation' : (qqLoginStatus.loggedIn ? 'Reopen official window to sync membership' : 'Open official scan window'))
-      : (isKugou ? (kugouWebLoginBusy ? 'Waiting for sign-in confirmation' : 'Open official login window') : (isQishui ? (qishuiOAuthBusy ? 'Generating QR code' : 'Scan to sign in to Soda') : (neteaseWebLoginBusy ? 'Waiting for scan confirmation' : 'Open official login window')));
-  }
-  if (st) {
-    st.className = isManualCookieProvider ? 'preview' : '';
-    st.textContent = isQQ
-      ? qqLoginStatusText(qqLoginStatus)
-      : (isKugou
-        ? (kugouLoginStatus.loggedIn ? ('Kugou Music session saved · ' + (kugouLoginStatus.nickname || '')) : 'Click "Sign in" to open the official Kugou Music window')
-        : (isQishui
-          ? qishuiLoginStatusText()
-        : (canOpenNeteaseWeb ? 'Click "Web sign-in" to open the official NetEase Cloud Music window' : 'Generating QR code…')));
-  }
-  if (refreshBtn) {
-    refreshBtn.disabled = isQishui ? (qishuiBusy || !canUseQishuiQrLogin) : (isQQ ? !!qqWebLoginBusy : (isKugou ? !!kugouWebLoginBusy : !!neteaseWebLoginBusy));
-    var qqNeedsAuthRefresh = isQQ && qqLoginStatus.loggedIn && (
-      qqLoginStatus.authorizationIncomplete ||
-      qqLoginStatus.playbackKeyReady === false
-    );
-    var qqNeedsMembershipSync = isQQ && typeof qqMembershipNeedsSync === 'function' && qqMembershipNeedsSync(qqLoginStatus);
-    refreshBtn.textContent = isQishui ? (qishuiOAuthBusy ? 'Generating…' : 'Refresh QR code') : (isQQ ? (qqWebLoginBusy ? 'Waiting for scan…' : (qqNeedsAuthRefresh ? 'Re-authorize' : (qqNeedsMembershipSync ? 'Sync membership' : (qqLoginStatus.loggedIn ? 'Refresh status' : 'Scan to sign in')))) : (isKugou ? (kugouWebLoginBusy ? 'Waiting for sign-in…' : 'Sign in') : (canOpenNeteaseWeb ? (neteaseWebLoginBusy ? 'Waiting for scan…' : 'Web sign-in') : 'Refresh QR code')));
-    refreshBtn.onclick = isQishui ? openQishuiWebLogin : (isQQ ? (qqNeedsAuthRefresh ? openQQWebLogin : (qqLoginStatus.loggedIn ? refreshQr : openQQWebLogin)) : (isKugou ? openKugouWebLogin : (canOpenNeteaseWeb ? openNeteaseWebLogin : refreshQr)));
+  // EN-FORK: ytmusic/deezer/soundcloud need no sign-in.
+  if (loginProvider === 'ytmusic' || loginProvider === 'deezer' || loginProvider === 'soundcloud') {
+    if (spotifyBtn) spotifyBtn.classList.toggle('active', false);
+    var provMeta = platformMeta(loginProvider);
+    if (title) title.textContent = provMeta.label || loginProvider;
+    if (desc) desc.textContent = (provMeta.label || loginProvider) + ' — no sign-in needed. Search and play instantly.';
+    if (shell) { shell.classList.remove('qq-preview', 'netease-preview'); shell.classList.remove('web-login-preview'); }
+    if (qqPanel) { qqPanel.classList.remove('show', 'spotify-guide-panel'); }
+    if (qqCookieToggle) qqCookieToggle.classList.remove('show');
+    if (qqCard) { qqCard.style.display = 'none'; }
+    if (st) { st.className = 'preview'; st.textContent = (provMeta.label || loginProvider) + ' is ready — no sign-in needed.'; }
+    if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = 'No sign-in needed'; refreshBtn.onclick = null; }
+    if (qqCookieSaveBtn) { qqCookieSaveBtn.disabled = true; qqCookieSaveBtn.textContent = 'No sign-in needed'; }
+    updateLoginNodeGraphUi();
+    return;
   }
   updateLoginNodeGraphUi();
 }
@@ -862,110 +766,14 @@ async function refreshQr() {
     }
     return;
   }
-  if (loginProvider === 'qishui') {
-    qrKey = null;
-    var qishuiStatus = document.getElementById('qr-status');
-    var qishuiImg = document.getElementById('qr-img');
-    if (qishuiImg) qishuiImg.src = '';
-    qishuiOAuthBusy = true;
-    updateLoginProviderUi();
-    try {
-      var qishuiQr = await apiJson('/api/qishui/login/qrcode?t=' + Date.now());
-      if (!isLoginRefreshCurrent(refreshProvider, refreshSeq)) return;
-      if (!qishuiQr || !qishuiQr.token || !qishuiQr.qrcode) {
-        throw new Error((qishuiQr && (qishuiQr.message || qishuiQr.error)) || 'Failed to generate Soda Music QR code');
-      }
-      qrKey = qishuiQr.token;
-      if (qishuiImg) {
-        qishuiImg.src = qishuiQr.qrcode;
-        qishuiImg.alt = 'Soda Music sign-in QR code';
-      }
-      if (qishuiStatus) {
-        qishuiStatus.textContent = 'Scan with the Douyin app and confirm sign-in';
-        qishuiStatus.className = '';
-      }
-      startQrPoll();
-    } catch (e) {
-      if (!isLoginRefreshCurrent(refreshProvider, refreshSeq)) return;
-      if (qishuiStatus) {
-        qishuiStatus.textContent = 'Error: ' + (e && e.message ? e.message : e);
-        qishuiStatus.className = 'fail';
-      }
-    } finally {
-      qishuiOAuthBusy = false;
-      if (isLoginRefreshCurrent(refreshProvider, refreshSeq)) updateLoginProviderUi();
-      if (qishuiStatus && qrKey && isLoginRefreshCurrent(refreshProvider, refreshSeq)) {
-        qishuiStatus.textContent = 'Scan with the Douyin app and confirm sign-in';
-        qishuiStatus.className = '';
-      }
-    }
-    return;
-  }
-  if (loginProvider === 'qq') {
-    qrKey = null;
-    var qqStatus = document.getElementById('qr-status');
-    var qqImg = document.getElementById('qr-img');
-    if (qqImg) qqImg.src = '';
-    var info = await refreshQQVipStatusNow('login-panel');
-    if (!isLoginRefreshCurrent(refreshProvider, refreshSeq)) return;
-    if (qqStatus) {
-      qqStatus.textContent = qqLoginStatusText(info);
-      qqStatus.className = 'preview';
-    }
-    return;
-  }
-  if (loginProvider === 'kugou') {
-    qrKey = null;
-    var kugouStatus = document.getElementById('qr-status');
-    var kugouImg = document.getElementById('qr-img');
-    if (kugouImg) kugouImg.src = '';
-    var kugouInfo = await refreshKugouLoginStatus();
-    if (!isLoginRefreshCurrent(refreshProvider, refreshSeq)) return;
-    if (kugouStatus) {
-      kugouStatus.textContent = kugouInfo && kugouInfo.loggedIn ? ('Kugou Music session saved · ' + (kugouInfo.nickname || '')) : 'Click "Sign in" to open the official Kugou Music window';
-      kugouStatus.className = 'preview';
-    }
-    return;
-  }
-  if (window.desktopWindow && typeof window.desktopWindow.openNeteaseMusicLogin === 'function') {
-    qrKey = null;
-    var neImg = document.getElementById('qr-img');
-    var neStatus = document.getElementById('qr-status');
-    if (neImg) neImg.src = '';
-    if (neStatus) {
-      neStatus.textContent = loginStatus.loggedIn ? ('NetEase Cloud Music session saved · ' + (loginStatus.nickname || '')) : 'Click "Web sign-in" to open the official NetEase Cloud Music window';
-      neStatus.className = 'preview';
-    }
-    return;
-  }
-  try {
-    var k = await apiJson('/api/login/qr/key');
-    if (!isLoginRefreshCurrent(refreshProvider, refreshSeq)) return;
-    if (!k.key) throw new Error('Failed to get key');
-    qrKey = k.key;
-    var q = await apiJson('/api/login/qr/create?key=' + encodeURIComponent(qrKey));
-    if (!isLoginRefreshCurrent(refreshProvider, refreshSeq)) return;
-    if (!q.img) throw new Error('Failed to generate QR code');
-    document.getElementById('qr-img').src = q.img;
-    document.getElementById('qr-status').textContent = 'Scan with the NetEase Cloud Music app';
-    startQrPoll();
-  } catch (e) {
-    if (!isLoginRefreshCurrent(refreshProvider, refreshSeq)) return;
-    document.getElementById('qr-status').textContent = 'Error: ' + e.message;
-    document.getElementById('qr-status').className = 'fail';
-  }
+  // EN-FORK: other global providers (ytmusic/deezer/soundcloud) need no QR sign-in.
 }
 function startQrPoll() {
   if (qrPollTimer) {
     clearInterval(qrPollTimer);
     clearTimeout(qrPollTimer);
   }
-  if (loginProvider === 'qishui') {
-    var generation = qishuiQrPollGeneration;
-    qrPollTimer = setTimeout(function () { pollQishuiQr(generation); }, 1200);
-    return;
-  }
-  qrPollTimer = setInterval(checkQr, 2000);
+  // EN-FORK: QR polling only used for Spotify; global providers need no QR.
 }
 function stopQrPoll() {
   if (qrPollTimer) {
@@ -973,92 +781,14 @@ function stopQrPoll() {
     clearTimeout(qrPollTimer);
     qrPollTimer = null;
   }
-  qishuiQrPollGeneration += 1;
-  qishuiQrPollBusy = false;
 }
-function scheduleQishuiQrPoll(generation, delay) {
-  if (generation !== qishuiQrPollGeneration || loginProvider !== 'qishui' || !qrKey) return;
-  if (qrPollTimer) clearTimeout(qrPollTimer);
-  qrPollTimer = setTimeout(function () { pollQishuiQr(generation); }, Math.max(1000, Number(delay) || 4500));
-}
-async function pollQishuiQr(generation) {
-  if (generation !== qishuiQrPollGeneration || loginProvider !== 'qishui' || !qrKey || qishuiQrPollBusy) return;
-  qishuiQrPollBusy = true;
-  var statusEl = document.getElementById('qr-status');
-  var nextDelay = 4500;
-  try {
-    var result = await apiJson('/api/qishui/login/check?token=' + encodeURIComponent(qrKey) + '&t=' + Date.now());
-    if (generation !== qishuiQrPollGeneration || loginProvider !== 'qishui') return;
-    if (result && result.loggedIn) {
-      stopQrPoll();
-      qishuiLoginStatus = normalizeQishuiLoginStatus(result);
-      activeAccountProvider = 'qishui';
-      markLoginWorkflowConnected('qishui');
-      renderUserBtn();
-      if (statusEl) {
-        statusEl.textContent = 'Signed in!';
-        statusEl.className = 'scan';
-      }
-      await refreshUserPlaylists(true);
-      loadHomeDiscover(true);
-      setTimeout(function () {
-        closeLoginModal();
-        showToast('Soda Music signed in: ' + (qishuiLoginStatus.nickname || qishuiLoginStatus.userId || ''));
-      }, 450);
-      return;
-    }
-    var code = Number(result && (result.errorCode || result.error_code) || 0);
-    var qrStatus = String(result && result.status || 'waiting');
-    if (code === 2 || qrStatus === 'expired') {
-      stopQrPoll();
-      if (statusEl) {
-        statusEl.textContent = 'QR code expired. Refresh it';
-        statusEl.className = 'fail';
-      }
-      return;
-    }
-    if (code === 7 || qrStatus === 'rate_limited') {
-      nextDelay = Number(result && result.retryAfterMs) || 60000;
-      if (statusEl) {
-        statusEl.textContent = 'Requests are frequent; retrying automatically shortly…';
-        statusEl.className = 'preview';
-      }
-    } else if (qrStatus === 'mfa_cancelled') {
-      stopQrPoll();
-      if (statusEl) {
-        statusEl.textContent = 'Two-step verification cancelled. Refresh the QR code and try again';
-        statusEl.className = 'fail';
-      }
-      return;
-    } else if (statusEl) {
-      statusEl.textContent = qrStatus === 'scanned' || qrStatus === '2'
-        ? 'Scanned. Confirm on your phone…'
-        : 'Waiting for scan confirmation…';
-      statusEl.className = qrStatus === 'scanned' || qrStatus === '2' ? 'scan' : '';
-    }
-  } catch (e) {
-    nextDelay = 8000;
-    console.warn('Qishui QR check failed:', e);
-    if (statusEl) {
-      statusEl.textContent = 'Sign-in check failed; retrying…';
-      statusEl.className = 'fail';
-    }
-  } finally {
-    qishuiQrPollBusy = false;
-    scheduleQishuiQrPoll(generation, nextDelay);
-  }
-}
+// EN-FORK: scheduleQishuiQrPoll, pollQishuiQr removed — Chinese providers removed from UI.
 function toggleQQCookiePanel() {
-  if (loginProvider === 'spotify') return;
-  setManualCookieOpenForProvider(loginProvider, !isManualCookieOpenForProvider(loginProvider));
-  updateLoginProviderUi();
+  // EN-FORK: cookie panel disabled for global providers.
 }
 function openProviderWebLogin() {
-  if (loginProvider === 'qq') return openQQWebLogin();
-  if (loginProvider === 'kugou') return openKugouWebLogin();
-  if (loginProvider === 'qishui') return openQishuiWebLogin();
   if (loginProvider === 'spotify') return openSpotifyWebLogin();
-  return openNeteaseWebLogin();
+  // EN-FORK: ytmusic/deezer/soundcloud need no web login.
 }
 async function openSpotifyWebLogin() {
   if (spotifyOAuthBusy) return;
@@ -1150,282 +880,7 @@ async function submitSpotifyConfigLogin() {
   }
   if (shouldOpenOAuth) await openSpotifyWebLogin();
 }
-async function openNeteaseWebLogin() {
-  if (neteaseWebLoginBusy) return;
-  var statusEl = document.getElementById('qr-status');
-  var api = window.desktopWindow;
-  if (!api || !api.isDesktop || typeof api.openNeteaseMusicLogin !== 'function') {
-    if (statusEl) { statusEl.textContent = 'Official web sign-in unavailable here. Trying the legacy QR code…'; statusEl.className = 'fail'; }
-    return refreshQr();
-  }
-
-  neteaseWebLoginBusy = true;
-  updateLoginProviderUi();
-  if (statusEl) { statusEl.textContent = 'NetEase Cloud Music window opened. Scan and sign in on the official page…'; statusEl.className = 'preview'; }
-  try {
-    var result = await api.openNeteaseMusicLogin();
-    if (!result || !result.ok || !result.cookie) {
-      throw new Error((result && (result.message || result.error)) || 'NetEase Cloud Music sign-in incomplete');
-    }
-    if (statusEl) { statusEl.textContent = 'Syncing NetEase Cloud Music session…'; statusEl.className = 'preview'; }
-    var info = await apiJson('/api/login/cookie', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cookie: result.cookie })
-    });
-    if (!info || !info.loggedIn) throw new Error((info && (info.message || info.error)) || 'NetEase Cloud Music session unavailable');
-    loginStatus = info;
-    activeAccountProvider = 'netease';
-    renderUserBtn();
-    refreshUserPlaylists(true);
-    loadHomeDiscover(true);
-    if (statusEl) { statusEl.textContent = 'NetEase Cloud Music session saved'; statusEl.className = 'scan'; }
-    offerLoginCookieExport('netease', info);
-    setTimeout(function () {
-      closeLoginModal();
-      showToast('NetEase Cloud Music signed in: ' + (info.nickname || info.userId || ''));
-    }, 420);
-  } catch (e) {
-    neteaseWebLoginBusy = false;
-    updateLoginProviderUi();
-    if (statusEl) { statusEl.textContent = e && e.message ? e.message : 'NetEase Cloud Music sign-in failed'; statusEl.className = 'fail'; }
-  } finally {
-    if (neteaseWebLoginBusy) {
-      neteaseWebLoginBusy = false;
-      updateLoginProviderUi();
-    }
-  }
-}
-async function openQQWebLogin() {
-  if (qqWebLoginBusy) return;
-  var statusEl = document.getElementById('qr-status');
-  var api = window.desktopWindow;
-  if (!api || !api.isDesktop || typeof api.openQQMusicLogin !== 'function') {
-    qqManualCookieOpen = true;
-    updateLoginProviderUi();
-    if (statusEl) { statusEl.textContent = 'Automatic web sign-in is unavailable here. Use manual import instead.'; statusEl.className = 'fail'; }
-    return;
-  }
-
-  qqWebLoginBusy = true;
-  updateLoginProviderUi();
-  if (statusEl) { statusEl.textContent = 'QQ Music window opened. Scan and confirm to sign in…'; statusEl.className = 'preview'; }
-  try {
-    var result = await api.openQQMusicLogin({
-      forceReauth: !!(qqLoginStatus && qqLoginStatus.authorizationIncomplete && qqLoginStatus.playbackKeyReady === false)
-    });
-    if (!result || !result.ok || !result.cookie) {
-      throw new Error((result && (result.message || result.error)) || 'QQ sign-in incomplete');
-    }
-    if (statusEl) { statusEl.textContent = 'Syncing QQ Music session…'; statusEl.className = 'preview'; }
-    var info = await apiJson('/api/qq/login/cookie', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cookie: result.cookie })
-    });
-    if (!info || !info.loggedIn) throw new Error((info && (info.message || info.error)) || 'QQ session unavailable');
-    qqLoginStatus = normalizeQQLoginStatus(info);
-    auditProviderVipState('qq', qqLoginStatus);
-    activeAccountProvider = 'qq';
-    qqManualCookieOpen = false;
-    renderUserBtn();
-    refreshUserPlaylists(true);
-    offerLoginCookieExport('qq', info);
-    var qqPlaybackReady = !!info.playbackKeyReady && !result.partial;
-    if (!qqPlaybackReady) {
-      if (statusEl) { statusEl.textContent = 'QQ account synced, but playback authorization is incomplete. Reopen QQ Music sign-in and wait until the player page loads before closing the window.'; statusEl.className = 'preview'; }
-      showToast('QQ account synced; playback authorization incomplete');
-      return;
-    }
-    if (statusEl) { statusEl.textContent = qqPlaybackReady ? qqLoginStatusText(qqLoginStatus) : 'QQ account synced; playback authorization incomplete. Some songs will auto-switch sources'; statusEl.className = 'scan'; }
-    setTimeout(function () {
-      closeLoginModal();
-      showToast((qqPlaybackReady ? 'QQ Music signed in: ' : 'QQ account synced: ') + (info.nickname || info.userId || ''));
-    }, 420);
-  } catch (e) {
-    qqWebLoginBusy = false;
-    updateLoginProviderUi();
-    if (statusEl) { statusEl.textContent = e && e.message ? e.message : 'QQ sign-in failed'; statusEl.className = 'fail'; }
-  } finally {
-    if (qqWebLoginBusy) {
-      qqWebLoginBusy = false;
-      updateLoginProviderUi();
-    }
-  }
-}
-async function openKugouWebLogin() {
-  if (kugouWebLoginBusy) return;
-  var statusEl = document.getElementById('qr-status');
-  var api = window.desktopWindow;
-  if (!api || !api.isDesktop || typeof api.openKugouMusicLogin !== 'function') {
-    kugouManualCookieOpen = true;
-    updateLoginProviderUi();
-    if (statusEl) { statusEl.textContent = 'Automatic web sign-in is unavailable here. Use manual import instead.'; statusEl.className = 'fail'; }
-    return;
-  }
-
-  kugouWebLoginBusy = true;
-  updateLoginProviderUi();
-  if (statusEl) { statusEl.textContent = 'Kugou Music window opened. Complete the official sign-in…'; statusEl.className = 'preview'; }
-  try {
-    var result = await api.openKugouMusicLogin();
-    if (!result || !result.ok || !result.cookie) {
-      throw new Error((result && (result.message || result.error)) || 'Kugou sign-in incomplete');
-    }
-    if (statusEl) { statusEl.textContent = 'Syncing Kugou Music session…'; statusEl.className = 'preview'; }
-    var info = await apiJson('/api/kugou/login/cookie', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cookie: result.cookie })
-    });
-    if (!info || !info.loggedIn) throw new Error((info && (info.message || info.error)) || 'Kugou session unavailable');
-    kugouLoginStatus = normalizeKugouLoginStatus(info);
-    activeAccountProvider = 'kugou';
-    kugouManualCookieOpen = false;
-    renderUserBtn();
-    refreshUserPlaylists(true);
-    offerLoginCookieExport('kugou', info);
-    var ready = !!info.playbackKeyReady && !result.partial;
-    if (statusEl) { statusEl.textContent = ready ? 'Kugou Music session saved' : 'Kugou account synced; playback authorization incomplete. Some songs may need re-signing'; statusEl.className = 'scan'; }
-    setTimeout(function () {
-      closeLoginModal();
-      showToast((ready ? 'Kugou Music signed in: ' : 'Kugou account synced: ') + (info.nickname || info.userId || ''));
-    }, 420);
-  } catch (e) {
-    kugouWebLoginBusy = false;
-    updateLoginProviderUi();
-    if (statusEl) { statusEl.textContent = e && e.message ? e.message : 'Kugou sign-in failed'; statusEl.className = 'fail'; }
-  } finally {
-    if (kugouWebLoginBusy) {
-      kugouWebLoginBusy = false;
-      updateLoginProviderUi();
-    }
-  }
-}
-async function openQishuiWebLogin() {
-  if (qishuiTokenBusy || qishuiOAuthBusy) return;
-  return refreshQr();
-}
-async function submitQQCookieLogin() {
-  if (loginProvider === 'spotify') return submitSpotifyConfigLogin();
-  if (loginProvider === 'qishui') return openQishuiWebLogin();
-  if (loginProvider === 'netease') return submitNeteaseCookieLogin();
-  var isKugou = loginProvider === 'kugou';
-  if (isKugou ? kugouCookieBusy : qqCookieBusy) return;
-  var input = document.getElementById('qq-cookie-input');
-  var statusEl = document.getElementById('qr-status');
-  var saveBtn = document.getElementById('qq-cookie-save-btn');
-  var cookie = input ? input.value.trim() : '';
-  if (!cookie) {
-    if (statusEl) { statusEl.textContent = isKugou ? 'Paste a Kugou Music cookie first' : 'Paste a QQ Music cookie first'; statusEl.className = 'fail'; }
-    return;
-  }
-  if (isKugou) kugouCookieBusy = true;
-  else qqCookieBusy = true;
-  if (saveBtn) saveBtn.classList.add('busy');
-  if (statusEl) { statusEl.textContent = isKugou ? 'Saving Kugou session…' : 'Saving QQ session…'; statusEl.className = 'preview'; }
-  try {
-    var info = await apiJson(isKugou ? '/api/kugou/login/cookie' : '/api/qq/login/cookie', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cookie: cookie })
-    });
-    if (!info || !info.loggedIn) throw new Error((info && (info.message || info.error)) || (isKugou ? 'Kugou session unavailable' : 'QQ session unavailable'));
-    if (isKugou) kugouLoginStatus = normalizeKugouLoginStatus(info);
-    else {
-      qqLoginStatus = normalizeQQLoginStatus(info);
-      auditProviderVipState('qq', qqLoginStatus);
-    }
-    activeAccountProvider = isKugou ? 'kugou' : 'qq';
-    if (input) input.value = '';
-    renderUserBtn();
-    refreshUserPlaylists(true);
-    var manualPlaybackReady = !!info.playbackKeyReady;
-    if (statusEl) { statusEl.textContent = manualPlaybackReady ? (isKugou ? 'Kugou Music session saved' : qqLoginStatusText(qqLoginStatus)) : (isKugou ? 'Kugou account synced; playback authorization incomplete. Some songs may need re-signing' : 'QQ account synced; playback authorization incomplete. Some songs will auto-switch sources'); statusEl.className = 'scan'; }
-    setManualCookieOpenForProvider(activeAccountProvider, false);
-    offerLoginCookieExport(activeAccountProvider, info);
-    setTimeout(function () {
-      closeLoginModal();
-      showToast((manualPlaybackReady ? (isKugou ? 'Kugou Music signed in: ' : 'QQ Music signed in: ') : (isKugou ? 'Kugou account synced: ' : 'QQ account synced: ')) + (info.nickname || info.userId || ''));
-    }, 420);
-  } catch (e) {
-    if (statusEl) { statusEl.textContent = e && e.message ? e.message : (isKugou ? 'Failed to save Kugou session' : 'Failed to save QQ session'); statusEl.className = 'fail'; }
-  } finally {
-    if (isKugou) kugouCookieBusy = false;
-    else qqCookieBusy = false;
-    if (saveBtn) saveBtn.classList.remove('busy');
-  }
-}
-
-async function submitNeteaseCookieLogin() {
-  if (qqCookieBusy) return;
-  var input = document.getElementById('qq-cookie-input');
-  var statusEl = document.getElementById('qr-status');
-  var saveBtn = document.getElementById('qq-cookie-save-btn');
-  var cookie = input ? input.value.trim() : '';
-  if (!cookie) {
-    if (statusEl) { statusEl.textContent = 'Paste a NetEase Cloud Music MUSIC_U cookie first'; statusEl.className = 'fail'; }
-    return;
-  }
-  qqCookieBusy = true;
-  if (saveBtn) saveBtn.classList.add('busy');
-  if (statusEl) { statusEl.textContent = 'Saving NetEase Cloud Music session…'; statusEl.className = 'preview'; }
-  try {
-    var info = await apiJson('/api/login/cookie', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cookie: cookie })
-    });
-    if (!info || !info.loggedIn) throw new Error((info && (info.message || info.error)) || 'NetEase Cloud Music session unavailable');
-    loginStatus = info;
-    activeAccountProvider = 'netease';
-    neteaseManualCookieOpen = false;
-    if (input) input.value = '';
-    renderUserBtn();
-    refreshUserPlaylists(true);
-    loadHomeDiscover(true);
-    if (statusEl) { statusEl.textContent = 'NetEase Cloud Music session saved'; statusEl.className = 'scan'; }
-    offerLoginCookieExport('netease', info);
-    setTimeout(function () {
-      closeLoginModal();
-      showToast('NetEase Cloud Music signed in: ' + (info.nickname || info.userId || ''));
-    }, 420);
-  } catch (e) {
-    if (statusEl) { statusEl.textContent = e && e.message ? e.message : 'Failed to save NetEase Cloud Music session'; statusEl.className = 'fail'; }
-  } finally {
-    qqCookieBusy = false;
-    if (saveBtn) saveBtn.classList.remove('busy');
-    updateLoginProviderUi();
-  }
-}
-async function checkQr() {
-  if (!qrKey) return;
-  try {
-    var r = await apiJson('/api/login/qr/check?key=' + encodeURIComponent(qrKey));
-    var $st = document.getElementById('qr-status');
-    if (r.code === 800) { $st.textContent = 'QR code expired. Please refresh'; $st.className = 'fail'; stopQrPoll(); }
-    else if (r.code === 801) { $st.textContent = 'Scan the code in the app'; $st.className = ''; }
-    else if (r.code === 802) { $st.textContent = 'Scanned. Confirm on your phone…'; $st.className = 'scan'; }
-    else if (r.code === 803 && (r.loggedIn || r.hasCookie)) {
-      $st.textContent = r.pendingProfile ? 'Signed in. Syncing account profile…' : 'Signed in!'; $st.className = 'scan';
-      stopQrPoll();
-      loginStatus = r.loggedIn ? r : Object.assign({}, r, { loggedIn: true, pendingProfile: true, nickname: r.nickname || 'NetEase user' });
-      activeAccountProvider = 'netease';
-      renderUserBtn();
-      setTimeout(async function () {
-        var fresh = await refreshLoginStatus(true);
-        if (!fresh || !fresh.loggedIn) {
-          loginStatus = Object.assign({}, loginStatus, { loggedIn: true, pendingProfile: true });
-          renderUserBtn();
-          fresh = loginStatus;
-        }
-        closeLoginModal();
-        offerLoginCookieExport('netease', fresh);
-        showToast('Welcome ' + (fresh && fresh.nickname ? fresh.nickname : ''));
-      }, r.pendingProfile ? 1200 : 500);
-    } else if (r.code === 803) {
-      $st.textContent = 'Scan confirmed but no login credential received. Refresh the QR code and retry'; $st.className = 'fail';
-      stopQrPoll();
-    }
-  } catch (e) { console.warn(e); }
-}
+// EN-FORK: openNeteaseWebLogin, openQQWebLogin, openKugouWebLogin, openQishuiWebLogin,
+// submitQQCookieLogin, submitNeteaseCookieLogin, checkQr, pollQishuiQr, scheduleQishuiQrPoll
+// removed — Chinese providers (netease/qq/kugou/qishui) removed from login UI.
+// Backends remain for lyric resolvers / hidden search fallback.

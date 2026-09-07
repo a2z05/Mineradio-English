@@ -5,7 +5,10 @@ var searchLastResultQuery = '';
 var searchProviderNotice = '';
 var SEARCH_HISTORY_STORE_KEY = 'mineradio-search-history';
 var SEARCH_HISTORY_STORE_VERSION = 3;
-var SEARCH_HISTORY_MODES = ['song', 'netease', 'qq', 'kugou', 'qishui', 'spotify', 'podcast'];
+// EN-FORK global swap: search modes for the global providers. Legacy Chinese
+// modes stay in the history whitelist so old persisted entries don't throw.
+// EN-FORK: search modes (Chinese tabs removed from UI; kept in history whitelist for migration)
+var SEARCH_HISTORY_MODES = ['song', 'ytmusic', 'deezer', 'soundcloud', 'spotify', 'podcast', 'netease', 'qq', 'kugou', 'qishui'];
 var MUSIC_SEARCH_INITIAL_VISIBLE = 18;
 var MUSIC_SEARCH_APPEND_BATCH = 14;
 var MUSIC_SEARCH_MAX_RESULTS = 180;
@@ -161,52 +164,26 @@ function runSearchHistory(q) {
   $input.focus();
 }
 function updateSearchModeTabs() {
-  var songBtn = document.getElementById('search-mode-song');
-  var neteaseBtn = document.getElementById('search-mode-netease');
-  var qqBtn = document.getElementById('search-mode-qq');
-  var kugouBtn = document.getElementById('search-mode-kugou');
-  var qishuiBtn = document.getElementById('search-mode-qishui');
-  var spotifyBtn = document.getElementById('search-mode-spotify');
-  var podcastBtn = document.getElementById('search-mode-podcast');
-  if (songBtn) {
-    songBtn.classList.toggle('active', searchMode === 'song');
-    songBtn.setAttribute('aria-selected', searchMode === 'song' ? 'true' : 'false');
-  }
-  if (neteaseBtn) {
-    neteaseBtn.classList.toggle('active', searchMode === 'netease');
-    neteaseBtn.setAttribute('aria-selected', searchMode === 'netease' ? 'true' : 'false');
-  }
-  if (qqBtn) {
-    qqBtn.classList.toggle('active', searchMode === 'qq');
-    qqBtn.setAttribute('aria-selected', searchMode === 'qq' ? 'true' : 'false');
-  }
-  if (kugouBtn) {
-    kugouBtn.classList.toggle('active', searchMode === 'kugou');
-    kugouBtn.setAttribute('aria-selected', searchMode === 'kugou' ? 'true' : 'false');
-  }
-  if (qishuiBtn) {
-    qishuiBtn.classList.toggle('active', searchMode === 'qishui');
-    qishuiBtn.setAttribute('aria-selected', searchMode === 'qishui' ? 'true' : 'false');
-  }
-  if (spotifyBtn) {
-    spotifyBtn.classList.toggle('active', searchMode === 'spotify');
-    spotifyBtn.setAttribute('aria-selected', searchMode === 'spotify' ? 'true' : 'false');
-  }
-  if (podcastBtn) {
-    podcastBtn.classList.toggle('active', searchMode === 'podcast');
-    podcastBtn.setAttribute('aria-selected', searchMode === 'podcast' ? 'true' : 'false');
+  var ids = ['song', 'ytmusic', 'deezer', 'soundcloud', 'spotify', 'podcast'];
+  for (var i = 0; i < ids.length; i++) {
+    var btn = document.getElementById('search-mode-' + ids[i]);
+    if (!btn) continue;
+    var active = searchMode === ids[i];
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
   }
   if ($input) {
     $input.placeholder = searchMode === 'podcast'
       ? 'Search podcasts, radio...'
-      : (searchMode === 'kugou' ? 'Search Kugou Music...' : (searchMode === 'qq' ? 'Search QQ Music...' : (searchMode === 'netease' ? 'Search NetEase Cloud Music...' : 'Search songs, artists...')));
+      : (searchMode === 'ytmusic' ? 'Search YouTube Music...'
+        : (searchMode === 'deezer' ? 'Search Deezer...'
+          : (searchMode === 'soundcloud' ? 'Search SoundCloud...'
+            : (searchMode === 'spotify' ? 'Search Spotify match source...' : 'Search songs, artists...'))));
   }
-  if ($input && searchMode === 'qishui') $input.placeholder = 'Search Soda Music match source...';
-  if ($input && searchMode === 'spotify') $input.placeholder = 'Search Spotify match source...';
   requestAnimationFrame(updateSearchPillGlassDisplacementMap);
 }
 function setSearchMode(mode) {
-  mode = (mode === 'podcast' || mode === 'netease' || mode === 'qq' || mode === 'kugou' || mode === 'qishui' || mode === 'spotify') ? mode : 'song';
+  mode = (SEARCH_HISTORY_MODES.indexOf(mode) >= 0 && mode !== 'song') || mode === 'song' ? mode : 'song';
   if (searchMode === mode) return;
   searchMode = mode;
   updateSearchModeTabs();
@@ -442,18 +419,28 @@ document.addEventListener('click', function (e) {
 });
 updateSearchModeTabs();
 
+// EN-FORK global swap: default provider is YouTube Music. Legacy Chinese
+// keys still resolve so persisted queues/history degrade gracefully.
 function songProviderKey(song) {
+  if (song && (song.provider === 'ytmusic' || song.source === 'ytmusic' || song.type === 'ytmusic' || song.videoId)) return 'ytmusic';
+  if (song && (song.provider === 'deezer' || song.source === 'deezer' || song.type === 'deezer')) return 'deezer';
+  if (song && (song.provider === 'soundcloud' || song.source === 'soundcloud' || song.type === 'soundcloud')) return 'soundcloud';
   if (song && (song.provider === 'spotify' || song.source === 'spotify' || song.type === 'spotify' || song.spotifyId || song.spotifyUri)) return 'spotify';
   if (song && (song.provider === 'qq' || song.source === 'qq' || song.type === 'qq')) return 'qq';
   if (song && (song.provider === 'qishui' || song.source === 'qishui' || song.type === 'qishui')) return 'qishui';
   if (song && (song.provider === 'kugou' || song.source === 'kugou' || song.type === 'kugou' || song.hash || song.audioHash)) return 'kugou';
-  return 'netease';
+  return 'ytmusic';
+}
+var SONG_SOURCE_TAG_LABELS = { ytmusic: 'YT', deezer: 'DZ', soundcloud: 'SC', spotify: 'SP', netease: 'NE', qq: 'QQ', kugou: 'KG', qishui: 'QS' };
+function platformMeta(provider) {
+  var map = { ytmusic: { label: 'YouTube Music' }, deezer: { label: 'Deezer' }, soundcloud: { label: 'SoundCloud' }, spotify: { label: 'Spotify' }, netease: { label: 'NetEase' }, qq: { label: 'QQ Music' }, kugou: { label: 'Kugou' }, qishui: { label: 'Soda Music' } };
+  return map[provider] || { label: provider };
 }
 function songSourceTagHtml(song, opts) {
   opts = opts || {};
   var rawKey = song && (song.resolvedPlaybackProvider || song.playbackProvider || song.audioProvider || song.providerResolved || '');
-  var key = /^(netease|qq|kugou|qishui|spotify)$/.test(String(rawKey || '')) ? String(rawKey) : songProviderKey(song);
-  var label = key === 'qq' ? 'QQ' : (key === 'kugou' ? 'KG' : (key === 'qishui' ? 'QS' : (key === 'spotify' ? 'SP' : 'NE')));
+  var key = /^(ytmusic|deezer|soundcloud|netease|qq|kugou|qishui|spotify)$/.test(String(rawKey || '')) ? String(rawKey) : songProviderKey(song);
+  var label = SONG_SOURCE_TAG_LABELS[key] || key.toUpperCase();
   if (opts.switcher) {
     return '<button type="button" class="tag-source ' + key + ' control-source-chip" title="Switch source" aria-haspopup="true" onclick="toggleControlSourceSwitcher(event)">' + label + '</button>';
   }
@@ -462,21 +449,20 @@ function songSourceTagHtml(song, opts) {
 var controlSourceSwitcherState = { open: false, loading: false, requestId: 0, anchor: null };
 function controlSourceProviders() {
   return [
-    { key: 'netease', label: 'NE', title: 'NetEase Cloud Music' },
-    { key: 'qq', label: 'QQ', title: 'QQ Music' },
-    { key: 'kugou', label: 'KG', title: 'Kugou' },
-    { key: 'qishui', label: 'QS', title: 'Soda Music' },
+    { key: 'ytmusic', label: 'YT', title: 'YouTube Music' },
+    { key: 'deezer', label: 'DZ', title: 'Deezer' },
+    { key: 'soundcloud', label: 'SC', title: 'SoundCloud' },
     { key: 'spotify', label: 'SP', title: 'Spotify' }
   ];
 }
 function controlSourceProviderTitle(provider) {
   var item = controlSourceProviders().filter(function (p) { return p.key === provider; })[0];
-  return item ? item.title : provider;
+  return item ? item.title : platformMeta(provider).label;
 }
 function controlSourceSearchUrl(provider, query) {
-  if (provider === 'qq') return '/api/qq/search?keywords=' + encodeURIComponent(query) + '&limit=8';
-  if (provider === 'kugou') return '/api/kugou/search?keywords=' + encodeURIComponent(query) + '&limit=8';
-  if (provider === 'qishui') return '/api/qishui/search?keywords=' + encodeURIComponent(query) + '&limit=8';
+  if (provider === 'ytmusic') return '/api/ytmusic/search?keywords=' + encodeURIComponent(query) + '&limit=8';
+  if (provider === 'deezer') return '/api/deezer/search?keywords=' + encodeURIComponent(query) + '&limit=8';
+  if (provider === 'soundcloud') return '/api/soundcloud/search?keywords=' + encodeURIComponent(query) + '&limit=8';
   if (provider === 'spotify') return '/api/spotify/search?keywords=' + encodeURIComponent(query) + '&limit=8';
   return '/api/search?keywords=' + encodeURIComponent(query) + '&limit=10';
 }
@@ -751,9 +737,15 @@ function searchIntentPrefersQQ(q) {
   q = String(q || '').toLowerCase();
   return /(^|\s)qq($|\s)|qq音乐|qq音樂/.test(q);
 }
-var MUSIC_SEARCH_PROVIDER_ORDER = ['netease', 'qq', 'kugou', 'qishui', 'spotify'];
+// EN-FORK global swap: the visible search fan-out covers the global providers.
+// NetEase/QQ stay in the list as lyric-only backends but are filtered out of
+// "All" aggregation by canSearch (they only serve lyrics now).
+var MUSIC_SEARCH_PROVIDER_ORDER = ['ytmusic', 'deezer', 'soundcloud', 'spotify'];
 function searchProviderStatus(provider) {
   if (typeof platformStatus === 'function') return platformStatus(provider);
+  if (provider === 'ytmusic') return ytmusicStatus;
+  if (provider === 'deezer') return deezerStatus;
+  if (provider === 'soundcloud') return soundcloudStatus;
   if (provider === 'spotify') return spotifyLoginStatus;
   if (provider === 'qishui') return qishuiLoginStatus;
   if (provider === 'kugou') return kugouLoginStatus;
@@ -769,12 +761,11 @@ function searchProviderCanSearch(provider) {
   var capabilities = st.capabilities || {};
   if (st.searchReady === true || st.publicCatalog === true || capabilities.search === true) return true;
   if (provider === 'spotify') return !!(st.loggedIn && !st.reauthRequired);
-  // These providers expose public catalogue metadata search. Login still controls
-  // private recommendations, collections and playback rights, not discovery.
-  return provider === 'netease' || provider === 'qq' || provider === 'kugou' || provider === 'qishui';
+  if (provider === 'ytmusic' || provider === 'deezer' || provider === 'soundcloud') return true;
+  return false;
 }
 function searchModeProvider(mode) {
-  return mode === 'netease' || mode === 'qq' || mode === 'kugou' || mode === 'qishui' || mode === 'spotify' ? mode : '';
+  return mode === 'ytmusic' || mode === 'deezer' || mode === 'soundcloud' || mode === 'netease' || mode === 'qq' || mode === 'kugou' || mode === 'qishui' || mode === 'spotify' ? mode : '';
 }
 function activeSearchProvidersForMode(mode) {
   var specific = searchModeProvider(mode);
@@ -791,9 +782,9 @@ function searchProviderLoginNotice(mode) {
 }
 function searchProviderUrl(provider, q, limit, offset) {
   var suffix = '&limit=' + limit + '&offset=' + Math.max(0, Number(offset) || 0);
-  if (provider === 'qq') return '/api/qq/search?keywords=' + encodeURIComponent(q) + suffix;
-  if (provider === 'kugou') return '/api/kugou/search?keywords=' + encodeURIComponent(q) + suffix;
-  if (provider === 'qishui') return '/api/qishui/search?keywords=' + encodeURIComponent(q) + suffix;
+  if (provider === 'ytmusic') return '/api/ytmusic/search?keywords=' + encodeURIComponent(q) + suffix;
+  if (provider === 'deezer') return '/api/deezer/search?keywords=' + encodeURIComponent(q) + suffix;
+  if (provider === 'soundcloud') return '/api/soundcloud/search?keywords=' + encodeURIComponent(q) + suffix;
   if (provider === 'spotify') return '/api/spotify/search?keywords=' + encodeURIComponent(q) + suffix;
   return '/api/search?keywords=' + encodeURIComponent(q) + suffix;
 }
@@ -1016,7 +1007,9 @@ function scoreSongSearchResult(song, q, sourceIndex) {
   if (song && song.playable === false) score -= 6;
   return score;
 }
-function mergeSongSearchResults(neteaseSongs, qqSongs, kugouSongs, qishuiSongs, spotifySongs, limit, q) {
+// EN-FORK global swap: merge across the global providers. Legacy Chinese
+// arrays still accepted for backward compatibility with persisted callers.
+function mergeSongSearchResults(ytmusicSongs, deezerSongs, soundcloudSongs, spotifySongs, legacyNetease, legacyQq, legacyKugou, legacyQishui, limit, q) {
   var out = [];
   var providerSeen = {};
   var canonicalSeen = {};
@@ -1035,11 +1028,14 @@ function mergeSongSearchResults(neteaseSongs, qqSongs, kugouSongs, qishuiSongs, 
     if (canonicalKey) canonicalSeen[canonicalKey] = out.length;
     out.push(song);
   }
-  (neteaseSongs || []).forEach(function (song, i) { push(song, i); });
-  (qqSongs || []).forEach(function (song, i) { push(song, i); });
-  (kugouSongs || []).forEach(function (song, i) { push(song, i); });
-  (qishuiSongs || []).forEach(function (song, i) { push(song, i); });
+  (ytmusicSongs || []).forEach(function (song, i) { push(song, i); });
+  (deezerSongs || []).forEach(function (song, i) { push(song, i); });
+  (soundcloudSongs || []).forEach(function (song, i) { push(song, i); });
   (spotifySongs || []).forEach(function (song, i) { push(song, i); });
+  (legacyNetease || []).forEach(function (song, i) { push(song, i); });
+  (legacyQq || []).forEach(function (song, i) { push(song, i); });
+  (legacyKugou || []).forEach(function (song, i) { push(song, i); });
+  (legacyQishui || []).forEach(function (song, i) { push(song, i); });
   out.sort(function (a, b) { return (b._searchScore || 0) - (a._searchScore || 0); });
   return out.slice(0, limit);
 }
@@ -1077,7 +1073,7 @@ async function fetchMusicSearchResults(q, mode, previousPages) {
   Object.keys(previousPages || {}).forEach(function (provider) {
     providerPages[provider] = Object.assign({}, previousPages[provider]);
   });
-  var pageLimitByProvider = { netease: 18, qq: 12, kugou: 12, qishui: 12, spotify: 10 };
+  var pageLimitByProvider = { ytmusic: 20, deezer: 20, soundcloud: 16, spotify: 10 };
   var fetchProviders = providers.filter(function (provider) {
     return !previousPages || !previousPages[provider] || previousPages[provider].hasMore;
   });
@@ -1089,7 +1085,7 @@ async function fetchMusicSearchResults(q, mode, previousPages) {
       return { provider: provider, offset: offset, requestedLimit: limit, value: value || {} };
     });
   }));
-  var songsByProvider = { netease: [], qq: [], kugou: [], qishui: [], spotify: [] };
+  var songsByProvider = { ytmusic: [], deezer: [], soundcloud: [], spotify: [] };
   fetchProviders.forEach(function (provider, index) {
     var entry = result[index];
     if (!entry || entry.status !== 'fulfilled') {
@@ -1119,11 +1115,11 @@ async function fetchMusicSearchResults(q, mode, previousPages) {
     if (value.message && !songs.length && !searchProviderNotice) searchProviderNotice = value.message;
   });
   var songs = mergeSongSearchResults(
-    songsByProvider.netease,
-    songsByProvider.qq,
-    songsByProvider.kugou,
-    songsByProvider.qishui,
+    songsByProvider.ytmusic,
+    songsByProvider.deezer,
+    songsByProvider.soundcloud,
     songsByProvider.spotify,
+    null, null, null, null,
     MUSIC_SEARCH_MAX_RESULTS,
     q
   );

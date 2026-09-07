@@ -1,4 +1,4 @@
-// ====================================================================
+﻿// ====================================================================
 //  粒子音乐可视化播放器 — Server v2
 //  - 网易云搜索 / 歌曲URL / 封面/音频代理
 //  - 扫码登录 (login_qr_*) + cookie 持久化 (./.cookie)
@@ -130,12 +130,170 @@ const {
   handleSpotifyLyric,
 } = require('./spotify-api');
 const {
+  setYtMusicProxyApplier,
+  handleYtMusicSearch,
+  handleYtMusicSongUrl,
+  handleYtMusicLyric,
+  getYtMusicCapabilities,
+} = require('./ytmusic-api');
+const {
+  setDeezerProxyApplier,
+  handleDeezerSearch,
+  handleDeezerChart,
+  handleDeezerAlbum,
+  handleDeezerPlaylist,
+  handleDeezerSongUrl,
+  handleDeezerLyric,
+  getDeezerCapabilities,
+} = require('./deezer-api');
+const {
+  setSoundCloudProxyApplier,
+  ensureSoundCloudClientId,
+  handleSoundCloudSearch,
+  handleSoundCloudSongUrl,
+  handleSoundCloudLyric,
+  getSoundCloudCapabilities,
+} = require('./soundcloud-api');
+const {
   appendCuefieldFeedback,
   readCuefieldFeedbackStats,
 } = require('./cuefield/feedback-log');
 const { planCuefieldTransitionFromCache } = require('./cuefield/mineradio-bridge');
 const { decryptQQMusicQrc } = require('./qq-lyric-codec');
 const { LyricCache } = require('./lyric-cache');
+// EN-FORK: wire the orphaned Apple Music TTML provider into the lyric chain.
+let appleMusicLyricsProvider = null;
+try {
+  const appleStoreMod = require('./apple-music-secure-auth-store');
+  const appleProviderMod = require('./apple-music-lyrics-provider');
+  const appleStore = appleStoreMod.AppleMusicSecureAuthStore ? new appleStoreMod.AppleMusicSecureAuthStore() : null;
+  if (appleStore && appleProviderMod.AppleMusicLyricsProvider) {
+    appleMusicLyricsProvider = new appleProviderMod.AppleMusicLyricsProvider({ store: appleStore });
+  }
+} catch (error) {
+  console.warn('[AppleLyrics] provider unavailable:', error.message);
+}
+
+// Lookup adapters for the resolver — each returns the standard lyric payload
+// or throws when the source has nothing. Registered after module init (see
+// below, next to the lyrics-resolver require) to avoid TDZ ordering issues.
+let registerLyricLookups = () => {};
+registerLyricLookups = function registerLyricLookupsImpl() {
+  registerLyricLookups = () => {};
+
+  setYtMusicLyricLookup(async ({ videoId, title, artist }) => {
+    let id = normalizeText(videoId);
+    if (!id) {
+      const found = await handleYtMusicSearch([title, artist].filter(Boolean).join(' '), 3, 0);
+      id = found.songs && found.songs[0] && (found.songs[0].videoId || found.songs[0].id) || '';
+    }
+    if (!id) throw new Error('YTMUSIC_NO_CANDIDATE');
+    const payload = await handleYtMusicLyric(id);
+    if (!normalizeText(payload.lyric)) throw new Error('YTMUSIC_NO_LYRIC');
+    return {
+      provider: 'ytmusic',
+      source: payload.source || 'ytmusic-description',
+      lyric: '',
+      plainLyric: normalizeText(payload.lyric),
+      tlyric: '', yrc: '', ytlrc: '', romalrc: '',
+    };
+  });
+
+  setAppleMusicLyricLookup(async ({ title, artist }) => {
+    if (!appleMusicLyricsProvider) throw new Error('APPLE_UNAVAILABLE');
+    const results = await appleMusicLyricsProvider.search({ term: `${title} ${artist}`.trim(), limit: 5 });
+    if (!results.length) throw new Error('APPLE_NO_MATCH');
+    const chosen = results[0];
+    const detail = await appleMusicLyricsProvider.lyrics({ id: chosen.id, storefront: chosen.storefront });
+    const lrc = appleStructuredLinesToLrc(detail.structuredLines);
+    if (!lrc) throw new Error('APPLE_EMPTY');
+    return {
+      provider: 'apple',
+      source: 'apple-ttml',
+      lyric: lrc,
+      tlyric: '', yrc: '', ytlrc: '', romalrc: '',
+    };
+  });
+
+  setNeteaseLyricLookup(async ({ title, artist, durationSec }) => {
+    if (typeof cloudsearch !== 'function' || typeof lyric_new !== 'function') throw new Error('NETEASE_UNAVAILABLE');
+    const query = [title, artist].filter(Boolean).join(' ');
+    const searchResult = await cloudsearch({ keywords: query, limit: 6, offset: 0, cookie: userCookie });
+    const songs = (searchResult.body && searchResult.body.result && searchResult.body.result.songs) || [];
+    if (!songs.length) throw new Error('NETEASE_NO_MATCH');
+    // Prefer duration-close candidates like the same-track matcher does.
+    let candidate = songs[0];
+    if (durationSec > 0) {
+      let bestDelta = Infinity;
+      for (const entry of songs) {
+        const delta = Math.abs(Math.round((Number(entry.dt || entry.duration) || 0) / 1000) - durationSec);
+        if (delta < bestDelta) { bestDelta = delta; candidate = entry; }
+      }
+    }
+    const id = candidate && candidate.id;
+    if (!id) throw new Error('NETEASE_NO_ID');
+    let body = {};
+    try {
+      const nr = await lyric_new({ id, cookie: userCookie, timestamp: Date.now() });
+      body = nr.body || {};
+    } catch (_) { }
+    try {
+      if (!lyricNodeText(body, 'lrc') || !lyricNodeText(body, 'tlyric')) {
+        const r = await lyric({ id, cookie: userCookie, timestamp: Date.now() });
+        body = mergeLyricBodies(body, r.body || {});
+      }
+    } catch (_) { }
+    const payload = {
+      provider: 'netease',
+      source: 'netease-lyric-chain',
+      lyric: lyricNodeText(body, 'lrc'),
+      tlyric: lyricNodeText(body, 'tlyric'),
+      yrc: lyricNodeText(body, 'yrc'),
+      ytlrc: lyricNodeText(body, 'ytlrc'),
+      romalrc: lyricNodeText(body, 'romalrc') || lyricNodeText(body, 'yromalrc'),
+    };
+    if (!payload.lyric && !payload.yrc) throw new Error('NETEASE_NO_LYRIC');
+    return payload;
+  });
+
+  setQqLyricLookup(async ({ title, artist }) => {
+    const query = [title, artist].filter(Boolean).join(' ');
+    const found = await handleQQSearch(query, 6, 0);
+    const song = found && found.songs && found.songs[0];
+    if (!song) throw new Error('QQ_NO_MATCH');
+    const payload = await handleQQLyric(song.mid || song.songmid || song.id, song.qqId || (/^\d+$/.test(String(song.id || '')) ? song.id : ''));
+    if (!payload || !normalizeText(payload.lyric)) throw new Error('QQ_NO_LYRIC');
+    return {
+      provider: 'qq',
+      source: payload.qrc ? 'qq-qrc' : 'qq-lyric-chain',
+      lyric: normalizeText(payload.lyric),
+      tlyric: normalizeText(payload.tlyric),
+      yrc: normalizeText(payload.qrc),
+      ytlrc: '',
+      romalrc: normalizeText(payload.roma),
+    };
+  });
+};
+
+function appleStructuredLinesToLrc(lines) {
+  // Apple TTML structured lines carry word timing; flatten to plain text with
+  // line start stamps so the existing LRC parser can render them synced.
+  const out = [];
+  for (const line of Array.isArray(lines) ? lines : []) {
+    if (!line) continue;
+    const startSec = Number(line.startMs || line.start || 0) / 1000;
+    const words = Array.isArray(line.words) ? line.words : [];
+    const text = normalizeText(words.map((w) => (w && typeof w === 'object' ? w.text || w.word : String(w || ''))).join(''));
+    if (!text) continue;
+    const mm = Math.floor(startSec / 60);
+    const ss = Math.floor(startSec % 60);
+    const xx = Math.floor((startSec - Math.floor(startSec)) * 100);
+    out.push(`[${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}.${String(xx).padStart(2, '0')}]${text}`);
+  }
+  return out.join('\n');
+}
+
+// Lookup adapters registered via registerLyricLookups() after module init.
 const { spotifyWebApiProxyTarget } = require('./spotify-web-api-policy');
 
 // Spotify PKCE 登录会话（文件缺失时降级为不可用，不影响启动）
@@ -199,6 +357,19 @@ const WEATHER_DEFAULT_LOCATION = {
 //  Spotify PKCE 授权会话 + 手机遥控状态
 // ====================================================================
 const appProxy = require('./app-proxy');
+setYtMusicProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'ytmusic'));
+setDeezerProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'deezer'));
+setSoundCloudProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'soundcloud'));
+const {
+  setLyricsResolverProxyApplier,
+  setYtMusicLyricLookup,
+  setAppleMusicLyricLookup,
+  setNeteaseLyricLookup,
+  setQqLyricLookup,
+  resolveGlobalLyrics,
+} = require('./lyrics-resolver');
+setLyricsResolverProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || (appName === '' ? '' : 'ytmusic')));
+registerLyricLookups();
 const spotifyAuthState = SpotifyAuthSession && createMemorySpotifyAuthStore
   ? new SpotifyAuthSession({
     store: global.__mineradioSpotifyAuthStore || createMemorySpotifyAuthStore(),
@@ -210,6 +381,9 @@ const spotifyAuthState = SpotifyAuthSession && createMemorySpotifyAuthStore
 async function testProxyForApp(appName) {
   const targets = {
     spotify: 'https://api.spotify.com/v1/',
+    ytmusic: 'https://music.youtube.com/',
+    deezer: 'https://api.deezer.com/',
+    soundcloud: 'https://api-v2.soundcloud.com/',
     netease: 'https://music.163.com/',
     qq: 'https://u.y.qq.com/',
     kugou: 'https://www.kugou.com/',
@@ -333,24 +507,77 @@ function detectLanAddress() {
   return candidates.length ? candidates[0].ip : '127.0.0.1';
 }
 
-const remotePairingToken = generatePairingToken();
+// Generated fresh per boot, but replaced below with the token persisted in
+// data/remote-config.json so existing QR pairings keep working.
+let remotePairingToken = generatePairingToken();
 const remoteDeviceTokens = new Map();
 const remoteCommandQueue = [];
+let remoteCommandSeq = 0;
 const remoteSseClients = new Set();
 const remotePairAttemptsByIp = new Map();
 
 // ---------- Phone transfer (music inbox) ----------
 let REMOTE_MUSIC_DIR;
+let remoteInboxDirIsCustom = false;
 try {
   REMOTE_MUSIC_DIR = require('./desktop/server-remote-music-dir').REMOTE_MUSIC_DIR;
 } catch (_) {
   REMOTE_MUSIC_DIR = path.join(process.env.MINERADIO_MUSIC_DIR || path.join(__dirname, 'data'), 'music-inbox');
 }
-const REMOTE_LIBRARY_EXTRA_DIRS = String(process.env.MINERADIO_LIBRARY_DIRS || '')
+let REMOTE_LIBRARY_EXTRA_DIRS = String(process.env.MINERADIO_LIBRARY_DIRS || '')
   .split(',').map(s => s.trim()).filter(Boolean);
+
+// Persisted phone-remote settings (inbox dir, library dirs, pairing token,
+// paired device tokens). Keeps phones paired across PC restarts.
+const remoteConfigStore = (() => {
+  try { return require('./desktop/remote-config-store'); } catch (_) { return null; }
+})();
+
+function remoteDefaultInboxDir() {
+  if (remoteConfigStore) return remoteConfigStore.defaultInboxDir();
+  return path.join(process.env.MINERADIO_MUSIC_DIR || path.join(__dirname, 'data'), 'music-inbox');
+}
+
+let remoteLibraryCache = { at: 0, data: null };
+
+// Seed runtime state from the persisted config and adopt the stored pairing
+// token so it stays stable across restarts (QR codes keep working).
+function applyPersistedRemoteConfig(cfg) {
+  if (!cfg) return;
+  if (cfg.inboxDir && path.isAbsolute(cfg.inboxDir)) {
+    REMOTE_MUSIC_DIR = cfg.inboxDir;
+    remoteInboxDirIsCustom = true;
+  } else if (!remoteInboxDirIsCustom) {
+    REMOTE_MUSIC_DIR = remoteDefaultInboxDir();
+  } else if (REMOTE_MUSIC_DIR === remoteDefaultInboxDir()) {
+    REMOTE_MUSIC_DIR = remoteDefaultInboxDir();
+    remoteInboxDirIsCustom = false;
+  }
+  const extraDirs = [];
+  for (const dir of (cfg.libraryDirs || [])) {
+    const norm = path.isAbsolute(dir) ? path.normalize(dir) : '';
+    if (norm && !extraDirs.includes(norm)) extraDirs.push(norm);
+  }
+  REMOTE_LIBRARY_EXTRA_DIRS = extraDirs;
+  remoteLibraryCache = { at: 0, data: null };
+  try { fs.mkdirSync(REMOTE_MUSIC_DIR, { recursive: true }); } catch (_) {}
+  remoteDeviceTokens.clear();
+  for (const [token, meta] of Object.entries(cfg.devices || {})) {
+    remoteDeviceTokens.set(token, { pairedAt: Number(meta && meta.pairedAt) || Date.now(), name: String((meta && meta.name) || '') });
+  }
+}
+if (remoteConfigStore) {
+  const loadedCfg = remoteConfigStore.load();
+  if (loadedCfg.pairingToken) remotePairingToken = loadedCfg.pairingToken;
+  else remoteConfigStore.update({ pairingToken: remotePairingToken });
+  applyPersistedRemoteConfig(loadedCfg);
+  remoteConfigStore.onChange(cfg => applyPersistedRemoteConfig(cfg));
+}
+
 const REMOTE_UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
 const REMOTE_ZIP_MAX_BYTES = 800 * 1024 * 1024;
 const REMOTE_UPLOAD_CONCURRENCY_PER_TOKEN = 3;
+const REMOTE_DEVICE_TOKEN_LIMIT = 20;
 const remoteUploadsInFlight = new Map(); // deviceToken -> count
 fs.mkdirSync(REMOTE_MUSIC_DIR, { recursive: true });
 
@@ -370,28 +597,62 @@ function sanitizeRelativeRemotePath(raw) {
   return parts.join('/');
 }
 
-function resolveRemoteMusicPath(relPath) {
-  const safe = sanitizeRelativeRemotePath(relPath);
+function sanitizeExistingRemoteFilePath(raw) {
+  let rel = String(raw || '').replace(/\\/g, '/').trim();
+  rel = rel.replace(/^[A-Za-z]:/, '');
+  rel = rel.replace(/^\/+/, '');
+  const parts = [];
+  for (const part of rel.split('/')) {
+    const p = part.trim();
+    if (!p || p === '.') continue;
+    if (p === '..') return null;
+    if (/[:*?"<>|]/.test(p)) return null;
+    parts.push(p); // keeps spaces/hyphens so real on-disk names resolve
+  }
+  if (!parts.length) return null;
+  return parts.join('/');
+}
+
+// Prefix check against root + separator (never a bare root) so a sibling
+// directory like "MusicEvil" cannot pass as "Music".
+function isPathInsideRoot(absPath, rootDir) {
+  if (!absPath || !rootDir) return false;
+  const abs = path.normalize(absPath);
+  const root = path.normalize(rootDir);
+  if (abs === root) return true; // the root itself is allowed
+  const prefixWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+  return abs.startsWith(prefixWithSep);
+}
+
+function resolveRemoteMusicPath(resolvedRelPath) {
+  const safe = resolvedRelPath;
   if (!safe) return null;
   const abs = path.join(REMOTE_MUSIC_DIR, ...safe.split('/'));
-  if (!abs.startsWith(REMOTE_MUSIC_DIR)) return null; // belt & suspenders
+  if (!isPathInsideRoot(abs, REMOTE_MUSIC_DIR)) return null;
   return { abs, rel: safe };
 }
 
 // Read-only library roots: the inbox itself plus optional extra dirs.
 function resolveLibraryPath(relPath) {
-  const clean = sanitizeRelativeRemotePath(relPath);
-  if (!clean) return null;
+  // Prefer the lenient sanitizer (real filenames keep their spaces), but fall
+  // back to the strict one for legacy clients that had characters stripped.
+  const strict = sanitizeRelativeRemotePath(relPath);
+  const candidates = [];
+  if (strict && !candidates.includes(strict)) candidates.push(strict);
+  const lenient = sanitizeExistingRemoteFilePath(relPath);
+  if (lenient && !candidates.includes(lenient)) candidates.push(lenient);
+  if (!candidates.length) return null;
   const roots = [[REMOTE_MUSIC_DIR, '']];
   for (const dir of REMOTE_LIBRARY_EXTRA_DIRS) roots.push([dir, path.basename(dir)]);
-  for (const [rootDir, prefix] of roots) {
-    const abs = path.join(rootDir, ...(prefix ? [prefix] : []), ...clean.split('/'));
-    if (abs.startsWith(rootDir)) return { abs, rel: prefix ? prefix + '/' + clean : clean };
+  for (const candidate of candidates) {
+    for (const [rootDir, prefix] of roots) {
+      const abs = path.join(rootDir, ...(prefix ? [prefix] : []), ...candidate.split('/'));
+      if (isPathInsideRoot(abs, rootDir)) return { abs, rel: prefix ? prefix + '/' + candidate : candidate };
+    }
   }
   return null;
 }
 
-let remoteLibraryCache = { at: 0, data: null };
 function walkRemoteLibrary() {
   if (remoteLibraryCache.data && Date.now() - remoteLibraryCache.at < 10000) return remoteLibraryCache.data;
   const dirs = [];
@@ -528,6 +789,42 @@ function broadcastRemoteEvent(eventName, data) {
   for (const client of remoteSseClients) {
     try { client.res.write(frame); } catch (_) {}
   }
+}
+
+// ---------- Phone remote: playable-source lookup ----------
+// The renderer publishes track metadata only (name/artist/album), never the
+// audio source, so the server remembers the last URL the PC itself fetched
+// through /api/audio. Paired phones use this to mirror playback.
+const remoteLastAudio = { url: '', at: 0 };
+const REMOTE_LAST_AUDIO_MAX_AGE_MS = 30 * 60 * 1000;
+
+function remotePlayableInfo() {
+  const snapshot = global.__mineradioRemoteSnapshot || {};
+  const track = snapshot.track || {};
+  const title = String(track.name || track.title || '');
+  const artist = String(track.artist || '');
+  let kind = null;
+  let src = null;
+
+  const lastUrl = Date.now() - remoteLastAudio.at <= REMOTE_LAST_AUDIO_MAX_AGE_MS
+    ? String(remoteLastAudio.url || '')
+    : '';
+  if (lastUrl.startsWith('/api/remote/inbox-audio?')) {
+    // Local file under the inbox/library roots -> serve it token-authed.
+    try {
+      const params = new URL(lastUrl, 'http://localhost');
+      const resolved = resolveLibraryPath(params.searchParams.get('path'));
+      if (resolved && fs.existsSync(resolved.abs) && fs.statSync(resolved.abs).isFile()) {
+        kind = 'file';
+        src = '/api/remote/pc-audio?path=' + encodeURIComponent(resolved.rel);
+      }
+    } catch (_) { /* fall through */ }
+  } else if (/^https?:\/\//i.test(lastUrl)) {
+    // Streamed web source -> hand back the original upstream URL.
+    kind = 'url';
+    src = lastUrl;
+  }
+  return { ok: true, title, artist, kind, src };
 }
 
 function loadListenSyncJournal() {
@@ -775,13 +1072,15 @@ function serveStatic(res, filePath, req) {
   const ext = path.extname(filePath);
   fs.stat(filePath, (statErr, stat) => {
     if (statErr) { res.writeHead(404); res.end('Not Found'); return; }
-    // EN-FORK perf: cache static assets by mtime ETag instead of no-store.
-    // Unchanged files return 304 / come from disk cache, cutting multi-MB
-    // module loads out of every cold start.
+    // EN-FORK perf: cache static assets by mtime ETag. Files are sent with
+    // no-cache so Chromium revalidates on every load: unchanged files return
+    // a tiny 304 (keeps the multi-MB cold-start saving), but an updated
+    // install is picked up immediately instead of serving week-old CSS from
+    // the disk cache (max-age would skip revalidation entirely).
     const etag = `"${stat.size}-${String(stat.mtimeMs)}"`;
     const inm = req && req.headers['if-none-match'];
     if (inm && inm === etag) {
-      res.writeHead(304, { ETag: etag });
+      res.writeHead(304, { ETag: etag, 'Cache-Control': 'no-cache' });
       res.end();
       return;
     }
@@ -789,7 +1088,7 @@ function serveStatic(res, filePath, req) {
       if (err) { res.writeHead(404); res.end('Not Found'); return; }
       res.writeHead(200, {
         'Content-Type': MIME[ext] || 'text/plain',
-        'Cache-Control': 'public, max-age=604800, must-revalidate',
+        'Cache-Control': 'no-cache',
         ETag: etag,
       });
       res.end(data);
@@ -2083,60 +2382,47 @@ function mapDailyRecommendationSongs(raw) {
     .filter(song => song && song.id && song.name);
 }
 
+// EN-FORK global swap: Home discovery uses global providers instead of NetEase.
 async function handleDiscoverHome() {
-  const info = await getLoginInfo();
-  const loggedIn = !!(info && info.loggedIn);
-  if (!loggedIn) {
-    return {
-      loggedIn: false,
-      user: null,
-      dailySongs: [],
-      dailySongTotal: 0,
-      dailySongsComplete: true,
-      playlists: [],
-      podcasts: [],
-      mode: 'starter',
-      updatedAt: Date.now(),
-    };
-  }
-  const tasks = [
-    personalized({ limit: 8, cookie: userCookie, timestamp: Date.now() }),
-    recommend_resource({ cookie: userCookie, timestamp: Date.now() }),
-    recommend_songs({ cookie: userCookie, timestamp: Date.now() }),
-  ];
-  const result = await Promise.allSettled(tasks);
-
-  const personalizedBody = result[0].status === 'fulfilled' && result[0].value && result[0].value.body || {};
-  const publicPlaylists = (personalizedBody.result || personalizedBody.data || [])
-    .map(pl => mapDiscoverPlaylist(pl, 'Recommended Playlists'))
-    .filter(pl => pl.id && pl.name)
-    .slice(0, 8);
-
-  let privatePlaylists = [];
-  if (result[1].status === 'fulfilled' && result[1].value) {
-    const body = result[1].value.body || {};
-    const raw = body.recommend || body.data || [];
-    privatePlaylists = (Array.isArray(raw) ? raw : [])
-      .map(pl => mapDiscoverPlaylist(pl, 'Personal Picks'))
-      .filter(pl => pl.id && pl.name)
-      .slice(0, 6);
-  }
-
+  let spotifyLoggedIn = false;
+  let spotifyUser = null;
+  try {
+    const st = await handleSpotifyStatus();
+    spotifyLoggedIn = !!(st && st.loggedIn);
+    if (spotifyLoggedIn) spotifyUser = { userId: st.userId || '', nickname: st.nickname || 'Spotify', avatar: st.avatar || '' };
+  } catch (_) {}
+  // Global providers (YT Music / Deezer / SoundCloud) need no login; consider the
+  // home discoverable for everyone so the UI never blocks on a NetEase cookie.
+  const loggedIn = true;
   let dailySongs = [];
-  if (result[2].status === 'fulfilled' && result[2].value) {
-    const body = result[2].value.body || {};
-    const raw = body.data && (body.data.dailySongs || body.data.recommend) || body.recommend || [];
-    dailySongs = mapDailyRecommendationSongs(raw);
+  if (spotifyLoggedIn) {
+    try {
+      const rec = await handleSpotifyRecommendations(12);
+      if (rec && Array.isArray(rec.songs) && rec.songs.length) dailySongs = rec.songs.slice(0, 12);
+    } catch (_) {}
   }
-
+  if (!dailySongs.length) {
+    try {
+      const chart = await handleDeezerChart(12);
+      if (chart && Array.isArray(chart.songs) && chart.songs.length) dailySongs = chart.songs.slice(0, 12);
+    } catch (_) {}
+  }
+  if (!dailySongs.length) {
+    try {
+      const yt = await handleYtMusicSearch('trending hits', 12, 0);
+      if (yt && Array.isArray(yt.songs) && yt.songs.length) dailySongs = yt.songs.slice(0, 12);
+    } catch (_) {}
+  }
   return {
     loggedIn,
-    user: loggedIn ? { userId: info.userId, nickname: info.nickname || '', avatar: info.avatar || '' } : null,
+    user: spotifyUser,
+    spotifyLoggedIn,
     dailySongs,
     dailySongTotal: dailySongs.length,
     dailySongsComplete: true,
-    playlists: privatePlaylists.concat(publicPlaylists).slice(0, 10),
+    playlists: [],
     podcasts: [],
+    mode: spotifyLoggedIn ? 'member' : 'starter',
     updatedAt: Date.now(),
   };
 }
@@ -3211,11 +3497,16 @@ async function qqGetJSON(targetUrl, params, opts) {
 }
 
 function audioProxyHeadersFor(audioUrl, range) {
-  const headers = { 'User-Agent': UA, Referer: 'https://music.163.com/' };
+  // EN-FORK: default to no Referer — global CDNs (googlevideo, sndcdn,
+  // deezer previews) reject or ignore the old NetEase referer, and sending a
+  // cross-origin referer can trip hotlink protection. Host-specific referers
+  // are added only where a provider requires one.
+  const headers = { 'User-Agent': UA };
   try {
     const host = new URL(audioUrl).hostname.toLowerCase();
     if (host.includes('qq.com') || host.includes('qpic.cn')) headers.Referer = 'https://y.qq.com/';
     if (host.includes('qishui.com') || host.includes('byteimg.com') || host.includes('douyin')) headers.Referer = 'https://www.qishui.com/';
+    if (host.includes('sndcdn.com')) headers.Referer = 'https://soundcloud.com/';
     const kugouReferer = kugouAudioReferer(audioUrl);
     if (kugouReferer) headers.Referer = kugouReferer;
   } catch (e) {}
@@ -5791,6 +6082,155 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ---------- EN-FORK global providers (YouTube Music / Deezer / SoundCloud)
+  if (pn === '/api/ytmusic/status') {
+    sendJSON(res, { provider: 'ytmusic', ...getYtMusicCapabilities() });
+    return;
+  }
+
+  if (pn === '/api/ytmusic/search') {
+    try {
+      const kw = url.searchParams.get('keywords') || '';
+      const limit = Math.max(4, Math.min(30, parseInt(url.searchParams.get('limit') || '12', 10) || 12));
+      const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0);
+      sendJSON(res, await handleYtMusicSearch(kw, limit, offset));
+    } catch (err) {
+      console.error('[YtMusicSearch]', err);
+      sendJSON(res, { provider: 'ytmusic', error: err.message, songs: [] }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/ytmusic/song/url') {
+    try {
+      sendJSON(res, await handleYtMusicSongUrl(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[YtMusicSongUrl]', err);
+      sendJSON(res, { provider: 'ytmusic', url: '', playable: false, error: err.message }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/ytmusic/lyric') {
+    try {
+      sendJSON(res, await handleYtMusicLyric(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[YtMusicLyric]', err);
+      sendJSON(res, { provider: 'ytmusic', lyric: '', source: 'none', error: err.message }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/deezer/status') {
+    sendJSON(res, { provider: 'deezer', ...getDeezerCapabilities() });
+    return;
+  }
+
+  if (pn === '/api/deezer/search') {
+    try {
+      const kw = url.searchParams.get('keywords') || '';
+      const limit = Math.max(4, Math.min(25, parseInt(url.searchParams.get('limit') || '20', 10) || 20));
+      const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0);
+      sendJSON(res, await handleDeezerSearch(kw, limit, offset));
+    } catch (err) {
+      console.error('[DeezerSearch]', err);
+      sendJSON(res, { provider: 'deezer', error: err.message, songs: [] }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/deezer/chart') {
+    try {
+      const limit = Math.max(1, Math.min(30, parseInt(url.searchParams.get('limit') || '12', 10) || 12));
+      sendJSON(res, await handleDeezerChart(limit));
+    } catch (err) {
+      console.error('[DeezerChart]', err);
+      sendJSON(res, { provider: 'deezer', error: err.message, songs: [] }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/deezer/album') {
+    try {
+      sendJSON(res, await handleDeezerAlbum(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[DeezerAlbum]', err);
+      sendJSON(res, { provider: 'deezer', error: err.message, songs: [] }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/deezer/playlist') {
+    try {
+      sendJSON(res, await handleDeezerPlaylist(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[DeezerPlaylist]', err);
+      sendJSON(res, { provider: 'deezer', error: err.message, songs: [] }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/deezer/song/url') {
+    try {
+      sendJSON(res, await handleDeezerSongUrl(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[DeezerSongUrl]', err);
+      sendJSON(res, { provider: 'deezer', url: '', playable: false, error: err.message }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/deezer/lyric') {
+    try {
+      sendJSON(res, await handleDeezerLyric(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[DeezerLyric]', err);
+      sendJSON(res, { provider: 'deezer', lyric: '', source: 'none', error: err.message }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/soundcloud/status') {
+    try {
+      await ensureSoundCloudClientId(false);
+    } catch (_) { /* status reflects availability */ }
+    sendJSON(res, { provider: 'soundcloud', ...getSoundCloudCapabilities() });
+    return;
+  }
+
+  if (pn === '/api/soundcloud/search') {
+    try {
+      const kw = url.searchParams.get('keywords') || '';
+      const limit = Math.max(4, Math.min(30, parseInt(url.searchParams.get('limit') || '16', 10) || 16));
+      const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0);
+      sendJSON(res, await handleSoundCloudSearch(kw, limit, offset));
+    } catch (err) {
+      console.error('[SoundCloudSearch]', err);
+      sendJSON(res, { provider: 'soundcloud', error: err.message, songs: [] }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/soundcloud/song/url') {
+    try {
+      sendJSON(res, await handleSoundCloudSongUrl(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[SoundCloudSongUrl]', err);
+      sendJSON(res, { provider: 'soundcloud', url: '', playable: false, error: err.message }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/soundcloud/lyric') {
+    try {
+      sendJSON(res, await handleSoundCloudLyric(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[SoundCloudLyric]', err);
+      sendJSON(res, { provider: 'soundcloud', lyric: '', source: 'none', error: err.message }, 502);
+    }
+    return;
+  }
+
   if (pn === '/api/spotify/recommendations') {
     try {
       const limit = Math.max(4, Math.min(10, parseInt(url.searchParams.get('limit') || '10', 10) || 10));
@@ -7015,6 +7455,25 @@ const server = http.createServer(async (req, res) => {
     return merged;
   }
 
+  // ---------- EN-FORK global lyrics chain ----------
+  // LRCLIB → YT Music ("Google" lyrics) → Apple Music TTML → NetEase → QQ QRC.
+  // NetEase/QQ stay as hidden lyric-only backends; every step is best-effort.
+  if (pn === '/api/lyrics/global') {
+    try {
+      const title = url.searchParams.get('title') || '';
+      const artist = url.searchParams.get('artist') || '';
+      const album = url.searchParams.get('album') || '';
+      const durationSec = Math.round(Number(url.searchParams.get('duration')) || 0);
+      const videoId = url.searchParams.get('videoId') || '';
+      const payload = await resolveGlobalLyrics({ title, artist, album, duration: durationSec, videoId });
+      sendJSON(res, payload);
+    } catch (err) {
+      console.error('[LyricsGlobal]', err);
+      sendJSON(res, { provider: 'global', source: 'none', lyric: '', tlyric: '', yrc: '', ytlrc: '', error: err.message }, 502);
+    }
+    return;
+  }
+
   if (pn === '/api/lyric') {
     try {
       const id = url.searchParams.get('id');
@@ -7241,6 +7700,8 @@ const server = http.createServer(async (req, res) => {
     try {
       const audioUrl = url.searchParams.get('url');
       if (!audioUrl) { res.writeHead(400); res.end('Missing url'); return; }
+      remoteLastAudio.url = audioUrl;
+      remoteLastAudio.at = Date.now();
       const range = req.headers.range || '';
       if (audioUrl.includes('#auth=')) {
         const decrypted = await getQishuiDecryptedAudio(audioUrl);
@@ -7250,7 +7711,10 @@ const server = http.createServer(async (req, res) => {
         }
       }
       const hdr = audioProxyHeadersFor(audioUrl, range);
-      const up = await fetchWithTimeout(audioUrl, { headers: hdr }, 9000);
+      // EN-FORK: route upstream audio through the per-app proxy when the
+      // owning provider's checkbox is on, so proxied setups can stream.
+      const fetchOptions = appProxy.applyToOptions({ headers: hdr }, url.searchParams.get('app') || '');
+      const up = await fetchWithTimeout(audioUrl, fetchOptions, 9000);
       const out = {
         'Content-Type': audioContentTypeForUrl(audioUrl, up.headers.get('content-type')),
         'Access-Control-Allow-Origin': '*',
@@ -7321,6 +7785,27 @@ const server = http.createServer(async (req, res) => {
       }
       const deviceToken = crypto.randomBytes(16).toString('hex');
       remoteDeviceTokens.set(deviceToken, { pairedAt: Date.now(), ip });
+      // Persist so the phone stays paired across PC restarts (cap 20 devices,
+      // pruning the oldest pairings first).
+      if (remoteConfigStore) {
+        try {
+          const devicesPatch = {};
+          for (const [token, meta] of remoteDeviceTokens) {
+            devicesPatch[token] = { pairedAt: meta.pairedAt || 0, name: String(meta.name || '') };
+          }
+          let entries = Object.entries(devicesPatch);
+          if (entries.length > REMOTE_DEVICE_TOKEN_LIMIT) {
+            entries.sort((a, b) => (Number(a[1].pairedAt) || 0) - (Number(b[1].pairedAt) || 0));
+            for (const [staleToken] of entries.slice(0, entries.length - REMOTE_DEVICE_TOKEN_LIMIT)) {
+              delete devicesPatch[staleToken];
+              remoteDeviceTokens.delete(staleToken);
+            }
+          }
+          remoteConfigStore.update({ devices: devicesPatch });
+        } catch (persistErr) {
+          console.error('[RemotePair] persist failed:', persistErr && persistErr.message);
+        }
+      }
       sendJSON(res, { ok: true, deviceToken });
     } catch (err) {
       console.error('[RemotePair]', err);
@@ -7346,6 +7831,87 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ---------- Phone remote settings (localhost-only control panel API) ----------
+  function remoteConfigPayload() {
+    const cfg = remoteConfigStore ? remoteConfigStore.effective() : null;
+    return {
+      inboxDir: cfg ? cfg.inboxDir : REMOTE_MUSIC_DIR,
+      defaultInboxDir: remoteDefaultInboxDir(),
+      libraryDirs: cfg ? cfg.libraryDirs : REMOTE_LIBRARY_EXTRA_DIRS.slice(),
+      pairedDevices: cfg ? Object.keys(cfg.devices).length : remoteDeviceTokens.size,
+      lanUrl: `http://${detectLanAddress()}:${PORT}/remote/#pair=${remotePairingToken}`,
+    };
+  }
+  if (pn === '/api/local/remote-config') {
+    if (!remoteRequestIsLocal(req)) {
+      sendJSON(res, { ok: false, error: 'LOCAL_ONLY' }, 403);
+      return;
+    }
+    if (req.method === 'GET') {
+      sendJSON(res, Object.assign({ ok: true }, remoteConfigPayload()));
+      return;
+    }
+    if (req.method === 'POST') {
+      if (!remoteConfigStore) {
+        sendJSON(res, { ok: false, error: 'REMOTE_CONFIG_STORE_UNAVAILABLE' }, 500);
+        return;
+      }
+      try {
+        const body = await readRequestBody(req);
+        const patch = {};
+        if (Object.prototype.hasOwnProperty.call(body, 'inboxDir')) {
+          if (body.inboxDir === null || body.inboxDir === '') {
+            patch.inboxDir = null; // reset to the default inbox
+          } else {
+            const dir = path.normalize(String(body.inboxDir).trim());
+            if (!dir || !path.isAbsolute(dir)) {
+              sendJSON(res, { ok: false, error: 'INVALID_INBOX_DIR', message: 'Inbox folder must be an absolute path.' }, 400);
+              return;
+            }
+            try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {
+              sendJSON(res, { ok: false, error: 'INBOX_DIR_UNAVAILABLE', message: 'Could not create the inbox folder.' }, 400);
+              return;
+            }
+            patch.inboxDir = dir;
+          }
+        }
+        if (typeof body.addLibraryDir === 'string' && body.addLibraryDir.trim()) {
+          const dir = path.normalize(body.addLibraryDir.trim());
+          let stat = null;
+          try { stat = fs.statSync(dir); } catch (_) {}
+          if (!stat || !stat.isDirectory()) {
+            sendJSON(res, { ok: false, error: 'LIBRARY_DIR_NOT_FOUND', message: 'Library folder does not exist.' }, 400);
+            return;
+          }
+          const dirs = remoteConfigStore.effective().libraryDirs.filter(d => d !== dir);
+          dirs.push(dir);
+          if (dirs.length > 5) {
+            sendJSON(res, { ok: false, error: 'TOO_MANY_LIBRARY_DIRS', message: 'At most 5 library folders are allowed.' }, 400);
+            return;
+          }
+          patch.libraryDirs = dirs;
+        }
+        if (typeof body.removeLibraryDir === 'string' && body.removeLibraryDir.trim()) {
+          const dir = path.normalize(body.removeLibraryDir.trim());
+          patch.libraryDirs = remoteConfigStore.effective().libraryDirs.filter(d => d !== dir);
+        }
+        if (body.unpairAll === true) {
+          remoteDeviceTokens.clear();
+          patch.devices = {};
+        }
+        remoteConfigStore.update(patch);
+        applyPersistedRemoteConfig(remoteConfigStore.effective());
+        sendJSON(res, { ok: true, config: Object.assign({}, remoteConfigPayload()) });
+      } catch (err) {
+        console.error('[LocalRemoteConfig]', err);
+        sendJSON(res, { ok: false, error: err.message || 'REMOTE_CONFIG_SAVE_FAILED' }, 500);
+      }
+      return;
+    }
+    sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+    return;
+  }
+
   if (pn.startsWith('/api/remote/')) {
     // Local (desktop) requests may read playback state without a device
     // token — the QR modal uses this to show the phone URL.
@@ -7355,6 +7921,33 @@ const server = http.createServer(async (req, res) => {
       }));
       return;
     }
+    // ---------- EN-FORK FIX: drain endpoint for phone commands ----------
+    // The desktop renderer polls this every second (00-remote-server-bridge.js)
+    // and executes each command locally. Without it commands sat in the queue
+    // forever and every phone tap appeared dead. Local-only: the renderer is
+    // the executor, so phones must never be able to drain or replay commands.
+    if (remoteRequestIsLocal(req) && pn === '/api/remote/poll-cmds' && req.method === 'POST') {
+      try {
+        const body = await readRequestBody(req);
+        const sinceId = Math.max(0, Number(body && body.sinceId) || 0);
+        // Only hand over fresh commands (60 s window) so stale taps from a
+        // disconnected phone never fire later.
+        const cutoff = Date.now() - 60000;
+        while (remoteCommandQueue.length && Number(remoteCommandQueue[0].queuedAt) < cutoff) {
+          remoteCommandQueue.shift();
+        }
+        const cmds = remoteCommandQueue.filter(cmdEntry => Number(cmdEntry.id) > sinceId);
+        for (const cmdEntry of cmds) {
+          const idx = remoteCommandQueue.indexOf(cmdEntry);
+          if (idx >= 0) remoteCommandQueue.splice(idx, 1);
+        }
+        sendJSON(res, { ok: true, cmds });
+      } catch (err) {
+        console.error('[RemotePollCmds]', err);
+        sendJSON(res, { ok: false, error: err.message }, 500);
+      }
+      return;
+    }
     const deviceToken = remoteRequestToken(req);
     if (!deviceToken || !remoteDeviceTokens.has(deviceToken)) {
       sendJSON(res, { ok: false, error: 'REMOTE_UNAUTHORIZED' }, 401);
@@ -7362,7 +7955,21 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pn === '/api/remote/state') {
-      sendJSON(res, global.__mineradioRemoteSnapshot || {});
+      // Authed devices also learn the current LAN URL so a phone that kept an
+      // old host/IP can self-heal to the right one.
+      sendJSON(res, Object.assign({}, global.__mineradioRemoteSnapshot || {}, {
+        lanUrl: `http://${detectLanAddress()}:${PORT}/remote/#pair=${remotePairingToken}`,
+      }));
+      return;
+    }
+
+    if (pn === '/api/remote/playable') {
+      try {
+        sendJSON(res, remotePlayableInfo());
+      } catch (err) {
+        console.error('[RemotePlayable]', err);
+        sendJSON(res, { ok: false, error: err.message }, 500);
+      }
       return;
     }
 
@@ -7373,7 +7980,8 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         const body = await readRequestBody(req);
-        remoteCommandQueue.push({ type: String(body.type || ''), payload: body.payload != null ? body.payload : body, queuedAt: Date.now() });
+        remoteCommandSeq += 1;
+        remoteCommandQueue.push({ id: remoteCommandSeq, type: String(body.type || ''), payload: body.payload != null ? body.payload : body, queuedAt: Date.now() });
         if (remoteCommandQueue.length > 100) remoteCommandQueue.shift();
         sendJSON(res, { ok: true, queued: true });
       } catch (err) {
@@ -7589,6 +8197,9 @@ const server = http.createServer(async (req, res) => {
     if (!resolved || !fs.existsSync(resolved.abs) || !fs.statSync(resolved.abs).isFile()) {
       res.writeHead(404); res.end(); return;
     }
+    // Remember what the PC is playing so phones can mirror it (/api/remote/playable).
+    remoteLastAudio.url = '/api/remote/inbox-audio?path=' + encodeURIComponent(resolved.rel);
+    remoteLastAudio.at = Date.now();
     const stat = fs.statSync(resolved.abs);
     const range = req.headers.range || '';
     const headers = {
@@ -7610,6 +8221,53 @@ const server = http.createServer(async (req, res) => {
       headers['Content-Length'] = stat.size;
       res.writeHead(200, headers);
       fs.createReadStream(resolved.abs).pipe(res);
+    }
+    return;
+  }
+
+  // Library audio streaming for paired phones (device-token authed, full
+  // HTTP Range support). Generalizes the inbox stream above.
+  if (pn === '/api/remote/pc-audio') {
+    const deviceToken = remoteRequestToken(req);
+    if (!deviceToken || !remoteDeviceTokens.has(deviceToken)) {
+      sendJSON(res, { ok: false, error: 'REMOTE_UNAUTHORIZED' }, 401);
+      return;
+    }
+    try {
+      const resolved = resolveLibraryPath(url.searchParams.get('path'));
+      if (!resolved || !fs.existsSync(resolved.abs) || !fs.statSync(resolved.abs).isFile()) {
+        res.writeHead(404); res.end(); return;
+      }
+      const stat = fs.statSync(resolved.abs);
+      const range = req.headers.range || '';
+      const headers = {
+        'Content-Type': MIME[path.extname(resolved.abs).toLowerCase()] || 'audio/mpeg',
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'no-store',
+      };
+      if (range) {
+        const match = range.match(/bytes=(\d*)-(\d*)/);
+        let start = match && match[1] ? parseInt(match[1], 10) : 0;
+        let end = match && match[2] ? Math.min(parseInt(match[2], 10), stat.size - 1) : stat.size - 1;
+        if (isNaN(start) || start >= stat.size || start > end) {
+          res.writeHead(416, { 'Content-Range': `bytes */${stat.size}` });
+          res.end();
+          return;
+        }
+        res.writeHead(206, Object.assign(headers, {
+          'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+          'Content-Length': end - start + 1,
+        }));
+        fs.createReadStream(resolved.abs, { start, end }).pipe(res);
+      } else {
+        headers['Content-Length'] = stat.size;
+        res.writeHead(200, headers);
+        fs.createReadStream(resolved.abs).pipe(res);
+      }
+    } catch (err) {
+      console.error('[RemotePCAudio]', err);
+      if (!res.headersSent) { res.writeHead(500); }
+      try { res.end(); } catch (_) {}
     }
     return;
   }

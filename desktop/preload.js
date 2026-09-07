@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   getCacheSettings: () => ipcRenderer.invoke('mineradio-cache-get-settings'),
   chooseCacheDirectory: () => ipcRenderer.invoke('mineradio-cache-choose-directory'),
   setCacheSettings: (payload) => ipcRenderer.invoke('mineradio-cache-set-settings', payload || {}),
+  clearHttpCache: () => ipcRenderer.invoke('mineradio-cache-clear-http'),
   listWallpaperEngineProjects: (payload) => ipcRenderer.invoke('mineradio-wallpaper-engine-list', payload || {}),
   getWallpaperEngineProjectDetails: (id) => ipcRenderer.invoke('mineradio-wallpaper-engine-project-details', String(id || '')),
   openWallpaperEngineProjectDetails: (id, target) => ipcRenderer.invoke('mineradio-wallpaper-engine-open-project-details', {

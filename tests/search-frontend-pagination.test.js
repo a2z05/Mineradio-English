@@ -157,7 +157,9 @@ test('history rendering and replay keep the currently selected tab', () => {
 
 test('catalogue search readiness is separate from login state', () => {
   const statuses = {
-    qishui: { loggedIn: false, searchReady: true, publicCatalog: true },
+    ytmusic: { loggedIn: true, searchReady: true },
+    deezer: { loggedIn: true, publicCatalog: true },
+    soundcloud: { loggedIn: true },
     spotify: { loggedIn: false, searchReady: true },
     spotifyOff: { loggedIn: false, searchReady: false },
   };
@@ -167,12 +169,16 @@ test('catalogue search readiness is separate from login state', () => {
     },
   };
   vm.runInNewContext(`${namedFunctionSource(searchSource, 'searchProviderCanSearch')}\nthis.canSearch = searchProviderCanSearch;`, sandbox);
-  assert.equal(sandbox.canSearch('qishui'), true);
+  // Global providers need no login to be searchable.
+  assert.equal(sandbox.canSearch('ytmusic'), true);
+  assert.equal(sandbox.canSearch('deezer'), true);
+  assert.equal(sandbox.canSearch('soundcloud'), true);
   assert.equal(sandbox.canSearch('spotify'), true);
   assert.equal(sandbox.canSearch('spotify-off'), false);
-  assert.equal(sandbox.canSearch('netease'), true);
-  assert.equal(sandbox.canSearch('qq'), true);
-  assert.equal(sandbox.canSearch('kugou'), true);
+  // Chinese providers are removed from UI search; only global providers searchable.
+  assert.equal(sandbox.canSearch('netease'), false);
+  assert.equal(sandbox.canSearch('qq'), false);
+  assert.equal(sandbox.canSearch('kugou'), false);
 });
 
 test('ranking favors exact originals while preserving explicitly requested versions', () => {

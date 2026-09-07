@@ -10,6 +10,9 @@ function songDurationLabel(song) {
 }
 function songSourceLabel(song) {
   if (!song) return 'Unknown';
+  if (song.provider === 'ytmusic' || song.source === 'ytmusic' || song.type === 'ytmusic' || song.videoId) return 'YouTube Music';
+  if (song.provider === 'deezer' || song.source === 'deezer' || song.type === 'deezer') return 'Deezer';
+  if (song.provider === 'soundcloud' || song.source === 'soundcloud' || song.type === 'soundcloud') return 'SoundCloud';
   if (song.provider === 'spotify' || song.source === 'spotify' || song.type === 'spotify' || song.spotifyId || song.spotifyUri) return 'Spotify';
   if (song.provider === 'qq' || song.source === 'qq' || song.type === 'qq') return 'QQ Music';
   if (song.provider === 'qishui' || song.source === 'qishui' || song.type === 'qishui') return 'Soda Music';
@@ -273,7 +276,7 @@ function commentTimeLabel(ms) {
   var t = Number(ms) || 0;
   if (!t) return '';
   try {
-    return new Date(t).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   } catch (e) {
     return '';
   }

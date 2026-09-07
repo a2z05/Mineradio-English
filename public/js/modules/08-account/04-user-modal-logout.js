@@ -1,5 +1,5 @@
 function loggedProviderCount() {
-  return ['netease', 'qq', 'kugou', 'qishui', 'spotify'].filter(function (key) { return hasPlatformLogin(key); }).length;
+  return ['spotify', 'ytmusic', 'deezer', 'soundcloud'].filter(function (key) { return hasPlatformLogin(key); }).length;
 }
 function updateUserModalUi() {
   activeAccountProvider = firstLoggedProvider();
@@ -11,11 +11,10 @@ function updateUserModalUi() {
   var vipEl = document.getElementById('user-modal-vip');
   var hint = document.getElementById('account-hint');
   var logoutBtn = document.getElementById('account-logout-btn');
-  var addNetease = document.getElementById('account-add-netease');
-  var addQQ = document.getElementById('account-add-qq');
-  var addKugou = document.getElementById('account-add-kugou');
-  var addQishui = document.getElementById('account-add-qishui');
   var addSpotify = document.getElementById('account-add-spotify');
+  var addYtmusic = document.getElementById('account-add-ytmusic');
+  var addDeezer = document.getElementById('account-add-deezer');
+  var addSoundcloud = document.getElementById('account-add-soundcloud');
   if (chip) {
     chip.className = 'account-provider-chip ' + activeAccountProvider;
     chip.innerHTML = '<span class="account-source-dot ' + meta.dot + '"></span><span>' + meta.label + '</span>';
@@ -23,47 +22,38 @@ function updateUserModalUi() {
   if (avatar) avatar.src = providerAvatarSrc(activeAccountProvider, st);
   if (name) name.textContent = (st && st.nickname) || meta.label;
   if (vipEl) {
-    if (activeAccountProvider === 'netease') {
-      var neVipLevel = providerVipLevel('netease', st);
-      var vipLabel = neVipLevel === 'svip' ? 'NetEase SVIP' : (neVipLevel === 'vip' ? 'NetEase VIP' : 'Free user');
-      vipEl.textContent = 'UID: ' + ((st && st.userId) || '-') + '  /  ' + vipLabel;
-      vipEl.style.color = hasProviderVip('netease', st) ? 'rgba(244,210,138,0.86)' : 'rgba(255,255,255,0.5)';
-    } else if (activeAccountProvider === 'kugou') {
-      var kgVipLevel = providerVipLevel('kugou', st);
-      var kgVipLabel = kgVipLevel === 'svip' ? 'Kugou SVIP member' : (kgVipLevel === 'vip' ? 'Kugou VIP member' : 'Kugou session');
-      vipEl.textContent = 'UID: ' + ((st && st.userId) || '-') + '  /  ' + kgVipLabel;
-      vipEl.style.color = hasProviderVip('kugou', st) ? 'rgba(86,224,255,0.86)' : 'rgba(86,224,255,0.58)';
-    } else if (activeAccountProvider === 'qishui') {
-      var qishuiMode = st && st.webSession ? 'Soda Music signed in via QR' : 'Soda Music not signed in';
-      var qishuiSync = st && st.webSession ? 'Likes and playlists sync; playback uses account perks' : 'Scan with the Douyin app to sign in';
-      vipEl.textContent = qishuiMode + '  /  ' + qishuiSync;
-      vipEl.style.color = 'rgba(69,214,143,0.78)';
-    } else if (activeAccountProvider === 'spotify') {
+    if (activeAccountProvider === 'spotify') {
       var spProduct = st && st.product === 'premium' ? 'Spotify Premium' : (st && st.product ? ('Spotify ' + String(st.product).toUpperCase()) : 'Spotify plan unknown');
       vipEl.textContent = 'ID: ' + ((st && st.userId) || '-') + '  /  ' + spProduct + '  /  Syncs playlists and Liked Songs';
       vipEl.style.color = hasProviderVip('spotify', st) ? 'rgba(30,215,96,0.86)' : 'rgba(30,215,96,0.60)';
+    } else if (activeAccountProvider === 'ytmusic') {
+      vipEl.textContent = 'YT Music — ready to play · No sign-in needed';
+      vipEl.style.color = 'rgba(255,60,60,0.78)';
+    } else if (activeAccountProvider === 'deezer') {
+      vipEl.textContent = 'Deezer — ready to play · Previews + auto fallback';
+      vipEl.style.color = 'rgba(254,223,0,0.86)';
+    } else if (activeAccountProvider === 'soundcloud') {
+      vipEl.textContent = 'SoundCloud — ready to play · Direct streams';
+      vipEl.style.color = 'rgba(255,110,0,0.86)';
     } else {
-      var qqVipLevel = providerVipLevel('qq', st);
-      var qqVipPending = qqLoginNeedsAuthorizationRefresh(st) || (typeof qqMembershipNeedsSync === 'function' && qqMembershipNeedsSync(st));
-      var qqVipLabel = qqVipPending ? 'QQ membership syncing' : (qqVipLevel === 'svip' ? 'QQ SVIP member' : (qqVipLevel === 'vip' ? 'QQ VIP member' : 'QQ Music session'));
-      vipEl.textContent = 'UID: ' + ((st && st.userId) || '-') + '  /  ' + qqVipLabel;
-      vipEl.style.color = qqVipPending ? 'rgba(255,232,174,0.86)' : (hasProviderVip('qq', st) ? 'rgba(0,245,212,0.82)' : 'rgba(0,245,212,0.58)');
+      var spProduct2 = st && st.product === 'premium' ? 'Spotify Premium' : (st && st.product ? ('Spotify ' + String(st.product).toUpperCase()) : 'Spotify plan unknown');
+      vipEl.textContent = 'ID: ' + ((st && st.userId) || '-') + '  /  ' + spProduct2;
+      vipEl.style.color = 'rgba(30,215,96,0.60)';
     }
   }
-  ['netease', 'qq', 'kugou', 'qishui', 'spotify', 'both'].forEach(function (key) {
+  ['spotify', 'ytmusic', 'deezer', 'soundcloud', 'both'].forEach(function (key) {
     var btn = document.getElementById('user-provider-' + key);
     if (btn) btn.classList.toggle('active', key === 'both' ? dualAccountMode : (!dualAccountMode && activeAccountProvider === key));
   });
-  if (addNetease) addNetease.style.display = hasPlatformLogin('netease') ? 'none' : '';
-  if (addQQ) addQQ.textContent = hasPlatformLogin('qq') ? 'View QQ Music' : 'Add QQ Music';
-  if (addKugou) addKugou.textContent = hasPlatformLogin('kugou') ? 'View Kugou Music' : 'Add Kugou Music';
-  if (addQishui) addQishui.textContent = hasPlatformLogin('qishui') ? 'Sign in to Soda again' : 'Sign in to Soda Music';
   if (addSpotify) addSpotify.textContent = hasPlatformLogin('spotify') ? 'View Spotify' : 'Connect Spotify';
+  if (addYtmusic) addYtmusic.textContent = 'YT Music — ready';
+  if (addDeezer) addDeezer.textContent = 'Deezer — ready';
+  if (addSoundcloud) addSoundcloud.textContent = 'SoundCloud — ready';
   if (logoutBtn) logoutBtn.textContent =
-    activeAccountProvider === 'qq' ? 'Log out of QQ Music' :
-    (activeAccountProvider === 'kugou' ? 'Log out of Kugou Music' :
-    (activeAccountProvider === 'qishui' ? 'Clear Soda sign-in' :
-    (activeAccountProvider === 'spotify' ? 'Log out of Spotify' : 'Log out of NetEase Cloud Music')));
+    activeAccountProvider === 'spotify' ? 'Log out of Spotify' :
+    (activeAccountProvider === 'ytmusic' ? 'YT Music — no sign-out needed' :
+    (activeAccountProvider === 'deezer' ? 'Deezer — no sign-out needed' :
+    (activeAccountProvider === 'soundcloud' ? 'SoundCloud — no sign-out needed' : 'Log out')));
   if (hint) hint.textContent = dualAccountMode
     ? 'The top-right corner now shows multiple platforms side by side.'
     : 'Choose which platforms show in the top-right; "I want both" shows all signed-in platforms side by side.';
@@ -72,15 +62,10 @@ function showUserModal() {
   if (!hasAnyPlatformLogin()) return showLoginModal();
   updateUserModalUi();
   openGsapModal(document.getElementById('user-modal'));
-  if (qqLoginStatus && qqLoginStatus.loggedIn && typeof refreshQQVipStatusNow === 'function') {
-    refreshQQVipStatusNow('account-modal')
-      .then(updateUserModalUi)
-      .catch(function (e) { console.warn('QQ VIP modal refresh failed:', e); });
-  }
 }
 function closeUserModal() { closeGsapModal(document.getElementById('user-modal')); }
 function setActiveAccountProvider(provider) {
-  provider = provider === 'qq' ? 'qq' : (provider === 'kugou' ? 'kugou' : (provider === 'qishui' ? 'qishui' : (provider === 'spotify' ? 'spotify' : 'netease')));
+  provider = provider === 'ytmusic' ? 'ytmusic' : (provider === 'deezer' ? 'deezer' : (provider === 'soundcloud' ? 'soundcloud' : 'spotify'));
   if (!hasPlatformLogin(provider)) {
     openProviderLogin(provider);
     return;
@@ -92,7 +77,7 @@ function setActiveAccountProvider(provider) {
 }
 function enableDualAccountView() {
   if (loggedProviderCount() < 2) {
-    openProviderLogin(firstLoggedProvider() === 'netease' ? 'qq' : 'netease');
+    openProviderLogin(firstLoggedProvider() === 'spotify' ? 'ytmusic' : 'spotify');
     return;
   }
   dualAccountMode = true;
@@ -104,7 +89,7 @@ function requestDualLoginMode() {
   enableDualAccountView();
 }
 function openProviderLogin(provider) {
-  provider = provider === 'qq' ? 'qq' : (provider === 'kugou' ? 'kugou' : (provider === 'qishui' ? 'qishui' : (provider === 'spotify' ? 'spotify' : 'netease')));
+  provider = provider === 'ytmusic' ? 'ytmusic' : (provider === 'deezer' ? 'deezer' : (provider === 'soundcloud' ? 'soundcloud' : 'spotify'));
   closeUserModal();
   loginProvider = provider;
   showLoginModal({ provider: provider });
@@ -139,11 +124,9 @@ function armLogoutAllAccountsResetConfirmation() {
   logoutAllAccountsResetConfirmTimer = window.setTimeout(clearLogoutAllAccountsResetConfirmation, 5000);
 }
 
+// EN-FORK: global-only providers — Chinese login states removed from UI reset.
 function resetAllProviderRendererLoginState() {
   loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: 'No VIP' };
-  qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false };
-  kugouLoginStatus = { provider: 'kugou', loggedIn: false, preview: false, nickname: 'Kugou Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false };
-  qishuiLoginStatus = { provider: 'qishui', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: 'Soda Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match' };
   spotifyLoginStatus = { provider: 'spotify', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: 'Spotify', userId: '', avatar: '', product: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match', tokenConfigured: false, tokenFileExists: false, credentialsFileExists: false, localConfigMissing: false };
   loginStatusChecked = true;
   loginStatusCheckFailed = false;
@@ -157,7 +140,7 @@ function resetAllProviderRendererLoginState() {
   myPodcastItems = {};
   likedSongMap = {};
   dualAccountMode = false;
-  activeAccountProvider = 'netease';
+  activeAccountProvider = 'spotify';
   playlistCatalogRevision += 1;
   if (typeof clearQQPlaybackVipEvidence === 'function') clearQQPlaybackVipEvidence();
   if (typeof homeDiscoverState !== 'undefined' && homeDiscoverState) {
@@ -171,6 +154,7 @@ function resetAllProviderRendererLoginState() {
   }
 }
 
+// EN-FORK: global-only logout — Chinese endpoints removed from UI bulk logout.
 async function logoutAllAccountsAndResetEasterEgg() {
   if (logoutAllAccountsResetBusy) return;
   if (Date.now() > logoutAllAccountsResetConfirmUntil) {
@@ -187,9 +171,6 @@ async function logoutAllAccountsAndResetEasterEgg() {
   try {
     await Promise.allSettled([
       apiJson('/api/logout'),
-      apiJson('/api/qq/logout'),
-      apiJson('/api/kugou/logout'),
-      apiJson('/api/qishui/logout'),
       apiJson('/api/spotify/logout')
     ]);
     var result = await requestLoginEasterEggReplayReset();
@@ -224,6 +205,7 @@ async function logoutAllAccountsAndResetEasterEgg() {
   }
 }
 
+// EN-FORK: global-only — ytmusic/deezer/soundcloud need no sign-out; Chinese branches removed.
 async function logoutActiveAccount() {
   if (activeAccountProvider === 'spotify') {
     try { await apiJson('/api/spotify/logout'); } catch (e) { }
@@ -245,63 +227,9 @@ async function logoutActiveAccount() {
     showToast('Signed out of Spotify');
     return;
   }
-  if (activeAccountProvider === 'qishui') {
-    try { await apiJson('/api/qishui/logout'); } catch (e) { }
-    try {
-      if (window.desktopWindow && typeof window.desktopWindow.clearQishuiMusicLogin === 'function') {
-        await window.desktopWindow.clearQishuiMusicLogin();
-      }
-    } catch (e) { }
-    qishuiLoginStatus = { provider: 'qishui', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: 'Soda Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match' };
-    qishuiPlaylists = [];
-    userPlaylists = userPlaylists.filter(function (pl) { return pl.provider !== 'qishui'; });
-    playlistCatalogRevision += 1;
-    dualAccountMode = false;
-    activeAccountProvider = firstLoggedProvider();
-    renderUserBtn();
-    safeShelfRebuild('qishui-logout');
-    if (hasAnyPlatformLogin()) updateUserModalUi();
-    else closeUserModal();
-    showToast('Soda Music authorization cleared');
-    return;
-  }
-  if (activeAccountProvider === 'kugou') {
-    try { await apiJson('/api/kugou/logout'); } catch (e) { }
-    try {
-      if (window.desktopWindow && typeof window.desktopWindow.clearKugouMusicLogin === 'function') {
-        await window.desktopWindow.clearKugouMusicLogin();
-      }
-    } catch (e) { }
-    kugouLoginStatus = { provider: 'kugou', loggedIn: false, preview: false, nickname: 'Kugou Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false };
-    kugouPlaylists = [];
-    userPlaylists = userPlaylists.filter(function (pl) { return pl.provider !== 'kugou'; });
-    playlistCatalogRevision += 1;
-    dualAccountMode = false;
-    activeAccountProvider = firstLoggedProvider();
-    renderUserBtn();
-    if (hasAnyPlatformLogin()) updateUserModalUi();
-    else closeUserModal();
-    showToast('Signed out of Kugou Music');
-    return;
-  }
-  if (activeAccountProvider === 'qq') {
-    try { await apiJson('/api/qq/logout'); } catch (e) { }
-    try {
-      if (window.desktopWindow && typeof window.desktopWindow.clearQQMusicLogin === 'function') {
-        await window.desktopWindow.clearQQMusicLogin();
-      }
-    } catch (e) { }
-    if (typeof clearQQPlaybackVipEvidence === 'function') clearQQPlaybackVipEvidence();
-    qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false };
-    qqPlaylists = [];
-    userPlaylists = userPlaylists.filter(function (pl) { return pl.provider !== 'qq'; });
-    playlistCatalogRevision += 1;
-    dualAccountMode = false;
-    activeAccountProvider = firstLoggedProvider();
-    renderUserBtn();
-    if (hasAnyPlatformLogin()) updateUserModalUi();
-    else closeUserModal();
-    showToast('Signed out of QQ Music');
+  if (activeAccountProvider === 'ytmusic' || activeAccountProvider === 'deezer' || activeAccountProvider === 'soundcloud') {
+    var m2 = platformMeta(activeAccountProvider);
+    showToast((m2.label || activeAccountProvider) + ' needs no sign-out');
     return;
   }
   doLogout();

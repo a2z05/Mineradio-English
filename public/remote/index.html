@@ -3,22 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b0d12">
+  <meta name="theme-color" content="#07080c">
   <title>Mineradio Remote</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
   <style>
     :root {
-      --bg: #0b0d12;
-      --surface: #151a26;
-      --surface-2: #1c2333;
-      --line: #27304a;
-      --text: #eef1f8;
-      --muted: #8a93a6;
-      --accent: #5b8cff;
-      --accent-2: #7c5bff;
-      --danger: #ff5b6e;
+      --bg: #07080c;
+      --surface: rgba(255, 255, 255, .04);
+      --surface-2: rgba(255, 255, 255, .08);
+      --line: rgba(255, 255, 255, .08);
+      --text: #f2f3f7;
+      --muted: #8b90a0;
+      --accent: #f4d28a;
+      --accent-2: #cf9f4e;
+      --on-accent: #221708;
+      --danger: #ff5367;
       --radius: 16px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -26,7 +27,7 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
       font-size: 16px;
       line-height: 1.45;
       padding-top: env(safe-area-inset-top);
@@ -34,7 +35,17 @@
       user-select: none;
       overscroll-behavior-y: contain;
     }
-    .wrap { max-width: 480px; margin: 0 auto; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); }
+    /* Soft ambient glows */
+    body::before {
+      content: "";
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(640px 420px at 50% -12%, rgba(244, 210, 138, .10), transparent 65%),
+        radial-gradient(520px 380px at 88% 112%, rgba(207, 159, 78, .06), transparent 62%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .wrap { position: relative; z-index: 1; max-width: 480px; margin: 0 auto; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); }
 
     header {
       display: flex; align-items: center; gap: 10px;
@@ -44,19 +55,40 @@
     .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
     .dot.on { background: #35d07f; box-shadow: 0 0 8px rgba(53,208,127,.7); }
     .dot.off { background: var(--danger); }
+    .hdr-btn {
+      border: 1px solid var(--line); background: var(--surface); color: var(--accent-2);
+      font-family: inherit; font-size: 12px; font-weight: 700;
+      border-radius: 999px; padding: 5px 12px; cursor: pointer;
+    }
+    .hdr-btn:active { transform: scale(.96); }
+    /* Hide the header install chip when the app already runs installed */
+    @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+      #btn-install { display: none; }
+    }
 
     /* Connection banner */
     #conn-banner {
       display: none;
+      align-items: center; gap: 10px;
       margin: 4px 0 10px;
       padding: 9px 12px;
-      border-radius: 12px;
-      background: rgba(255,91,110,.12);
-      border: 1px solid rgba(255,91,110,.35);
-      color: #ffb3bd;
+      border-radius: 14px;
+      background: rgba(255, 83, 103, .10);
+      border: 1px solid rgba(255, 83, 103, .35);
+      color: #ffb9c2;
       font-size: 13px;
     }
-    #conn-banner.show { display: block; }
+    #conn-banner.show { display: flex; }
+    #conn-banner #conn-text { flex: 1; }
+    #btn-reconnect {
+      flex: none; cursor: pointer; white-space: nowrap;
+      border: 1px solid rgba(255, 131, 146, .45);
+      background: rgba(255, 83, 103, .16);
+      color: #ffc3cb; border-radius: 10px;
+      padding: 5px 12px; font-size: 12px; font-weight: 700;
+      font-family: inherit;
+    }
+    #btn-reconnect:active { opacity: .75; }
 
     /* Pair view */
     #view-pair { padding-top: 18vh; text-align: center; }
@@ -64,25 +96,48 @@
       width: 96px; height: 96px; margin: 0 auto 22px;
       border-radius: 28px;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 14px 40px rgba(244, 210, 138, .22);
       display: flex; align-items: center; justify-content: center;
-      font-size: 46px; color: #fff;
+      font-size: 46px; color: var(--on-accent);
     }
     #view-pair h2 { font-size: 22px; margin-bottom: 6px; }
-    #pair-status { color: var(--muted); font-size: 14px; max-width: 300px; margin: 0 auto; }
+    #pair-status { color: var(--muted); font-size: 14px; max-width: 320px; margin: 0 auto; }
     #pair-status.busy::after { content: "…"; }
 
     /* Player view */
-    .cover-box { position: relative; width: min(72vw, 270px); margin: 8px auto 14px; aspect-ratio: 1; }
+    .cover-box { position: relative; z-index: 0; width: min(72vw, 270px); margin: 8px auto 10px; aspect-ratio: 1; }
+    .cover-box::before {
+      content: "";
+      position: absolute; inset: -34%;
+      background: radial-gradient(closest-side, rgba(244, 210, 138, .16), transparent 72%);
+      z-index: -1;
+      pointer-events: none;
+    }
     .cover-box img, .cover-ph {
       width: 100%; height: 100%; border-radius: var(--radius);
       object-fit: cover; box-shadow: 0 14px 34px rgba(0,0,0,.55);
     }
     .cover-ph {
       display: none;
-      background: linear-gradient(135deg, var(--surface-2), var(--surface));
+      background: linear-gradient(135deg, rgba(255,255,255,.07), rgba(255,255,255,.02));
       border: 1px solid var(--line);
       align-items: center; justify-content: center;
-      font-size: 64px; color: var(--muted);
+      font-size: 64px; color: rgba(244, 210, 138, .55);
+    }
+    .out-row { display: flex; justify-content: center; margin: 2px 0 6px; }
+    .out-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      cursor: pointer; font-family: inherit;
+      border: 1px solid var(--line); background: var(--surface);
+      color: var(--muted); border-radius: 999px;
+      padding: 6px 14px; font-size: 12px; font-weight: 700; letter-spacing: .05em;
+    }
+    .out-btn svg { width: 15px; height: 15px; fill: currentColor; }
+    .out-btn:active { transform: scale(.96); }
+    .out-btn.phone {
+      color: var(--on-accent); border-color: transparent;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 4px 16px rgba(244, 210, 138, .25);
     }
     .meta { text-align: center; padding: 0 8px; min-height: 52px; }
     #track-title { font-size: 19px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -98,7 +153,7 @@
     }
     input[type="range"]::-webkit-slider-runnable-track {
       height: 5px; border-radius: 3px;
-      background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--surface-2) var(--fill, 0%));
+      background: linear-gradient(to right, var(--accent) var(--fill, 0%), rgba(255,255,255,.12) var(--fill, 0%));
     }
     input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none; appearance: none;
@@ -106,7 +161,7 @@
       border-radius: 50%; background: #fff; border: none;
       box-shadow: 0 1px 5px rgba(0,0,0,.5);
     }
-    input[type="range"]::-moz-range-track { height: 5px; border-radius: 3px; background: var(--surface-2); }
+    input[type="range"]::-moz-range-track { height: 5px; border-radius: 3px; background: rgba(255,255,255,.12); }
     input[type="range"]::-moz-range-progress { height: 5px; border-radius: 3px; background: var(--accent); }
     input[type="range"]::-moz-range-thumb {
       width: 17px; height: 17px; border: none; border-radius: 50%; background: #fff;
@@ -126,22 +181,47 @@
     .transport button:active { transform: scale(.9); opacity: .8; }
     .btn-side { width: 54px; height: 54px; }
     .btn-main {
-      width: 72px; height: 72px; color: #fff;
+      width: 72px; height: 72px; color: var(--on-accent);
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      box-shadow: 0 8px 22px rgba(91,140,255,.35);
+      box-shadow: 0 8px 22px rgba(244, 210, 138, .28);
     }
     .transport svg { width: 26px; height: 26px; fill: currentColor; }
     .btn-main svg { width: 32px; height: 32px; }
 
     /* Volume */
-    .volume-row { display: flex; align-items: center; gap: 10px; margin: 8px 2px 18px; color: var(--muted); }
+    .volume-row { display: flex; align-items: center; gap: 10px; margin: 8px 2px 12px; color: var(--muted); }
     .volume-row input { flex: 1; }
 
+    /* Tap-to-play chip (shown when the browser blocked autoplay) */
+    .tap-chip {
+      display: block; margin: 0 auto 12px; cursor: pointer; font-family: inherit;
+      border: none; border-radius: 999px; padding: 11px 26px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: var(--on-accent); font-size: 14px; font-weight: 700;
+      box-shadow: 0 6px 20px rgba(244, 210, 138, .3);
+    }
+    .tap-chip:active { transform: scale(.97); }
+
     /* Tabs */
-    .tabs { display: flex; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+    .opts-row { display: flex; gap: 8px; justify-content: center; margin: 2px 0 10px; }
+    .opt-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      cursor: pointer; font-family: inherit;
+      border: 1px solid var(--line); background: var(--surface);
+      color: var(--muted); border-radius: 999px;
+      padding: 7px 14px; font-size: 12.5px; font-weight: 600;
+      transition: transform .08s ease, color .15s ease;
+    }
+    .opt-btn svg { width: 15px; height: 15px; fill: currentColor; }
+    .opt-btn:active { transform: scale(.95); }
+    .opt-btn.active {
+      color: var(--on-accent); border-color: transparent;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+    .tabs { display: flex; gap: 6px; background: rgba(255, 255, 255, .03); border: 1px solid var(--line); border-radius: 14px; padding: 4px; }
     .tabs button {
       flex: 1; border: none; background: transparent; color: var(--muted);
-      font-size: 14px; font-weight: 600; padding: 8px 0; border-radius: 9px; cursor: pointer;
+      font-family: inherit; font-size: 14px; font-weight: 600; padding: 8px 0; border-radius: 10px; cursor: pointer;
     }
     .tabs button.active { background: var(--surface-2); color: var(--text); }
 
@@ -150,10 +230,10 @@
     .rowlist li {
       display: flex; align-items: center; gap: 10px;
       background: var(--surface); border: 1px solid transparent;
-      border-radius: 12px; padding: 10px 12px; margin-bottom: 6px;
+      border-radius: 14px; padding: 10px 12px; margin-bottom: 6px;
       min-height: 48px;
     }
-    .rowlist li.active { border-color: var(--accent); }
+    .rowlist li.active { border-color: rgba(244, 210, 138, .55); background: rgba(244, 210, 138, .05); }
     .rowlist li.tap { cursor: pointer; }
     .rowlist li.tap:active { background: var(--surface-2); }
     .idx { width: 22px; text-align: right; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; flex: none; }
@@ -173,13 +253,15 @@
     #search-form { display: flex; gap: 8px; margin-top: 10px; }
     #search-input {
       flex: 1; background: var(--surface); border: 1px solid var(--line);
-      color: var(--text); border-radius: 12px; padding: 11px 14px; font-size: 15px; outline: none;
+      color: var(--text); border-radius: 14px; padding: 11px 14px; font-size: 15px; outline: none;
+      font-family: inherit;
     }
-    #search-input:focus { border-color: var(--accent); }
+    #search-input:focus { border-color: rgba(244, 210, 138, .55); }
     #search-form button {
-      border: none; cursor: pointer; color: #fff; font-weight: 700; font-size: 14px;
+      border: none; cursor: pointer; color: var(--on-accent); font-family: inherit;
+      font-weight: 700; font-size: 14px;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      border-radius: 12px; padding: 0 18px;
+      border-radius: 14px; padding: 0 18px;
     }
     #search-status { color: var(--muted); font-size: 12px; margin: 8px 2px 0; min-height: 15px; }
     [hidden] { display: none !important; }
@@ -187,8 +269,8 @@
     /* Library + Transfer */
     .crumbs { display: flex; align-items: center; gap: 6px; margin: 10px 2px 0; font-size: 13px; color: var(--muted); }
     .crumbs button {
-      border: none; background: var(--surface-2); color: var(--text);
-      border-radius: 8px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+      border: none; background: var(--surface-2); color: var(--text); font-family: inherit;
+      border-radius: 9px; padding: 5px 12px; font-size: 12px; cursor: pointer;
     }
     .lib-note { color: var(--muted); font-size: 12px; margin: 6px 2px 0; }
     .upload-box { margin-top: 10px; padding: 14px; border-radius: var(--radius);
@@ -196,19 +278,53 @@
     .upload-box p { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
     .upload-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
     .upload-actions button {
-      border: none; cursor: pointer; color: #fff; font-weight: 700; font-size: 13px;
+      border: none; cursor: pointer; color: var(--on-accent); font-family: inherit;
+      font-weight: 700; font-size: 13px;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      border-radius: 11px; padding: 10px 16px;
+      border-radius: 12px; padding: 10px 16px;
     }
     .upload-actions button.ghost { background: var(--surface-2); color: var(--text); }
     #upload-progress-list { list-style: none; margin-top: 10px; }
-    #upload-progress-list li { background: var(--surface); border-radius: 10px; padding: 7px 10px; margin-bottom: 5px; font-size: 12px; }
-    #upload-progress-list .ubar { height: 4px; border-radius: 2px; background: var(--surface-2); margin-top: 5px; overflow: hidden; }
+    #upload-progress-list li { background: var(--surface); border-radius: 11px; padding: 7px 10px; margin-bottom: 5px; font-size: 12px; }
+    #upload-progress-list .uname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #upload-progress-list .ubar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.08); margin-top: 5px; overflow: hidden; }
     #upload-progress-list .ubar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); width: 0%; }
     #upload-progress-list li.done .ubar i { background: #35d07f; }
     #upload-progress-list li.err .ubar i { background: var(--danger); }
-    .import-btn { width: 100%; margin-top: 10px; border: none; cursor: pointer; color: var(--text);
-      background: var(--surface-2); border-radius: 11px; padding: 10px 0; font-size: 13px; font-weight: 600; }
+    .import-btn { width: 100%; margin-top: 10px; border: none; cursor: pointer; color: var(--text); font-family: inherit;
+      background: var(--surface-2); border-radius: 12px; padding: 10px 0; font-size: 13px; font-weight: 600; }
+
+    /* Mini toast */
+    #toast {
+      position: fixed; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom));
+      transform: translateX(-50%) translateY(8px);
+      background: rgba(23, 25, 35, .96); border: 1px solid var(--line); color: var(--text);
+      padding: 10px 16px; border-radius: 999px; font-size: 13px;
+      opacity: 0; pointer-events: none; z-index: 50;
+      max-width: 86vw; text-align: center;
+      transition: opacity .2s ease, transform .2s ease;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Install bottom sheet */
+    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; padding: 0 12px calc(14px + env(safe-area-inset-bottom)); }
+    .sheet-card {
+      max-width: 456px; margin: 0 auto;
+      background: rgba(22, 24, 34, .97);
+      border: 1px solid var(--line); border-radius: 18px;
+      padding: 16px; box-shadow: 0 -10px 44px rgba(0, 0, 0, .6);
+    }
+    .sheet-title { color: var(--accent); font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .sheet-desc { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+    .sheet-actions { display: flex; gap: 10px; }
+    .sheet-actions button {
+      flex: 1; cursor: pointer; font-family: inherit;
+      border: none; border-radius: 12px; padding: 12px 0;
+      font-size: 14px; font-weight: 700;
+    }
+    .sheet-actions button:active { transform: scale(.98); }
+    #install-yes { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--on-accent); }
+    #install-later { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
   </style>
 </head>
 <body>
@@ -216,9 +332,10 @@
     <header>
       <span id="conn-dot" class="dot"></span>
       <h1>Mineradio Remote</h1>
+      <button id="btn-install" class="hdr-btn" type="button" hidden title="Install app">⤓ Install</button>
     </header>
 
-    <div id="conn-banner"><span id="conn-text"></span></div>
+    <div id="conn-banner"><span id="conn-text"></span><button id="btn-reconnect" type="button">Reconnect</button></div>
 
     <!-- Pair screen -->
     <div id="view-pair" hidden>
@@ -232,6 +349,13 @@
       <div class="cover-box">
         <img id="cover-img" alt="" hidden>
         <div class="cover-ph" id="cover-ph">&#9835;</div>
+      </div>
+
+      <div class="out-row">
+        <button id="btn-output" class="out-btn" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M21 3H3a2 2 0 0 0-2 2v3h2V5h18v14h-7v2h7a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2a5 5 0 0 1 5 5h2c0-3.87-3.13-7-7-7zm0-4v2a9 9 0 0 1 9 9h2c0-6.08-4.93-11-11-11z"/></svg>
+          <span id="output-label">PC</span>
+        </button>
       </div>
 
       <div class="meta">
@@ -263,6 +387,24 @@
       <div class="volume-row">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
         <input id="volume" type="range" min="0" max="100" step="1" value="80" aria-label="Volume">
+      </div>
+
+      <button id="tap-chip" class="tap-chip" type="button" hidden>Tap to play</button>
+
+      <!-- Extra options: play mode / save track / reload state -->
+      <div class="opts-row">
+        <button id="btn-playmode" class="opt-btn" type="button">
+          <svg viewBox="0 0 24 24"><path d="M17 4l4 4-4 4V9.5H8v-2h9V4zM7 20l-4-4 4-4v2.5h9v2H7V20z"/></svg>
+          <span id="playmode-label">Loop</span>
+        </button>
+        <button id="btn-download" class="opt-btn" type="button">
+          <svg viewBox="0 0 24 24"><path d="M12 3v10.6l-3.3-3.3-1.4 1.4L13 17.4l5.7-5.7-1.4-1.4-3.3 3.3V3h-2zM5 19h14v2H5v-2z"/></svg>
+          Save
+        </button>
+        <button id="btn-refresh" class="opt-btn" type="button">
+          <svg viewBox="0 0 24 24"><path d="M17.65 6.35A8 8 0 1 0 19.73 14h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+          Sync
+        </button>
       </div>
 
       <div class="tabs">
@@ -298,7 +440,7 @@
 
       <section id="sec-transfer" class="panel" hidden>
         <div class="upload-box">
-          <p>Pick songs or a whole folder — uploads land in the PC's inbox (<code>data/music-inbox</code>).</p>
+          <p>Pick songs or a whole folder — uploads land in the PC's inbox folder.</p>
           <div class="upload-actions">
             <button type="button" onclick="document.getElementById('upload-files').click()">Pick files</button>
             <button type="button" class="ghost" onclick="document.getElementById('upload-folder').click()">Pick folder</button>
@@ -310,6 +452,24 @@
         <ul id="upload-progress-list"></ul>
         <p id="transfer-note" class="empty"></p>
       </section>
+    </div>
+  </div>
+
+  <!-- Local playback sink for Phone output mode -->
+  <audio id="phone-audio" preload="none" playsinline hidden></audio>
+
+  <!-- Mini toast -->
+  <div id="toast" role="status"></div>
+
+  <!-- Install bottom sheet -->
+  <div id="install-sheet" class="sheet" hidden>
+    <div class="sheet-card">
+      <div class="sheet-title">Install Mineradio Remote</div>
+      <p class="sheet-desc">Full-screen, offline-ready — adds the remote to your home screen.</p>
+      <div class="sheet-actions">
+        <button id="install-yes" type="button">Install</button>
+        <button id="install-later" type="button">Later</button>
+      </div>
     </div>
   </div>
 

@@ -10,7 +10,7 @@ const {
   LOGIN_EASTER_EGG_GATE_VERSION,
   LOGIN_EASTER_EGG_CREDENTIAL_FILES,
 } = require('../desktop/login-easter-egg-gate');
-const { normalizeLoginEasterEggCharacters } = require('../public/js/modules/08-account/00-login-easter-egg');
+const { finishLoginEasterEggAnyKey } = require('../public/js/modules/08-account/00-login-easter-egg');
 
 async function run() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mineradio-login-gate-'));
@@ -44,8 +44,12 @@ async function run() {
     assert.strictEqual(fs.existsSync(path.join(root, '.qishui-oauth.json')), true);
     assert.strictEqual(fs.existsSync(path.join(root, 'current-fx-autosave.json')), true);
 
-    assert.strictEqual(gate.unlock('世界和气').error, 'LOGIN_EASTER_EGG_INVALID');
-    assert.strictEqual(gate.unlock('世界和平').unlocked, true);
+    // EN-FORK: the gate accepts ANY wish (even one character) — no fixed password.
+    assert.strictEqual(gate.unlock('abcd').unlocked, true);
+    assert.strictEqual(gate.unlock('世界和气').unlocked, true);
+    assert.strictEqual(gate.unlock('w').unlocked, true);
+    assert.strictEqual(gate.unlock('  ').error, 'LOGIN_EASTER_EGG_INVALID');
+    assert.strictEqual(gate.unlock('').error, 'LOGIN_EASTER_EGG_INVALID');
 
     fs.writeFileSync(path.join(root, '.cookie'), 'new-login', 'utf8');
     const reopened = new LoginEasterEggGate({ userDataPath: root, credentialRoots: () => [migrationRoot], now: () => 5678 });
@@ -59,7 +63,9 @@ async function run() {
     assert.strictEqual(state.gateVersion, LOGIN_EASTER_EGG_GATE_VERSION);
     assert.strictEqual(state.cookieResetVersion, LOGIN_EASTER_EGG_GATE_VERSION);
     assert.strictEqual(state.unlocked, true);
-    assert.deepStrictEqual(normalizeLoginEasterEggCharacters(' 世 界 和 平 多 '), ['世', '界', '和', '平']);
+    // EN-FORK: the typing ritual is gone — the exported unlock path is the
+    // any-key finisher. In plain Node (no DOM) it resolves without throwing.
+    assert.strictEqual(typeof finishLoginEasterEggAnyKey, 'function');
 
     LOGIN_EASTER_EGG_CREDENTIAL_FILES.forEach((name) => {
       fs.writeFileSync(path.join(root, name), 'replayed-login', 'utf8');
@@ -88,7 +94,8 @@ async function run() {
     assert.strictEqual(lockedStatus.unlocked, false);
     assert.strictEqual(partitionClearCount, 3, 'a locked restart must audit sessions again');
     assert.strictEqual(fs.existsSync(path.join(migrationRoot, '.cookie')), false, 'locked restart must remove restored migration credentials');
-    assert.strictEqual(lockedRestart.unlock('世界和平').unlocked, true, 'replayed gate should unlock again');
+    assert.strictEqual(lockedRestart.unlock('wish').unlocked, true, 'replayed gate should unlock again');
+    assert.strictEqual(lockedRestart.unlock('x').unlocked, true, 'any single-character wish unlocks too');
 
     const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.js'), 'utf8');
     assert(main.indexOf('migrateLegacyAuthStorage();') < main.indexOf('await initializeLoginEasterEggGate();'));
@@ -172,8 +179,8 @@ async function run() {
     assert(html.includes('login-easter-achievement-pixel-eyes'));
     assert(html.includes('id="login-reset-all-btn"'));
     assert(html.includes('onclick="logoutAllAccountsAndResetEasterEgg()"'));
-    assert(html.includes('已达成成就'));
-    assert(html.includes('世界和平！'));
+    assert(html.includes('Achievement unlocked'));
+    assert(html.includes('World Peace!'));
     assert(!/id="login-easter-egg-input"[^>]*maxlength="4"/.test(html), 'IME composition must not be truncated before Chinese text is committed');
 
     const easterEggRenderer = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'modules', '08-account', '00-login-easter-egg.js'), 'utf8');
@@ -184,16 +191,10 @@ async function run() {
     assert(easterEggRenderer.includes("pixels.data[i + 3] >= 92"));
     assert(easterEggRenderer.includes('requestLoginEasterEggReplayReset()'));
     assert(easterEggRenderer.includes('resetLoginEasterEggUiForReplay()'));
-    assert(easterEggRenderer.includes("input.addEventListener('compositionstart'"));
-    assert(easterEggRenderer.includes('scheduleLoginEasterEggInputFocus()'));
-    assert(easterEggRenderer.includes('function restoreLoginEasterEggInputSurface(clearValue)'));
-    assert(easterEggRenderer.includes("input.removeAttribute('inert')"));
-    assert(easterEggRenderer.includes('restoreLoginEasterEggInputSurface(true)'));
-    assert(easterEggRenderer.includes('loginEasterEggState.focusRequestId'));
-    assert(easterEggRenderer.includes("requestLoginEasterEggKeyboardFocus(reason || 'focus').then"));
-    assert(easterEggRenderer.includes('document.activeElement === input && document.hasFocus()'));
-    assert(easterEggRenderer.includes('if (document.hasFocus())'));
-    assert(easterEggRenderer.includes('event.isComposing || loginEasterEggState.composing || event.keyCode === 229'));
+    // EN-FORK: typing ritual removed — the finisher is any key / another tap.
+    assert(easterEggRenderer.includes('finishLoginEasterEggAnyKey()'));
+    assert(easterEggRenderer.includes("gate.classList.add('any-key')"));
+    assert(!easterEggRenderer.includes("input.addEventListener('compositionstart'"));
     assert(!easterEggRenderer.includes("requestLoginEasterEggKeyboardFocus('wish-pointerdown')"));
     assert(/api\.requestDesktopKeyboardFocus\([\s\S]{0,120}'login-easter-egg-'/.test(easterEggRenderer));
     assert(easterEggRenderer.includes('function playLoginEasterEggAchievementChime()'));
@@ -206,7 +207,7 @@ async function run() {
     assert(logoutRenderer.includes('resetAllProviderRendererLoginState()'));
     assert(logoutRenderer.includes('resetLoginEasterEggUiForReplay()'));
     assert(logoutRenderer.includes('armLogoutAllAccountsResetConfirmation()'));
-    assert(logoutRenderer.includes("button.textContent = '再次点击确认'"));
+    assert(logoutRenderer.includes("button.textContent = 'Click again to confirm'"));
     assert(!logoutRenderer.includes('window.confirm('));
 
     const splashRenderer = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'modules', '10-shell', '03-splash.js'), 'utf8');

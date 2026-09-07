@@ -313,7 +313,11 @@ html.desktop-shell-root body {
   --visual-tint: #9db8cf;
   --source-netease: #d95b67;
   --source-qq: #00F5D4;
+  --source-kugou: #56e0ff;
   --source-qishui: #45d68f;
+  --source-ytmusic: #ff0033;
+  --source-deezer: #a238ff;
+  --source-soundcloud: #ff5500;
   --source-spotify: #1ed760;
   --source-local: #9db8cf
 }
@@ -2136,6 +2140,37 @@ body.empty-home-active.diy-mode #search-area:not(.has-results) #search-mode-tabs
   color: #d8ffe2;
   border-color: rgba(30, 215, 96, .34);
   background: rgba(30, 215, 96, .085)
+}
+
+/* EN-FORK global provider badges */
+.tag-source.ytmusic {
+  color: #ffd9df;
+  border-color: rgba(255, 0, 51, .34);
+  background: rgba(255, 0, 51, .085)
+}
+
+.tag-source.deezer {
+  color: #ecd9ff;
+  border-color: rgba(162, 56, 255, .34);
+  background: rgba(162, 56, 255, .085)
+}
+
+.tag-source.soundcloud {
+  color: #ffe1d4;
+  border-color: rgba(255, 85, 0, .34);
+  background: rgba(255, 85, 0, .085)
+}
+
+.search-result.ytmusic-source:hover {
+  background: rgba(255, 0, 51, .052)
+}
+
+.search-result.deezer-source:hover {
+  background: rgba(162, 56, 255, .052)
+}
+
+.search-result.soundcloud-source:hover {
+  background: rgba(255, 85, 0, .052)
 }
 
 .search-result.qq-source:hover {
@@ -4433,6 +4468,21 @@ body.desktop-shell.empty-home-active.controls-visible #empty-home {
 .account-source-dot.spotify {
   background: var(--source-spotify);
   color: var(--source-spotify)
+}
+
+.account-source-dot.ytmusic {
+  background: var(--source-ytmusic);
+  color: var(--source-ytmusic)
+}
+
+.account-source-dot.deezer {
+  background: var(--source-deezer);
+  color: var(--source-deezer)
+}
+
+.account-source-dot.soundcloud {
+  background: var(--source-soundcloud);
+  color: var(--source-soundcloud)
 }
 
 .top-account-pill {
@@ -6742,12 +6792,12 @@ body:not(.controls-visible) .lyric-timing-control::before,
 }
 
 .quality-option.locked:not(.cap-locked) small::after {
-  content: ' · 需网易云SVIP';
+  content: ' · NetEase SVIP required';
   color: rgba(244, 210, 138, .88)
 }
 
 .quality-option.cap-locked small::after {
-  content: ' · 已探测';
+  content: ' · probed';
   color: rgba(168, 211, 255, .86)
 }
 
@@ -7677,21 +7727,46 @@ body.login-guide-active #login-guide-canvas {
 }
 
 .dual-login-modal {
-  width: fit-content;
-  min-width: min(610px, calc(100vw - 44px));
-  max-width: min(720px, calc(100vw - 44px));
+  /* EN-FORK FIX: was width:fit-content — the panel hugged the node-graph
+     width and never grew for the opened auth drawer, so the sign-in form
+     (tutorial + Client ID input + Save button) looked crushed inside a too-
+     small dialog. A stable explicit width gives every section room. */
+  width: min(720px, calc(100vw - 44px));
+  max-width: min(820px, calc(100vw - 32px));
   max-height: calc(100vh - 42px);
   padding: 24px 30px 26px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   text-align: left;
-  scrollbar-width: thin;
+  scrollbar-gutter: stable;
   background: radial-gradient(circle at 18% 10%, rgba(255, 255, 255, .09), transparent 28%), radial-gradient(circle at 78% 62%, rgba(var(--fc-accent-rgb), .055), transparent 38%), rgba(6, 7, 10, .34);
   border-color: rgba(255, 255, 255, .060);
   border-radius: 24px;
   box-shadow: 0 26px 84px rgba(0, 0, 0, .40), inset 0 1px 0 rgba(255, 255, 255, .060);
   backdrop-filter: blur(28px) saturate(1.18);
   -webkit-backdrop-filter: blur(28px) saturate(1.18);
-  transition: min-width .46s cubic-bezier(.16, 1, .3, 1), box-shadow .46s ease, background .46s ease
+  transition: box-shadow .46s ease, background .46s ease
+}
+
+/* EN-FORK FIX: custom slim scrollbar for the login dialog — the tall drawer
+   can make the dialog taller than the viewport; the stock Windows scrollbar
+   broke the dark look. Slim, gold-tinted, only visible while scrolling. */
+.dual-login-modal::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dual-login-modal::-webkit-scrollbar-track {
+  margin: 10px 0;
+  background: transparent;
+}
+
+.dual-login-modal::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(244, 210, 138, .22);
+}
+
+.dual-login-modal::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 210, 138, .40);
 }
 
 .login-easter-egg-gate {
@@ -7722,6 +7797,13 @@ body.login-guide-active #login-guide-canvas {
   padding: 18px 28px 8px;
   text-align: center;
   isolation: isolate
+}
+
+/* EN-FORK FIX: .login-panel-head (Sign out + close) is absolutely positioned
+   over the modal; without reserved top padding it covered the intro/graph.
+   Scoped with :not() so the locked easter-egg variant stays pixel-identical. */
+#login-modal:not(.login-easter-egg-locked) .dual-login-modal {
+  padding-top: 58px
 }
 
 .login-easter-egg-gate::before {
@@ -7796,8 +7878,8 @@ body.login-guide-active #login-guide-canvas {
 .login-easter-egg-wish {
   position: absolute;
   left: 50%;
-  top: 202px;
-  width: min(390px, calc(100% - 58px));
+  top: 190px;
+  width: min(520px, calc(100% - 48px));
   opacity: 0;
   filter: blur(18px);
   transform: translate(-50%, 24px) scale(.95);
@@ -7846,24 +7928,45 @@ body.login-guide-active #login-guide-canvas {
   width: 100%
 }
 
+/* EN-FORK: the wish ritual now ends with a single keypress — no typing. */
+.login-easter-anykey {
+  margin-top: 6px;
+  display: inline-block;
+  padding: 14px 34px;
+  border: 1px solid rgba(244, 210, 138, .38);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(244, 210, 138, .16), rgba(207, 159, 78, .10));
+  color: rgba(255, 240, 214, .95);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  animation: login-easter-anykey-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes login-easter-anykey-pulse {
+  0%, 100% { opacity: .72; transform: scale(.985); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
 .login-easter-cells {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  gap: 14px;
   pointer-events: none
 }
 
 .login-easter-cell {
-  height: 68px;
+  height: 96px;
   display: grid;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, .11);
-  border-radius: 20px;
+  border-radius: 22px;
   background: rgba(255, 255, 255, .035);
   color: rgba(255, 255, 255, .94);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .055), 0 12px 28px rgba(0, 0, 0, .16);
   font-family: SimHei, 'Microsoft YaHei', sans-serif;
-  font-size: 28px;
+  font-size: 36px;
   font-weight: 800;
   transition: border-color .22s ease, background .22s ease, transform .22s ease, color .22s ease
 }
@@ -8167,8 +8270,8 @@ body.login-guide-active #login-guide-canvas {
   }
   #login-modal.login-easter-egg-locked .login-easter-egg-gate { min-height: 400px }
   .login-easter-eye-trigger { width: 144px; height: 144px }
-  .login-easter-egg-wish { top: 172px }
-  .login-easter-cell { height: 56px; border-radius: 17px; font-size: 24px }
+  .login-easter-egg-wish { top: 164px }
+  .login-easter-cell { height: 80px; border-radius: 19px; font-size: 30px }
   .login-easter-achievement { top: 22px; right: 22px; width: min(326px, calc(100vw - 44px)) }
 }
 
@@ -8396,9 +8499,13 @@ body.login-guide-active #login-guide-canvas {
   display: grid;
   width: max-content;
   max-width: 100%;
-  grid-template-columns: 248px 168px;
+  /* EN-FORK FIX: fixed 248px+168px columns with a 112px gap left no spare room
+     inside min(610px) modal; the middle column flexes now so the graph shrinks
+     with the viewport instead of forcing a horizontal scrollbar. */
+  grid-template-columns: minmax(212px, 248px) minmax(150px, 168px);
   grid-template-areas: "providers hub";
-  gap: 112px;
+  column-gap: clamp(56px, calc((100% - (212px + 150px)) / 3), 112px);
+  row-gap: 14px;
   align-items: center;
   justify-content: center;
   margin: 0 auto;
@@ -8529,13 +8636,16 @@ body.login-guide-active #login-guide-canvas {
 
 .login-node-providers.login-platform-tabs button {
   height: auto;
-  min-height: 46px;
-  grid-template-columns: 18px 35px minmax(0, 1fr) auto 56px;
+  /* EN-FORK FIX: min-height 50px + extra vertical padding so the name row and
+     the VIP badge never feel cramped; cols 4+5 share the end via minmax so the
+     badge and the Show switch can sit side by side without collapsing b. */
+  min-height: 50px;
+  grid-template-columns: 16px 32px minmax(0, 1fr) minmax(auto, max-content) minmax(auto, max-content);
   grid-template-rows: auto;
   justify-items: start;
   align-content: center;
   gap: 0 8px;
-  padding: 7px 14px 7px 5px;
+  padding: 10px 14px 10px 5px;
   border-radius: 13px;
   border-color: rgba(255, 255, 255, .050);
   background: linear-gradient(90deg, rgba(255, 255, 255, .042), rgba(255, 255, 255, .014));
@@ -8552,7 +8662,7 @@ body.login-guide-active #login-guide-canvas {
 .login-provider-sort-handle {
   position: relative;
   z-index: 2;
-  width: 18px;
+  width: 16px;
   height: 32px;
   align-self: center;
   display: inline-flex;
@@ -8678,7 +8788,8 @@ body.login-guide-active #login-guide-canvas {
   grid-column: 4;
   justify-self: end;
   align-self: center;
-  min-width: 34px;
+  flex-shrink: 0;
+  min-width: 30px;
   padding: 2px 7px;
   border-radius: 3px;
   border: 0;
@@ -8716,6 +8827,7 @@ body.login-guide-active #login-guide-canvas {
   justify-self: end;
   align-self: center;
   position: relative;
+  flex-shrink: 0;
   width: 56px;
   height: 22px;
   border-radius: 999px;
@@ -8888,11 +9000,17 @@ body.login-guide-active #login-guide-canvas {
   display: none
 }
 
-@media (max-width: 720px) {
+/* EN-FORK FIX: below ~700px available width the side-by-side graph cannot fit,
+   so stack providers ABOVE the hub and drop the connector line. This replaces
+   (and slightly widens) the old 720px breakpoint. */
+@media (max-width: 700px) {
   .dual-login-modal {
-    width: min(430px, calc(100vw - 28px));
+    width: calc(100vw - 28px);
+    max-width: none;
     min-width: 0;
-    padding: 14px
+    /* top value matches the 58px set by the higher-specificity
+       #login-modal:not(.login-easter-egg-locked) rule, which outranks this */
+    padding: 58px 14px 14px
   }
 
   .login-node-graph {
@@ -8901,7 +9019,8 @@ body.login-guide-active #login-guide-canvas {
       "providers"
       "hub";
     width: 100%;
-    gap: 14px;
+    column-gap: 0;
+    row-gap: 14px;
     padding: 0
   }
 
@@ -8911,6 +9030,15 @@ body.login-guide-active #login-guide-canvas {
 
   .login-node-hub {
     min-height: 104px
+  }
+
+  .login-provider-state-badge {
+    min-width: 0;
+    flex-basis: auto
+  }
+
+  .login-provider-external-switch {
+    margin-left: auto
   }
 }
 
@@ -8922,9 +9050,12 @@ body.login-guide-active #login-guide-canvas {
 
 .login-auth-drawer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 168px;
+  /* EN-FORK FIX: single column for every provider — copy on top, QR/form
+     below, all full-width. The old side-by-side layout (copy + narrow right
+     column) crushed the Spotify guide and cookie forms. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
-  align-items: center;
+  align-items: stretch;
   margin-top: 0;
   padding: 0 14px;
   max-height: 0;
@@ -8951,11 +9082,25 @@ body.login-guide-active #login-guide-canvas {
     visibility 0s linear .68s
 }
 
+/* EN-FORK FIX: the old side-by-side layout is gone — single column at every
+   width, so this breakpoint only centers the QR shell on narrow windows. */
+@media (max-width: 560px) {
+  .login-auth-body {
+    justify-items: center
+  }
+
+  .login-auth-copy {
+    width: 100%
+  }
+}
+
+/* EN-FORK FIX: single consolidated open state — one column for every
+   provider, full-width form/QR, height capped at max(600px). */
 .login-auth-drawer.show {
-  /* EN-FORK FIX: cap is generous but not clipping — tall panels (Spotify
-     guide + Save & Authorize) can exceed 420px, so allow growth instead of
-     cutting off the action buttons. */
-  max-height: max(420px, min-content);
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+  align-items: stretch;
+  max-height: max(600px);
   margin-top: 18px;
   padding: 14px;
   opacity: 1;
@@ -8975,43 +9120,54 @@ body.login-guide-active #login-guide-canvas {
     visibility 0s linear 0s
 }
 
+.login-auth-drawer.show .login-auth-copy,
+.login-auth-drawer.form-open .login-auth-copy {
+  width: 100%
+}
+
+/* EN-FORK FIX: scale up every child inside the auth drawer — the old sizes
+   (15/11px text, 156px QR) were tuned for the cramped 168px column and read
+   as "broken" once the drawer went full-width. */
 .login-auth-copy h2 {
-  margin: 0 0 7px;
-  font-size: 15px;
-  line-height: 1.25
+  margin: 0 0 8px;
+  font-size: 18px;
+  line-height: 1.3
 }
 
 .login-auth-copy .desc {
-  margin: 0 0 8px;
-  font-size: 11px
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.55
 }
 
 .login-auth-copy #qr-status {
-  min-height: 22px;
+  min-height: 24px;
   margin: 0;
-  font-size: 11px;
+  font-size: 12.5px;
   color: rgba(244, 210, 138, .70);
   text-align: left
 }
 
 .login-auth-body {
   display: grid;
-  justify-items: center;
-  gap: 8px
+  justify-items: stretch;
+  align-items: start;
+  gap: 10px;
+  width: 100%
 }
 
 .login-auth-drawer .qr-shell {
-  width: 156px;
-  height: 156px;
-  margin: 0;
-  border-radius: 12px
+  width: 200px;
+  height: 200px;
+  margin: 0 auto;
+  border-radius: 14px
 }
 
 .login-auth-drawer #qr-img {
-  width: 156px;
-  height: 156px;
-  margin: 0;
-  border-radius: 10px
+  width: 200px;
+  height: 200px;
+  margin: 0 auto;
+  border-radius: 12px
 }
 
 .login-auth-drawer .qq-cookie-panel.show {
@@ -9022,6 +9178,7 @@ body.login-guide-active #login-guide-canvas {
 .login-auth-actions {
   grid-column: 1 / -1;
   justify-content: flex-end;
+  flex-wrap: wrap;
   margin: 0;
   gap: 8px
 }
@@ -9140,11 +9297,33 @@ body.login-guide-active #login-guide-canvas {
   color: #d8ffe2
 }
 
+/* EN-FORK global provider tab accents */
+.login-platform-tabs button.ytmusic.active,
+.user-platform-tabs button.ytmusic.active {
+  background: rgba(255, 0, 51, .14);
+  color: #ffd9df
+}
+
+.login-platform-tabs button.deezer.active,
+.user-platform-tabs button.deezer.active {
+  background: rgba(162, 56, 255, .14);
+  color: #ecd9ff
+}
+
+.login-platform-tabs button.soundcloud.active,
+.user-platform-tabs button.soundcloud.active {
+  background: rgba(255, 85, 0, .14);
+  color: #ffe1d4
+}
+
 .login-node-providers.login-platform-tabs button.netease.active,
 .login-node-providers.login-platform-tabs button.qq.active,
 .login-node-providers.login-platform-tabs button.kugou.active,
 .login-node-providers.login-platform-tabs button.qishui.active,
-.login-node-providers.login-platform-tabs button.spotify.active {
+.login-node-providers.login-platform-tabs button.spotify.active,
+.login-node-providers.login-platform-tabs button.ytmusic.active,
+.login-node-providers.login-platform-tabs button.deezer.active,
+.login-node-providers.login-platform-tabs button.soundcloud.active {
   background: linear-gradient(135deg, rgba(255, 255, 255, .064), rgba(var(--fc-accent-rgb), .026));
   color: rgba(255, 255, 255, .95)
 }
@@ -9264,8 +9443,8 @@ body.login-guide-active #login-guide-canvas {
 .qq-cookie-panel {
   display: none;
   margin-top: 12px;
-  padding: 12px;
-  border-radius: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
   border: 1px solid rgba(191, 214, 107, .18);
   background: rgba(255, 255, 255, .035)
 }
@@ -9276,16 +9455,17 @@ body.login-guide-active #login-guide-canvas {
 
 .qq-cookie-input {
   width: 100%;
-  height: 74px;
-  resize: none;
-  border: 1px solid rgba(255, 255, 255, .08);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, .22);
-  color: rgba(255, 255, 255, .82);
-  padding: 10px 11px;
+  min-height: 88px;
+  height: 92px;
+  resize: vertical;
+  border: 1px solid rgba(255, 255, 255, .10);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, .26);
+  color: rgba(255, 255, 255, .86);
+  padding: 12px 13px;
   font-family: inherit;
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.5;
   outline: none
 }
 
@@ -9295,15 +9475,17 @@ body.login-guide-active #login-guide-canvas {
 }
 
 .qq-cookie-panel.spotify-guide-panel .qq-cookie-input {
-  height: 46px
+  height: auto;
+  min-height: 72px;
+  font-size: 14px
 }
 
 .qq-cookie-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-top: 9px
+  gap: 12px;
+  margin-top: 11px
 }
 
 .qq-cookie-panel.spotify-guide-panel .qq-cookie-actions {
@@ -9312,48 +9494,50 @@ body.login-guide-active #login-guide-canvas {
 }
 
 .qq-cookie-note {
-  font-size: 10.5px;
-  color: rgba(255, 255, 255, .36);
-  line-height: 1.45;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, .44);
+  line-height: 1.55;
   text-align: left
 }
 
 .qq-cookie-panel.spotify-guide-panel .qq-cookie-note {
-  flex: 1 1 250px
+  flex: 1 1 320px
 }
 
 .spotify-guide-title {
-  margin-bottom: 5px;
-  color: rgba(30, 215, 96, .82);
-  font-size: 11px;
+  margin-bottom: 7px;
+  color: rgba(30, 215, 96, .85);
+  font-size: 14px;
   font-weight: 700
 }
 
 .spotify-guide-steps {
   display: grid;
-  gap: 3px
+  gap: 5px
 }
 
 .spotify-guide-steps code {
-  color: rgba(255, 255, 255, .78);
-  font-family: inherit
+  color: rgba(255, 255, 255, .82);
+  font-family: inherit;
+  font-size: 13px;
+  user-select: all;
 }
 
 .spotify-guide-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 7px
+  gap: 8px;
+  margin-top: 9px
 }
 
 .spotify-guide-link {
-  border: 1px solid rgba(30, 215, 96, .26);
-  border-radius: 8px;
-  background: rgba(30, 215, 96, .08);
-  color: rgba(232, 255, 238, .82);
-  padding: 5px 8px;
-  font-size: 10.5px;
+  border: 1px solid rgba(30, 215, 96, .30);
+  border-radius: 10px;
+  background: rgba(30, 215, 96, .10);
+  color: rgba(232, 255, 238, .88);
+  padding: 8px 14px;
+  font-size: 12.5px;
   line-height: 1;
   cursor: pointer
 }
@@ -9364,8 +9548,9 @@ body.login-guide-active #login-guide-canvas {
 }
 
 .qq-cookie-panel .modal-btn {
-  padding: 8px 12px;
-  white-space: nowrap
+  padding: 11px 20px;
+  white-space: nowrap;
+  font-size: 13.5px
 }
 
 #qq-cookie-toggle-btn {
@@ -9444,6 +9629,25 @@ body.login-guide-active #login-guide-canvas {
   background: rgba(30, 215, 96, .08)
 }
 
+/* EN-FORK global provider chips */
+.account-provider-chip.ytmusic {
+  border-color: rgba(255, 0, 51, .26);
+  color: #ffd9df;
+  background: rgba(255, 0, 51, .08)
+}
+
+.account-provider-chip.deezer {
+  border-color: rgba(162, 56, 255, .26);
+  color: #ecd9ff;
+  background: rgba(162, 56, 255, .08)
+}
+
+.account-provider-chip.soundcloud {
+  border-color: rgba(255, 85, 0, .26);
+  color: #ffe1d4;
+  background: rgba(255, 85, 0, .08)
+}
+
 .account-modal-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -9473,10 +9677,12 @@ body.login-guide-active #login-guide-canvas {
   flex-wrap: wrap
 }
 
+/* EN-FORK FIX: bumped from 12.5px/8px — buttons were tiny inside the
+   enlarged login drawer (Start sign-in, Manual import, Save & Authorize). */
 .modal-btn {
-  padding: 8px 20px;
-  font-size: 12.5px;
-  border-radius: 8px;
+  padding: 11px 22px;
+  font-size: 14px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(255, 255, 255, 0.05);
   color: #fff;

@@ -15,7 +15,7 @@ function lyricTranslationTextFromAliases(source) {
 }
 function lyricEndpointForSong(songOrId) {
   var song = (songOrId && typeof songOrId === 'object') ? songOrId : null;
-  var provider = song ? songProviderKey(song) : 'netease';
+  var provider = song ? songProviderKey(song) : 'ytmusic';
   if (provider === 'qq') {
     var mid = song.mid || song.songmid || song.id || '';
     var qqId = song.qqId || (/^\d+$/.test(String(song.id || '')) ? song.id : '');
@@ -29,8 +29,14 @@ function lyricEndpointForSong(songOrId) {
   if (provider === 'qishui') {
     return '/api/qishui/lyric?id=' + encodeURIComponent(song.id || song.providerSongId || '');
   }
-  if (provider === 'spotify') {
-    return '/api/spotify/lyric?id=' + encodeURIComponent(song.id || song.providerSongId || song.spotifyId || '');
+  // EN-FORK global swap: ytmusic/deezer/soundcloud/spotify all resolve lyrics
+  // through the unified global chain (LRCLIB → YT → Apple → NetEase → QQ).
+  if (provider !== 'netease') {
+    return '/api/lyrics/global?title=' + encodeURIComponent(song && (song.name || song.title) || '') +
+      '&artist=' + encodeURIComponent(song && song.artist || '') +
+      '&album=' + encodeURIComponent(song && song.album || '') +
+      '&duration=' + encodeURIComponent(Math.round((song && (song.durationMs || Number(song.duration) * 1000) || 0) / 1000)) +
+      '&videoId=' + encodeURIComponent(song && (song.videoId || '') || '');
   }
   var songId = song ? song.id : songOrId;
   return '/api/lyric?id=' + encodeURIComponent(songId);

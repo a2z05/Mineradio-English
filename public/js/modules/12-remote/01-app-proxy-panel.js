@@ -7,10 +7,9 @@
   var backdrops = ['app-proxy-backdrop', 'app-proxy-host', 'app-proxy-port', 'app-proxy-user', 'app-proxy-pass'];
   var APP_LABELS = [
     ['spotify', 'Spotify'],
-    ['netease', 'NetEase'],
-    ['qq', 'QQ'],
-    ['kugou', 'Kugou'],
-    ['qishui', 'Soda'],
+    ['ytmusic', 'YT Music'],
+    ['deezer', 'Deezer'],
+    ['soundcloud', 'SoundCloud'],
   ];
 
   function el(id) { return document.getElementById(id); }
