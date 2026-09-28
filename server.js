@@ -155,6 +155,20 @@ const {
   getSoundCloudCapabilities,
 } = require('./soundcloud-api');
 const {
+  setItunesProxyApplier,
+  handleItunesSearch,
+  handleItunesSongUrl,
+  handleItunesLyric,
+  getItunesCapabilities,
+} = require('./itunes-api');
+const {
+  setInternetArchiveProxyApplier,
+  handleInternetArchiveSearch,
+  handleInternetArchiveSongUrl,
+  handleInternetArchiveLyric,
+  getInternetArchiveCapabilities,
+} = require('./internet-archive-api');
+const {
   appendCuefieldFeedback,
   readCuefieldFeedbackStats,
 } = require('./cuefield/feedback-log');
@@ -360,6 +374,15 @@ const appProxy = require('./app-proxy');
 setYtMusicProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'ytmusic'));
 setDeezerProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'deezer'));
 setSoundCloudProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'soundcloud'));
+// EN-FORK: iTunes and Internet Archive are the two keyless sources that resolve
+// on a network where the other providers are DNS-blocked, so they deliberately
+// bypass the proxy unless the user opts them in by name.
+setItunesProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'itunes'));
+setInternetArchiveProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'archive'));
+// EN-FORK: SoundCloud's client_id is scraped out of a ~2.9 MB bundle, which
+// costs 14-27 s through a proxy. The home feed gives its fetch 14 s, so pay
+// that cost once at boot instead of on the user's first search.
+setTimeout(() => { ensureSoundCloudClientId(false).catch(() => {}); }, 2000);
 const {
   setLyricsResolverProxyApplier,
   setYtMusicLyricLookup,
@@ -2059,30 +2082,36 @@ async function handleSearch(keywords, limit, offset) {
   limit = Math.max(1, Math.min(50, Number(limit) || 20));
   offset = Math.max(0, Number(offset) || 0);
   console.log('[Search]', keywords, 'limit:', limit, 'offset:', offset);
-  const result = await cloudsearch({ keywords, limit, offset, cookie: userCookie });
-  const songs = result.body && result.body.result && result.body.result.songs ? result.body.result.songs : [];
-
-  let mapped = songs.map(s => {
-    return mapSongRecord(s);
+  // EN-FORK: this legacy endpoint (phone remote, track detail, lyric
+  // candidates, weather moods) used to call NetEase cloudsearch, which is no
+  // longer reachable from the UI. Fan out over the keyless global catalogs
+  // instead and merge them in provider order.
+  const perProvider = Math.min(50, Math.max(limit, 8));
+  const sources = [
+    ['deezer', () => handleDeezerSearch(keywords, perProvider, offset)],
+    ['ytmusic', () => handleYtMusicSearch(keywords, perProvider, offset)],
+    ['soundcloud', () => handleSoundCloudSearch(keywords, perProvider, offset)],
+    ['spotify', () => handleSpotifySearch(keywords, perProvider, offset)],
+  ];
+  const settled = await Promise.allSettled(sources.map((entry) => entry[1]()));
+  const mapped = [];
+  const seen = new Set();
+  settled.forEach((entry, index) => {
+    if (entry.status !== 'fulfilled') {
+      console.warn('[Search]', sources[index][0], 'failed:', entry.reason && entry.reason.message);
+      return;
+    }
+    const songs = entry.value && Array.isArray(entry.value.songs) ? entry.value.songs : [];
+    songs.forEach((song) => {
+      const id = song && (song.id || song.providerSongId);
+      if (!id) return;
+      const key = `${(song && (song.provider || song.source)) || ''}:${id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      mapped.push(song);
+    });
   });
-
-  // 兜底: 补齐缺失的封面
-  const missing = mapped.filter(s => !s.cover).map(s => s.id);
-  if (missing.length) {
-    try {
-      console.log('[Search] backfilling covers for', missing.length, 'songs');
-      const dd = await song_detail({ ids: missing.join(','), cookie: userCookie });
-      const songsArr = (dd.body && dd.body.songs) || [];
-      const idToPic = {};
-      songsArr.forEach(s => {
-        const pic = (s.al && s.al.picUrl) || (s.album && s.album.picUrl) || '';
-        if (pic) idToPic[s.id] = pic;
-      });
-      mapped = mapped.map(s => s.cover ? s : { ...s, cover: idToPic[s.id] || '' });
-    } catch (e) { console.warn('[Search] backfill failed:', e.message); }
-  }
-
-  return mapped;
+  return mapped.slice(0, limit);
 }
 
 const NETEASE_SOURCE_MATCH_POSITIVE_TTL_MS = 12 * 60 * 60 * 1000;
@@ -6227,6 +6256,85 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       console.error('[SoundCloudLyric]', err);
       sendJSON(res, { provider: 'soundcloud', lyric: '', source: 'none', error: err.message }, 502);
+    }
+    return;
+  }
+
+  // ---------- EN-FORK: keyless sources ----------
+  // iTunes and Internet Archive are the two providers that resolve on a network
+  // where the streaming services are DNS-blocked, and neither needs an account.
+  if (pn === '/api/itunes/status') {
+    sendJSON(res, { provider: 'itunes', ...getItunesCapabilities() });
+    return;
+  }
+
+  if (pn === '/api/itunes/search') {
+    try {
+      const kw = url.searchParams.get('keywords') || '';
+      const limit = Math.max(4, Math.min(50, parseInt(url.searchParams.get('limit') || '16', 10) || 16));
+      const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0);
+      sendJSON(res, await handleItunesSearch(kw, limit, offset));
+    } catch (err) {
+      console.error('[ItunesSearch]', err);
+      sendJSON(res, { provider: 'itunes', error: err.message, songs: [] }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/itunes/song/url') {
+    try {
+      sendJSON(res, await handleItunesSongUrl(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[ItunesSongUrl]', err);
+      sendJSON(res, { provider: 'itunes', url: '', playable: false, error: err.message }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/itunes/lyric') {
+    try {
+      sendJSON(res, await handleItunesLyric(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[ItunesLyric]', err);
+      sendJSON(res, { provider: 'itunes', lyric: '', source: 'none', error: err.message }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/archive/status') {
+    sendJSON(res, { provider: 'archive', ...getInternetArchiveCapabilities() });
+    return;
+  }
+
+  if (pn === '/api/archive/search') {
+    try {
+      const kw = url.searchParams.get('keywords') || '';
+      const limit = Math.max(4, Math.min(50, parseInt(url.searchParams.get('limit') || '16', 10) || 16));
+      const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0);
+      sendJSON(res, await handleInternetArchiveSearch(kw, limit, offset));
+    } catch (err) {
+      console.error('[ArchiveSearch]', err);
+      sendJSON(res, { provider: 'archive', error: err.message, songs: [] }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/archive/song/url') {
+    try {
+      sendJSON(res, await handleInternetArchiveSongUrl(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[ArchiveSongUrl]', err);
+      sendJSON(res, { provider: 'archive', url: '', playable: false, error: err.message }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/archive/lyric') {
+    try {
+      sendJSON(res, await handleInternetArchiveLyric(url.searchParams.get('id') || ''));
+    } catch (err) {
+      console.error('[ArchiveLyric]', err);
+      sendJSON(res, { provider: 'archive', lyric: '', source: 'none', error: err.message }, 502);
     }
     return;
   }

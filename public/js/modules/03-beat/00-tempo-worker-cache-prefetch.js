@@ -364,7 +364,7 @@ async function fetchBeatPrefetchAudioUrl(song) {
   if (typeof resolveAlbumGaplessPlaybackData === 'function') {
     var resolved = await resolveAlbumGaplessPlaybackData(song);
     if (!resolved || !resolved.url || resolved.trial) return null;
-    return '/api/audio?url=' + encodeURIComponent(resolved.url);
+    return audioBridgeUrl(resolved.url);
   }
   var isQQ = songProviderKey(song) === 'qq';
   var requestedQuality = normalizePlaybackQualityForProvider(getPlaybackQualityForSong(song), isQQ ? 'qq' : 'netease');
@@ -377,7 +377,7 @@ async function fetchBeatPrefetchAudioUrl(song) {
     ? await apiJson('/api/qq/song/url?mid=' + encodeURIComponent(song.mid || song.songmid || song.id || '') + '&mediaMid=' + encodeURIComponent(song.mediaMid || song.media_mid || '') + qualityParam, { timeoutMs: 15000 })
     : await apiJson('/api/song/url?id=' + encodeURIComponent(song.id) + neteaseMatchQuery + qualityParam, { timeoutMs: 14000 });
   if (!data || !data.url || data.trial) return null;
-  return '/api/audio?url=' + encodeURIComponent(data.url);
+  return audioBridgeUrl(data.url);
 }
 
 function scheduleQueueBeatPrefetch(fromIdx, delayMs, state) {

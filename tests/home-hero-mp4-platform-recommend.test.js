@@ -95,30 +95,40 @@ test('home hero video is low-impact and releases its object URL off home', () =>
 
 test('platform recommendation entry uses real feeds and does not synthesize radio searches', () => {
   assert.match(indexHtml, /id="home-platform-recommend-mask"/);
-  for (const source of ['netease', 'qishui', 'qq', 'kugou', 'spotify']) {
+  for (const source of ['spotify', 'ytmusic', 'deezer', 'soundcloud']) {
     assert.match(indexHtml, new RegExp(`data-home-recommend-source="${source}"`));
   }
   const openRadio = namedFunctionSource(dashboardScript, 'openHomeDashboardRadio');
   assert.match(openRadio, /openHomePlatformRecommendations\s*\(/);
-  assert.doesNotMatch(openRadio, /runHomeSearch|通勤|深夜|专注|私人电台/);
+  assert.doesNotMatch(openRadio, /runHomeSearch/);
   const openCharts = namedFunctionSource(dashboardScript, 'openHomeDashboardCharts');
-  assert.match(openCharts, /openHomePlatformRecommendations\s*\(\s*['"]netease['"]\s*\)/);
-  assert.doesNotMatch(openCharts, /runHomeSearch|今日热歌/);
-  const neteaseLoader = namedFunctionSource(dashboardScript, 'loadHomePlatformNeteaseRecommendations');
-  assert.match(neteaseLoader, /loadHomeDiscover\s*\(/);
-  assert.match(neteaseLoader, /\/api\/podcast\/hot/);
+  assert.match(openCharts, /openHomePlatformRecommendations\s*\(/);
+  assert.doesNotMatch(openCharts, /runHomeSearch/);
   const feedConfig = namedFunctionSource(dashboardScript, 'homePlatformRecommendationFeedConfig');
-  assert.match(feedConfig, /\/api\/qishui\/feed/);
-  assert.match(feedConfig, /\/api\/kugou\/recommendations/);
   assert.match(feedConfig, /\/api\/spotify\/recommendations/);
-  assert.doesNotMatch(feedConfig, /\/api\/qq\/|search/);
+  assert.match(feedConfig, /\/api\/ytmusic\/search/);
+  assert.match(feedConfig, /\/api\/deezer\/chart/);
+  assert.match(feedConfig, /\/api\/soundcloud\/search/);
+  assert.doesNotMatch(feedConfig, /\/api\/qq\/|\/api\/netease\/|\/api\/kugou\/|\/api\/qishui\//);
   assert.match(namedFunctionSource(dashboardScript, 'loadHomePlatformFeedRecommendations'), /apiJson\s*\(\s*config\.endpoint/);
   assert.match(namedFunctionSource(dashboardScript, 'loadHomePlatformFeedRecommendations'), /feedState\.fallback/);
   assert.match(namedFunctionSource(dashboardScript, 'loadHomePlatformFeedRecommendations'), /feedState\.mode/);
   assert.match(namedFunctionSource(dashboardScript, 'renderHomePlatformRecommendations'), /liked-affinity/);
   assert.match(namedFunctionSource(dashboardScript, 'renderHomePlatformRecommendations'), /personal-top/);
-  assert.match(dashboardScript, /当前版本没有可验证的平台推荐接口，未使用关键词搜索替代/);
   const discoverySongs = namedFunctionSource(dashboardScript, 'homeDashboardDiscoverySongs');
   assert.doesNotMatch(discoverySongs, /homeWeatherRadioState/);
-  assert.doesNotMatch(indexHtml.match(/<button class="home-insight-card home-ranking-entry home-radio-entry"[\s\S]*?<\/button>/)[0], /天气|通勤|深夜|专注/);
+  assert.doesNotMatch(indexHtml.match(/<button class="home-insight-card home-ranking-entry home-radio-entry"[\s\S]*?<\/button>/)[0], /通勤|深夜|专注/);
+});
+
+test('recommendation hub falls off Spotify when no account is connected', () => {
+  const defaultSource = namedFunctionSource(dashboardScript, 'homePlatformRecommendationDefaultSource');
+  assert.ok(defaultSource, 'expected homePlatformRecommendationDefaultSource()');
+  assert.match(defaultSource, /hasPlatformLogin\s*\(\s*['"]spotify['"]/);
+  assert.match(defaultSource, /spotifyReady\s*\?\s*['"]spotify['"]\s*:\s*['"]deezer['"]/);
+  // The hub must consult the default rather than hardcoding a source, otherwise
+  // an unconnected Spotify opens on an empty SPOTIFY_AUTH_REQUIRED panel.
+  assert.match(namedFunctionSource(dashboardScript, 'openHomePlatformRecommendations'), /homePlatformRecommendationDefaultSource\s*\(/);
+  assert.match(namedFunctionSource(dashboardScript, 'openHomeDashboardCharts'), /openHomePlatformRecommendations\s*\(\s*\)/);
+  // Explicit tab clicks still bypass the default and honour the chosen source.
+  assert.match(namedFunctionSource(dashboardScript, 'bindHomePlatformRecommendationControls'), /loadHomePlatformRecommendations\s*\(\s*tab\.getAttribute/);
 });

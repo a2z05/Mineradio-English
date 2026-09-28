@@ -855,8 +855,17 @@ function openHomeDashboardLibrary() {
   if (typeof openUploadPanel === 'function') openUploadPanel();
 }
 
+// EN-FORK: Spotify's personalized feed is the richest default, but it answers
+// SPOTIFY_AUTH_REQUIRED until an account is connected, which opened the panel
+// on an empty list. Only make it the default when it can actually respond;
+// otherwise fall back to a keyless catalog so the hub is never blank.
+function homePlatformRecommendationDefaultSource() {
+  var spotifyReady = typeof hasPlatformLogin === 'function' && hasPlatformLogin('spotify');
+  return spotifyReady ? 'spotify' : 'deezer';
+}
+
 function openHomeDashboardCharts() {
-  openHomePlatformRecommendations('spotify');
+  openHomePlatformRecommendations();
 }
 
 function homePlatformRecommendationSourceLabel(source) {
@@ -1067,7 +1076,7 @@ async function loadHomePlatformFeedRecommendations(source, force) {
 }
 
 async function loadHomePlatformRecommendations(source, force) {
-  homePlatformRecommendationState.source = source || 'spotify';
+  homePlatformRecommendationState.source = source || homePlatformRecommendationDefaultSource();
   renderHomePlatformRecommendations();
   try {
     if (homePlatformRecommendationFeedConfig(homePlatformRecommendationState.source)) {
@@ -1156,7 +1165,7 @@ function openHomePlatformRecommendations(preferredSource) {
   homePlatformRecommendationState.open = true;
   mask.classList.add('show');
   mask.setAttribute('aria-hidden', 'false');
-  var defaultSource = 'spotify';
+  var defaultSource = homePlatformRecommendationDefaultSource();
   if (preferredSource && /^(spotify|ytmusic|deezer|soundcloud)$/.test(String(preferredSource))) {
     defaultSource = preferredSource;
   }

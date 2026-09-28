@@ -209,6 +209,47 @@ async function run() {
       assert.strictEqual(created.playlist.id, 'playlist-new');
     });
 
+    // Spotify refuses Development-mode apps whose owner account has no active
+    // Premium subscription. The real reason arrives in the 403 body — as bare
+    // text, not a JSON error object — and the status screen must pass it
+    // through: the old mapping overwrote it with "reconnect once from the
+    // Spotify login panel", and a reconnect produces the identical 403, so the
+    // user was trapped in a login loop.
+    const PREMIUM_GATE_TEXT = 'Active premium subscription required for the owner of the app. When the subscription status changes, it can take a few hours before requests are allowed again.';
+    for (const body of [PREMIUM_GATE_TEXT, { error: { status: 403, message: PREMIUM_GATE_TEXT } }]) {
+      runtime.resetSpotifyRuntimeStateForTests();
+      spotify.saveSpotifyOAuthToken({ access_token: 'premium-gate-access', expires_in: 3600, refresh_token: 'refresh-three', newAuthorization: true });
+      let premiumGateCalls = 0;
+      await withHttpsMock(({ url }) => {
+        premiumGateCalls += 1;
+        assert(url.includes('/v1/me'), 'profile is the call Spotify refuses');
+        return { statusCode: 403, body };
+      }, async () => {
+        const status = await spotify.handleSpotifyStatus();
+        assert.strictEqual(premiumGateCalls, 1, 'a 403 must not be retried');
+        assert.strictEqual(status.loggedIn, false);
+        assert.match(status.errorMessage, /premium subscription/i, "Spotify's own reason must reach the user");
+        // The wording must not prescribe reconnecting as the remedy: that was the
+        // loop. Explaining that reconnecting will not help is the opposite claim.
+        assert.ok(!/reconnect once|reconnect official|permissions are insufficient/i.test(status.errorMessage),
+          'a policy refusal must not tell the user to reconnect');
+        assert.strictEqual(status.stale, false, 'a policy refusal is not an expired session');
+        assert.strictEqual(status.reauthRequired, false);
+      });
+    }
+
+    // The token is still valid, so nothing about this state may be described as
+    // expired; only a rejected credential (401 / invalid_grant) is stale.
+    const modalSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'modules', '08-account', '03-login-modal-flows.js'), 'utf8');
+    const statusTextFn = modalSource.slice(modalSource.indexOf('function spotifyLoginStatusText'), modalSource.indexOf('function parseSpotifyConfigInput'));
+    assert.ok(statusTextFn.length > 0, 'spotifyLoginStatusText must exist');
+    assert.match(statusTextFn, /info\.errorMessage/, 'the modal must show the reason the backend reported');
+    // The stale branch may stay, but it must sit behind a genuine expiry and
+    // must not outrank a concrete error message.
+    const errorIdx = statusTextFn.indexOf('info.errorMessage');
+    const staleIdx = statusTextFn.indexOf('info.stale');
+    assert.ok(errorIdx !== -1 && (staleIdx === -1 || errorIdx < staleIdx), 'the real reason must outrank the generic expiry copy');
+
     assert.strictEqual(runtime.normalizeSpotifyProfile({ id: 'numeric-or-id-only' }).nickname, 'Spotify');
     assert.strictEqual(runtime.normalizeSpotifyProfile({ id: 'user-id', account_id: 'stable-account', display_name: '平台昵称' }).nickname, '平台昵称');
     assert.strictEqual(runtime.normalizeSpotifyProfile({ id: 'user-id', account_id: 'stable-account', display_name: '平台昵称' }).accountId, 'stable-account');

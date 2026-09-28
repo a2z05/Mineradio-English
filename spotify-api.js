@@ -369,7 +369,17 @@ function spotifyErrorDetails(err) {
         apiStatus = body.error.status || '';
       }
     }
-  } catch (parseErr) { }
+  } catch (parseErr) {
+    // Spotify answers some refusals — notably the Development-mode Premium gate —
+    // as a bare sentence rather than a JSON error object. Dropping the body here
+    // was why the true cause never reached the status screen and the user was
+    // told to reconnect instead. Only a short, single-line, non-HTML payload is
+    // safe to show; anything else stays empty and falls back to the canned text.
+    const text = String(err.body || '').trim();
+    if (text.length > 0 && text.length <= 500 && !/^</.test(text) && !/[\r\n]/.test(text)) {
+      apiMessage = text;
+    }
+  }
   const statusCode = Number(err.statusCode || apiStatus || 0) || 0;
   const oauthCode = normalizeText(spotifyTokenErrorBody(err).error);
   const code = normalizeText(err.code || oauthCode || (statusCode ? ('SPOTIFY_HTTP_' + statusCode) : err.message)) || 'SPOTIFY_ERROR';
@@ -381,7 +391,18 @@ function spotifyErrorDetails(err) {
     const seconds = Math.max(1, Math.ceil(Number(err.retryAfterMs || spotifyRetryAfterMs(err)) / 1000));
     message = 'Spotify requests are too frequent — retry in about ' + seconds + ' seconds.';
   } else if (statusCode === 403) {
-    message = 'Spotify permissions are insufficient — reconnect once from the Spotify login panel.';
+    // Spotify's body already says exactly what is wrong, and for a
+    // Development-mode app that reason is nearly always an account condition
+    // rather than a bad token. Overwriting it with "reconnect once" sent users
+    // into a loop: the reconnect produced the identical 403, so the app kept
+    // asking for an action that could not change the answer.
+    if (/premium subscription/i.test(apiMessage)) {
+      message = 'Spotify refused this request because the account that owns the app (its Spotify Developer Dashboard account) has no active Premium subscription. Reconnecting will not change this — Spotify only serves Development-mode apps to a Premium owner, and it can take a few hours after the subscription changes.';
+    } else if (apiMessage) {
+      message = apiMessage;
+    } else {
+      message = 'Spotify refused this request (403) — check the Spotify Developer Dashboard for this app.';
+    }
   } else if (statusCode === 404) {
     message = 'Spotify could not find this playlist — it may have been deleted, made private, or this account has no access.';
   } else if (statusCode === 500 || statusCode === 502 || statusCode === 503) {
@@ -859,15 +880,20 @@ async function handleSpotifyStatus() {
     'playlist-modify-public',
   ].filter(scope => !tokenScopes.includes(scope));
   const normalized = normalizeSpotifyProfile(profile);
+  const tokenReady = !!(currentToken.accessToken && Date.now() < currentToken.expiresAt - 30000);
   return Object.assign({}, config, normalized, {
     clientSecret: '',
     loggedIn,
     configured: !!(config.configured || loggedIn),
     profileReady: loggedIn,
     tokenConfigured: !!(currentToken.accessToken || currentToken.refreshToken),
-    tokenReady: !!(currentToken.accessToken && Date.now() < currentToken.expiresAt - 30000),
+    tokenReady,
     authorizedAt: currentToken.authorizedAt || 0,
-    stale: !!(!loggedIn && (currentToken.accessToken || currentToken.refreshToken)),
+    // Only an unusable token is a stale session. A token that is still valid,
+    // unexpired and refreshing fine, which Spotify merely refuses for policy
+    // reasons, is not expired — reporting it as such put "Spotify session
+    // expired, reconnect official OAuth" on screen for a login that worked.
+    stale: !!(!loggedIn && (currentToken.accessToken || currentToken.refreshToken) && !tokenReady),
     reauthRequired: !!(profileErrorDetail && profileErrorDetail.reauthRequired),
     error: profileErrorDetail && profileErrorDetail.error || profileError || '',
     errorMessage: profileErrorDetail && profileErrorDetail.message || '',

@@ -423,6 +423,11 @@ updateSearchModeTabs();
 // keys still resolve so persisted queues/history degrade gracefully.
 function songProviderKey(song) {
   if (song && (song.provider === 'ytmusic' || song.source === 'ytmusic' || song.type === 'ytmusic' || song.videoId)) return 'ytmusic';
+  // EN-FORK: the two keyless sources. iTunes and the Internet Archive are the
+  // only providers that resolve on a network where the streaming services are
+  // DNS-blocked, and neither needs an account.
+  if (song && (song.provider === 'itunes' || song.source === 'itunes' || song.type === 'itunes')) return 'itunes';
+  if (song && (song.provider === 'archive' || song.source === 'archive' || song.type === 'archive')) return 'archive';
   if (song && (song.provider === 'deezer' || song.source === 'deezer' || song.type === 'deezer')) return 'deezer';
   if (song && (song.provider === 'soundcloud' || song.source === 'soundcloud' || song.type === 'soundcloud')) return 'soundcloud';
   if (song && (song.provider === 'spotify' || song.source === 'spotify' || song.type === 'spotify' || song.spotifyId || song.spotifyUri)) return 'spotify';
@@ -431,15 +436,15 @@ function songProviderKey(song) {
   if (song && (song.provider === 'kugou' || song.source === 'kugou' || song.type === 'kugou' || song.hash || song.audioHash)) return 'kugou';
   return 'ytmusic';
 }
-var SONG_SOURCE_TAG_LABELS = { ytmusic: 'YT', deezer: 'DZ', soundcloud: 'SC', spotify: 'SP', netease: 'NE', qq: 'QQ', kugou: 'KG', qishui: 'QS' };
+var SONG_SOURCE_TAG_LABELS = { ytmusic: 'YT', deezer: 'DZ', soundcloud: 'SC', spotify: 'SP', itunes: 'AP', archive: 'IA', netease: 'NE', qq: 'QQ', kugou: 'KG', qishui: 'QS' };
 function platformMeta(provider) {
-  var map = { ytmusic: { label: 'YouTube Music' }, deezer: { label: 'Deezer' }, soundcloud: { label: 'SoundCloud' }, spotify: { label: 'Spotify' }, netease: { label: 'NetEase' }, qq: { label: 'QQ Music' }, kugou: { label: 'Kugou' }, qishui: { label: 'Soda Music' } };
+  var map = { ytmusic: { label: 'YouTube Music' }, deezer: { label: 'Deezer' }, soundcloud: { label: 'SoundCloud' }, spotify: { label: 'Spotify' }, itunes: { label: 'Apple Music preview' }, archive: { label: 'Internet Archive' }, netease: { label: 'NetEase' }, qq: { label: 'QQ Music' }, kugou: { label: 'Kugou' }, qishui: { label: 'Soda Music' } };
   return map[provider] || { label: provider };
 }
 function songSourceTagHtml(song, opts) {
   opts = opts || {};
   var rawKey = song && (song.resolvedPlaybackProvider || song.playbackProvider || song.audioProvider || song.providerResolved || '');
-  var key = /^(ytmusic|deezer|soundcloud|netease|qq|kugou|qishui|spotify)$/.test(String(rawKey || '')) ? String(rawKey) : songProviderKey(song);
+  var key = /^(ytmusic|deezer|soundcloud|netease|qq|kugou|qishui|spotify|itunes|archive)$/.test(String(rawKey || '')) ? String(rawKey) : songProviderKey(song);
   var label = SONG_SOURCE_TAG_LABELS[key] || key.toUpperCase();
   if (opts.switcher) {
     return '<button type="button" class="tag-source ' + key + ' control-source-chip" title="Switch source" aria-haspopup="true" onclick="toggleControlSourceSwitcher(event)">' + label + '</button>';
@@ -452,7 +457,9 @@ function controlSourceProviders() {
     { key: 'ytmusic', label: 'YT', title: 'YouTube Music' },
     { key: 'deezer', label: 'DZ', title: 'Deezer' },
     { key: 'soundcloud', label: 'SC', title: 'SoundCloud' },
-    { key: 'spotify', label: 'SP', title: 'Spotify' }
+    { key: 'spotify', label: 'SP', title: 'Spotify' },
+    { key: 'itunes', label: 'AP', title: 'Apple Music preview' },
+    { key: 'archive', label: 'IA', title: 'Internet Archive' }
   ];
 }
 function controlSourceProviderTitle(provider) {
@@ -464,6 +471,8 @@ function controlSourceSearchUrl(provider, query) {
   if (provider === 'deezer') return '/api/deezer/search?keywords=' + encodeURIComponent(query) + '&limit=8';
   if (provider === 'soundcloud') return '/api/soundcloud/search?keywords=' + encodeURIComponent(query) + '&limit=8';
   if (provider === 'spotify') return '/api/spotify/search?keywords=' + encodeURIComponent(query) + '&limit=8';
+  if (provider === 'itunes') return '/api/itunes/search?keywords=' + encodeURIComponent(query) + '&limit=8';
+  if (provider === 'archive') return '/api/archive/search?keywords=' + encodeURIComponent(query) + '&limit=8';
   return '/api/search?keywords=' + encodeURIComponent(query) + '&limit=10';
 }
 function ensureControlSourceSwitcher() {
@@ -740,7 +749,11 @@ function searchIntentPrefersQQ(q) {
 // EN-FORK global swap: the visible search fan-out covers the global providers.
 // NetEase/QQ stay in the list as lyric-only backends but are filtered out of
 // "All" aggregation by canSearch (they only serve lyrics now).
-var MUSIC_SEARCH_PROVIDER_ORDER = ['ytmusic', 'deezer', 'soundcloud', 'spotify'];
+// EN-FORK: the two keyless sources lead the list. They are the only ones that
+// answer on a network where the streaming services are DNS-blocked, so putting
+// them last meant an unproxied machine searched four dead hosts and reported
+// "No matching songs found".
+var MUSIC_SEARCH_PROVIDER_ORDER = ['archive', 'itunes', 'ytmusic', 'deezer', 'soundcloud', 'spotify'];
 function searchProviderStatus(provider) {
   if (typeof platformStatus === 'function') return platformStatus(provider);
   if (provider === 'ytmusic') return ytmusicStatus;
@@ -765,7 +778,7 @@ function searchProviderCanSearch(provider) {
   return false;
 }
 function searchModeProvider(mode) {
-  return mode === 'ytmusic' || mode === 'deezer' || mode === 'soundcloud' || mode === 'netease' || mode === 'qq' || mode === 'kugou' || mode === 'qishui' || mode === 'spotify' ? mode : '';
+  return mode === 'ytmusic' || mode === 'deezer' || mode === 'soundcloud' || mode === 'netease' || mode === 'qq' || mode === 'kugou' || mode === 'qishui' || mode === 'spotify' || mode === 'itunes' || mode === 'archive' ? mode : '';
 }
 function activeSearchProvidersForMode(mode) {
   var specific = searchModeProvider(mode);
@@ -786,6 +799,8 @@ function searchProviderUrl(provider, q, limit, offset) {
   if (provider === 'deezer') return '/api/deezer/search?keywords=' + encodeURIComponent(q) + suffix;
   if (provider === 'soundcloud') return '/api/soundcloud/search?keywords=' + encodeURIComponent(q) + suffix;
   if (provider === 'spotify') return '/api/spotify/search?keywords=' + encodeURIComponent(q) + suffix;
+  if (provider === 'itunes') return '/api/itunes/search?keywords=' + encodeURIComponent(q) + suffix;
+  if (provider === 'archive') return '/api/archive/search?keywords=' + encodeURIComponent(q) + suffix;
   return '/api/search?keywords=' + encodeURIComponent(q) + suffix;
 }
 function simpleSearchNorm(text) {
@@ -1009,7 +1024,9 @@ function scoreSongSearchResult(song, q, sourceIndex) {
 }
 // EN-FORK global swap: merge across the global providers. Legacy Chinese
 // arrays still accepted for backward compatibility with persisted callers.
-function mergeSongSearchResults(ytmusicSongs, deezerSongs, soundcloudSongs, spotifySongs, legacyNetease, legacyQq, legacyKugou, legacyQishui, limit, q) {
+// The keyless sources are merged first: on an equal relevance score the
+// earlier push wins, so the tracks that actually play here are the ones kept.
+function mergeSongSearchResults(ytmusicSongs, deezerSongs, soundcloudSongs, spotifySongs, itunesSongs, archiveSongs, legacyNetease, legacyQq, legacyKugou, legacyQishui, limit, q) {
   var out = [];
   var providerSeen = {};
   var canonicalSeen = {};
@@ -1028,6 +1045,8 @@ function mergeSongSearchResults(ytmusicSongs, deezerSongs, soundcloudSongs, spot
     if (canonicalKey) canonicalSeen[canonicalKey] = out.length;
     out.push(song);
   }
+  (itunesSongs || []).forEach(function (song, i) { push(song, i); });
+  (archiveSongs || []).forEach(function (song, i) { push(song, i); });
   (ytmusicSongs || []).forEach(function (song, i) { push(song, i); });
   (deezerSongs || []).forEach(function (song, i) { push(song, i); });
   (soundcloudSongs || []).forEach(function (song, i) { push(song, i); });
@@ -1061,7 +1080,15 @@ function mergeUniqueSearchSongPools(existing, incoming) {
   (incoming || []).forEach(push);
   return out;
 }
-async function fetchMusicSearchResults(q, mode, previousPages) {
+// EN-FORK: apiJson defaults to no timeout at all, so a single hung upstream kept
+// every other provider's finished results off screen. The fan-out was only ever
+// as fast as its slowest member — ten to twenty seconds on this network — and a
+// dead host could hold the whole search open indefinitely.
+var MUSIC_SEARCH_PROVIDER_TIMEOUT_MS = 12000;
+
+// onProgress, when given, is called with the merge-so-far every time a provider
+// settles, so the fastest source paints first instead of waiting for the slowest.
+async function fetchMusicSearchResults(q, mode, previousPages, onProgress) {
   searchProviderNotice = '';
   var providers = activeSearchProvidersForMode(mode);
   if (!providers.length) {
@@ -1073,57 +1100,80 @@ async function fetchMusicSearchResults(q, mode, previousPages) {
   Object.keys(previousPages || {}).forEach(function (provider) {
     providerPages[provider] = Object.assign({}, previousPages[provider]);
   });
-  var pageLimitByProvider = { ytmusic: 20, deezer: 20, soundcloud: 16, spotify: 10 };
+  // The Archive resolves metadata item-by-item, so it is the slowest of the
+  // set — keep its page small rather than stalling the whole fan-out.
+  var pageLimitByProvider = { archive: 12, itunes: 20, ytmusic: 20, deezer: 20, soundcloud: 16, spotify: 10 };
   var fetchProviders = providers.filter(function (provider) {
     return !previousPages || !previousPages[provider] || previousPages[provider].hasMore;
   });
-  var result = await Promise.allSettled(fetchProviders.map(function (provider) {
+  // provider -> settled entry. A provider that has not answered yet is simply
+  // absent, which is what lets collect() report a partial merge.
+  var slots = {};
+  var songsByProvider = { archive: [], itunes: [], ytmusic: [], deezer: [], soundcloud: [], spotify: [] };
+
+  function collect() {
+    fetchProviders.forEach(function (provider) {
+      var entry = slots[provider];
+      if (!entry) return;
+      if (entry.status !== 'fulfilled') {
+        console.warn(controlSourceProviderTitle(provider) + ' search failed:', entry.reason);
+        providerPages[provider] = Object.assign({}, providerPages[provider] || {}, { hasMore: false, failed: true });
+        return;
+      }
+      var response = entry.value || {};
+      var value = response.value || {};
+      var songs = Array.isArray(value.songs) ? value.songs : [];
+      var offset = response.offset;
+      var requestedLimit = response.requestedLimit;
+      var nextOffset = Number(value.nextOffset);
+      if (!isFinite(nextOffset) || nextOffset <= offset) nextOffset = offset + songs.length;
+      var hasMore = value.hasMore === true;
+      if (value.hasMore == null) hasMore = songs.length >= requestedLimit;
+      if (!songs.length || nextOffset <= offset) hasMore = false;
+      providerPages[provider] = {
+        offset: offset,
+        limit: Number(value.limit) || requestedLimit,
+        nextOffset: nextOffset,
+        hasMore: hasMore,
+        total: Number(value.total) || 0,
+        failed: false
+      };
+      songsByProvider[provider] = songs;
+      if (value.message && !songs.length && !searchProviderNotice) searchProviderNotice = value.message;
+    });
+    return {
+      songs: mergeSongSearchResults(
+        songsByProvider.ytmusic,
+        songsByProvider.deezer,
+        songsByProvider.soundcloud,
+        songsByProvider.spotify,
+        songsByProvider.itunes,
+        songsByProvider.archive,
+        null, null, null, null,
+        MUSIC_SEARCH_MAX_RESULTS,
+        q
+      ),
+      providerPages: providerPages,
+      hasMore: searchProviderPagesHaveMore(providerPages)
+    };
+  }
+
+  await Promise.all(fetchProviders.map(function (provider) {
     var previous = previousPages && previousPages[provider];
     var offset = previous ? Math.max(0, Number(previous.nextOffset) || 0) : 0;
     var limit = pageLimitByProvider[provider] || 12;
-    return apiJson(searchProviderUrl(provider, q, limit, offset)).then(function (value) {
-      return { provider: provider, offset: offset, requestedLimit: limit, value: value || {} };
-    });
+    return apiJson(searchProviderUrl(provider, q, limit, offset), { timeoutMs: MUSIC_SEARCH_PROVIDER_TIMEOUT_MS })
+      .then(function (value) {
+        slots[provider] = { status: 'fulfilled', value: { provider: provider, offset: offset, requestedLimit: limit, value: value || {} } };
+      }, function (reason) {
+        slots[provider] = { status: 'rejected', reason: reason };
+      })
+      .then(function () {
+        if (typeof onProgress !== 'function') return;
+        try { onProgress(collect()); } catch (err) { console.warn('search progress render failed:', err); }
+      });
   }));
-  var songsByProvider = { ytmusic: [], deezer: [], soundcloud: [], spotify: [] };
-  fetchProviders.forEach(function (provider, index) {
-    var entry = result[index];
-    if (!entry || entry.status !== 'fulfilled') {
-      console.warn(controlSourceProviderTitle(provider) + ' search failed:', entry && entry.reason);
-      providerPages[provider] = Object.assign({}, providerPages[provider] || {}, { hasMore: false, failed: true });
-      return;
-    }
-    var response = entry.value || {};
-    var value = response.value || {};
-    var songs = Array.isArray(value.songs) ? value.songs : [];
-    var offset = response.offset;
-    var requestedLimit = response.requestedLimit;
-    var nextOffset = Number(value.nextOffset);
-    if (!isFinite(nextOffset) || nextOffset <= offset) nextOffset = offset + songs.length;
-    var hasMore = value.hasMore === true;
-    if (value.hasMore == null) hasMore = songs.length >= requestedLimit;
-    if (!songs.length || nextOffset <= offset) hasMore = false;
-    providerPages[provider] = {
-      offset: offset,
-      limit: Number(value.limit) || requestedLimit,
-      nextOffset: nextOffset,
-      hasMore: hasMore,
-      total: Number(value.total) || 0,
-      failed: false
-    };
-    songsByProvider[provider] = songs;
-    if (value.message && !songs.length && !searchProviderNotice) searchProviderNotice = value.message;
-  });
-  var songs = mergeSongSearchResults(
-    songsByProvider.ytmusic,
-    songsByProvider.deezer,
-    songsByProvider.soundcloud,
-    songsByProvider.spotify,
-    null, null, null, null,
-    MUSIC_SEARCH_MAX_RESULTS,
-    q
-  );
-  return { songs: songs, providerPages: providerPages, hasMore: searchProviderPagesHaveMore(providerPages) };
+  return collect();
 }
 function searchSongResultHtml(s, i) {
     var vipTag = songVipTagHtml(s);
@@ -1242,7 +1292,11 @@ function appendNextSearchResults(expectedKey) {
   });
   return true;
 }
-function renderSongSearchResults(songs) {
+// opts.animate     — repaints as providers stream in must not replay the entrance
+//                    animation on every arrival; only the first paint should.
+// opts.visibleCount— a repaint must not collapse a list the user already expanded.
+function renderSongSearchResults(songs, opts) {
+  opts = opts || {};
   setSearchHistorySurface(false);
   var plan = pendingSearchProviderPages || {};
   resetSearchMusicRenderState();
@@ -1253,13 +1307,14 @@ function renderSongSearchResults(songs) {
   searchMusicRenderState.providerPages = plan.providerPages || {};
   searchMusicRenderState.remoteHasMore = !!plan.hasMore;
   searchMusicRenderState.songs = playlist;
-  searchMusicRenderState.visibleCount = Math.min(playlist.length, MUSIC_SEARCH_INITIAL_VISIBLE);
+  var wanted = Number(opts.visibleCount) > 0 ? Number(opts.visibleCount) : MUSIC_SEARCH_INITIAL_VISIBLE;
+  searchMusicRenderState.visibleCount = Math.min(playlist.length, wanted);
   var html = '';
   for (var i = 0; i < searchMusicRenderState.visibleCount; i++) html += searchSongResultHtml(playlist[i], i);
   $results.innerHTML = html + searchLoadMoreSentinelHtml();
   $results.classList.add('show');
   syncLikeStatusForSongs(playlist.slice(0, searchMusicRenderState.visibleCount));
-  if (window.gsap) animateListItems($results, '.search-result', { x: 0, y: 6, stagger: 0.012, duration: 0.18, limit: 18 });
+  if (window.gsap && opts.animate !== false) animateListItems($results, '.search-result', { x: 0, y: 6, stagger: 0.012, duration: 0.18, limit: 18 });
   observeSearchLoadMoreSentinel();
 }
 
@@ -1279,7 +1334,38 @@ async function doSearch(q, opts) {
   setSearchHistorySurface(false);
   try {
     var mode = searchMode;
-    var searchData = await fetchMusicSearchResults(q, mode);
+    var painted = false;
+    // Paint whatever has settled so far rather than holding every finished
+    // provider hostage to the slowest one. Later paints only ever add songs,
+    // so the list grows instead of flickering.
+    function paint(data, isFinal) {
+      if (requestSeq !== searchRequestSeq || searchMode !== mode || $input.value.trim() !== q) return;
+      var list = data && Array.isArray(data.songs) ? data.songs : [];
+      if (!list.length) return;
+      var keepScroll = $results.scrollTop;
+      var expanded = painted && searchMusicRenderState.visibleCount > MUSIC_SEARCH_INITIAL_VISIBLE;
+      // Never yank a list the user has already started scrolling or growing.
+      if (!isFinal && painted && (keepScroll > 0 || expanded)) return;
+      if (painted && !isFinal && list.length === playlist.length) return;
+      var firstPaint = !painted;
+      var prevVisible = painted ? searchMusicRenderState.visibleCount : 0;
+      painted = true;
+      searchLastResultQuery = searchResultKey(q, mode);
+      if (firstPaint) rememberSearchQuery(q);
+      pendingSearchProviderPages = {
+        key: searchLastResultQuery,
+        query: q,
+        mode: mode,
+        providerPages: data.providerPages || {},
+        hasMore: !!data.hasMore
+      };
+      renderSongSearchResults(list, { animate: firstPaint, visibleCount: prevVisible });
+      if (keepScroll > 0) $results.scrollTop = keepScroll;
+    }
+
+    var searchData = await fetchMusicSearchResults(q, mode, null, function (partial) {
+      paint(partial, false);
+    });
     var songs = searchData && Array.isArray(searchData.songs) ? searchData.songs : [];
     if (requestSeq !== searchRequestSeq || searchMode !== mode || $input.value.trim() !== q) return;
     if (!songs.length) {
@@ -1290,17 +1376,8 @@ async function doSearch(q, opts) {
       $results.classList.add('show');
       return;
     }
-    searchLastResultQuery = searchResultKey(q, mode);
-    rememberSearchQuery(q);
-    pendingSearchProviderPages = {
-      key: searchLastResultQuery,
-      query: q,
-      mode: mode,
-      providerPages: searchData.providerPages || {},
-      hasMore: !!searchData.hasMore
-    };
-    renderSongSearchResults(songs);
-    if (opts.autoPlayFirst) playSearchResult(0);
+    paint(searchData, true);
+    if (painted && opts.autoPlayFirst) playSearchResult(0);
   } catch (err) {
     console.error('Search:', err);
     if (requestSeq === searchRequestSeq) {

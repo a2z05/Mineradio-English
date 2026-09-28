@@ -12,8 +12,17 @@ const https = require('https');
 
 const ITUNES_API_BASE = (process.env.ITUNES_API_BASE || 'https://itunes.apple.com').replace(/\/+$/, '');
 const ITUNES_UA = 'Mineradio/2.1.0 (iTunes Search API bridge)';
-const REQUEST_TIMEOUT_MS = 8000;
+// Eight seconds was shorter than the host itself: itunes.apple.com routinely
+// takes 3s to answer here and often longer, so requests were being aborted at
+// the deadline and surfaced as HTTP 502 "iTunes search failed (abort)". One
+// provider that needs ~1.5s on a good run is not worth a budget that tight.
+const REQUEST_TIMEOUT_MS = 20000;
 const SEARCH_LIMIT_MAX = 50;
+// Apple's search ranks remixes, live and karaoke versions of the exact title
+// above the original, so pull a wide slice and re-rank. A search for "blinding
+// lights" otherwise returns the remix first and buries the track people meant.
+const SEARCH_FETCH_FACTOR = 4;
+const SEARCH_FETCH_MAX = 200;
 
 let applyProxyOptions = null;
 function setItunesProxyApplier(fn) {
@@ -45,7 +54,33 @@ function cacheWrap(key, ttlMs, producer) {
     });
 }
 
+// itunes.apple.com drops TCP connections on this network — roughly one request
+// in six answers "fetch failed" — and that is environmental, not a bug here.
+// Absorb it with one bounded retry instead of handing the fan-out a 502 and
+// leaving a working source contributing nothing.
+const TRANSIENT_RETRY_DELAY_MS = 500;
+
+function isDroppedConnection(err) {
+  // Timeouts are deliberately excluded. The search fan-out has already
+  // abandoned this provider at its own deadline, so paying another twenty
+  // seconds would only delay the fallback every other source is waiting on.
+  if (!err || err.statusCode) return false;
+  if (err.name === 'AbortError' || err.code === 'ABORT_ERR') return false;
+  return true;
+}
+
 async function requestJson(pathAndQuery) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await requestJsonOnce(pathAndQuery);
+    } catch (err) {
+      if (!isDroppedConnection(err) || attempt >= 1) throw err;
+      await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS));
+    }
+  }
+}
+
+async function requestJsonOnce(pathAndQuery) {
   const target = `${ITUNES_API_BASE}${pathAndQuery.startsWith('/') ? pathAndQuery : `/${pathAndQuery}`}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -122,6 +157,61 @@ function mapItunesTrack(track, index, query) {
   };
 }
 
+// "blinding lights remix live karaoke version" → the words people actually
+// typed, with the noise words removed.
+function queryTerms(query) {
+  return normalizeText(query)
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}']+/u)
+    .filter(Boolean);
+}
+
+// Title words that mean "this is a different recording of the same song".
+const VARIANT_WORDS = new Set([
+  'remix', 'remixed', 'live', 'acoustic', 'cover', 'karaoke', 'instrumental',
+  'demo', 'radioedit', 'edit', 'mix', 'version', 'reprise', 'unplugged',
+  'instrumentalversion',
+]);
+
+// Score lower is better. An exact title match always beats a variant of it.
+function scoreTrack(track, terms) {
+  if (!terms.length) return 0;
+  const title = String((track && track.trackName) || '').toLowerCase();
+  const artist = String((track && track.artistName) || '').toLowerCase();
+  let score = 0;
+  let artistMatches = 0;
+  // A title that equals the whole typed phrase outranks one that merely
+  // contains its words, which demotes "Blinding Lights (Remix)" and covers
+  // whose title embeds extra words.
+  const phrase = terms.join(' ');
+  if (phrase && title === phrase) score -= 12;
+  for (const term of terms) {
+    // An artist-name hit is the strongest relevance signal available, so it
+    // outranks a title hit and is not also counted in the title. Without this,
+    // a cover titled "Blinding Lights The Weeknd" outscores the real track.
+    if (artist.includes(term)) {
+      score -= 4;
+      artistMatches += 1;
+      continue;
+    }
+    if (title === term) score -= 6;
+    else if (title.startsWith(term)) score -= 3;
+    else if (title.includes(term)) score -= 2;
+    else score += 4;
+  }
+  if (artistMatches) score -= 2;
+  const variant = tokensOf(title).filter((t) => VARIANT_WORDS.has(t));
+  if (variant.length) score += variant.length * 3;
+  return score;
+}
+
+function tokensOf(text) {
+  return String(text || '')
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}']+/u)
+    .filter(Boolean);
+}
+
 async function handleItunesSearch(keywords, limit, offset) {
   const query = normalizeText(keywords);
   limit = Math.max(1, Math.min(SEARCH_LIMIT_MAX, Number(limit) || 25));
@@ -135,7 +225,7 @@ async function handleItunesSearch(keywords, limit, offset) {
       term: query,
       media: 'music',
       entity: 'song',
-      limit: String(Math.min(SEARCH_LIMIT_MAX, limit * 3)),
+      limit: String(Math.min(SEARCH_FETCH_MAX, limit * SEARCH_FETCH_FACTOR)),
       country: process.env.ITUNES_COUNTRY || 'US',
     });
     const { status, body } = await requestJson(`/search?${params.toString()}`);
@@ -143,11 +233,20 @@ async function handleItunesSearch(keywords, limit, offset) {
     return body;
   });
   const results = Array.isArray(payload.results) ? payload.results : [];
+  const terms = queryTerms(query);
+  const ranked = results
+    .map((entry, index) => ({ entry, index, score: scoreTrack(entry, terms) }))
+    .sort((a, b) => (a.score - b.score) || (a.index - b.index));
   const seen = new Set();
   const songs = [];
-  for (let i = offset; i < results.length && songs.length < limit; i++) {
-    const mapped = mapItunesTrack(results[i], i - offset, query);
-    if (!mapped || seen.has(mapped.id)) continue;
+  for (const item of ranked) {
+    if (songs.length >= limit) break;
+    const mapped = mapItunesTrack(item.entry, item.index, query);
+    // This provider can only ever play a preview, so a track without one is a
+    // result the user can click and get nothing from. The search API happily
+    // ranks those first (they are often the exact title match), which is how
+    // the top row of results turned out to be unplayable.
+    if (!mapped || !mapped.playable || seen.has(mapped.id)) continue;
     seen.add(mapped.id);
     songs.push(mapped);
   }
@@ -155,11 +254,11 @@ async function handleItunesSearch(keywords, limit, offset) {
     provider: 'itunes',
     configured: true,
     songs,
-    total: results.length,
+    total: ranked.length,
     offset,
     limit,
     nextOffset: offset + songs.length,
-    hasMore: offset + songs.length < results.length,
+    hasMore: songs.length < ranked.length,
   };
 }
 
@@ -260,4 +359,5 @@ module.exports = {
   handleItunesLyric,
   getItunesCapabilities,
   resetItunesRuntimeStateForTests,
+  __test: { queryTerms, scoreTrack, tokensOf, mapItunesTrack },
 };

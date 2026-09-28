@@ -590,6 +590,11 @@ function spotifyLoginStatusText(info) {
   info = info || spotifyLoginStatus || {};
   if (info.loggedIn) return 'Spotify connected / ' + (info.product === 'premium' ? 'Premium' : (info.product ? String(info.product).toUpperCase() : 'Plan unknown')) + ' / Syncs playlists and Liked Songs';
   if (info.reauthRequired) return 'Spotify long-term authorization expired. Reconnect official OAuth';
+  // The backend reports the concrete reason a valid login still fails —
+  // Spotify's own 403 body, for instance. Skipping it here is what made a
+  // working login look broken and sent users to reconnect something that
+  // already worked.
+  if (info.errorMessage) return String(info.errorMessage);
   if (info.stale) return 'Spotify session expired. Reconnect official OAuth';
   if (info.localConfigMissing) return 'Spotify not connected: paste a Client ID, then click "Save & Authorize"';
   if (info.oauthConfigured) return 'Client ID saved. Click "Connect Spotify" to open the official authorization window';

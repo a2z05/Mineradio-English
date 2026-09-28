@@ -230,10 +230,41 @@ function platformMeta(provider) {
   if (provider === 'deezer') return { key: 'deezer', short: 'DZ', label: 'Deezer', app: 'Deezer', dot: 'deezer' };
   if (provider === 'soundcloud') return { key: 'soundcloud', short: 'SC', label: 'SoundCloud', app: 'SoundCloud', dot: 'soundcloud' };
   if (provider === 'spotify') return { key: 'spotify', short: 'SP', label: 'Spotify', app: 'Spotify', dot: 'spotify' };
+  // EN-FORK: keyless sources. This copy of platformMeta loads last and wins
+  // over the one in 07-search.js, so leaving them out labelled both of them
+  // "NetEase Cloud Music" in every notice that names a platform.
+  if (provider === 'itunes') return { key: 'itunes', short: 'AP', label: 'Apple Music preview', app: 'Apple Music preview', dot: 'itunes' };
+  if (provider === 'archive') return { key: 'archive', short: 'IA', label: 'Internet Archive', app: 'Internet Archive', dot: 'archive' };
   // Lyric-only backends keep their metadata for settings surfaces.
   if (provider === 'qq') return { key: 'qq', short: 'QQ', label: 'QQ Music', app: 'QQ Music app', dot: 'qq' };
   return { key: 'netease', short: 'NE', label: 'NetEase Cloud Music', app: 'NetEase Cloud Music app', dot: 'netease' };
 }
+// EN-FORK: the keyless sources have no account. They used to fall through to
+// NetEase's loginStatus, which reports loggedOut — so every capability check
+// answered "sign in first" for the two providers that need no sign-in at all.
+var KEYLESS_PLATFORM_STATUS = {
+  provider: 'keyless',
+  loggedIn: true,
+  configured: true,
+  publicCatalog: true,
+  searchReady: true,
+  preview: false,
+  nickname: 'No sign-in needed',
+  vipType: 0,
+  vipLevel: 'none',
+  isVip: false,
+  isSvip: false,
+  vipLabel: 'No VIP',
+  capabilities: {
+    search: true,
+    metadata: true,
+    lyric: false,
+    playableUrl: true,
+    userPlaylists: false,
+    likedTracks: false,
+    chart: false,
+  },
+};
 function platformStatus(provider) {
   if (provider === 'spotify') return spotifyLoginStatus;
   if (provider === 'ytmusic') return ytmusicStatus;
@@ -241,6 +272,7 @@ function platformStatus(provider) {
   if (provider === 'soundcloud') return soundcloudStatus;
   if (provider === 'qishui') return qishuiLoginStatus;
   if (provider === 'kugou') return kugouLoginStatus;
+  if (provider === 'itunes' || provider === 'archive') return KEYLESS_PLATFORM_STATUS;
   return provider === 'qq' ? qqLoginStatus : loginStatus;
 }
 function providerVipType(provider, status) {

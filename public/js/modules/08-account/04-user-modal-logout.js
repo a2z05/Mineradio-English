@@ -61,6 +61,9 @@ function updateUserModalUi() {
 function showUserModal() {
   if (!hasAnyPlatformLogin()) return showLoginModal();
   updateUserModalUi();
+  // EN-FORK: keep the "Playback sources" order in step with account state,
+  // since readiness decides which rows can actually serve as a fallback.
+  if (typeof renderPlaybackProviderOrderList === 'function') renderPlaybackProviderOrderList();
   openGsapModal(document.getElementById('user-modal'));
 }
 function closeUserModal() { closeGsapModal(document.getElementById('user-modal')); }
@@ -89,7 +92,17 @@ function requestDualLoginMode() {
   enableDualAccountView();
 }
 function openProviderLogin(provider) {
-  provider = provider === 'ytmusic' ? 'ytmusic' : (provider === 'deezer' ? 'deezer' : (provider === 'soundcloud' ? 'soundcloud' : 'spotify'));
+  // EN-FORK: only the four global providers have a sign-in window. Anything
+  // else used to be silently coerced to Spotify, which opened a sign-in that
+  // could never satisfy the original request.
+  var supported = provider === 'ytmusic' || provider === 'deezer'
+    || provider === 'soundcloud' || provider === 'spotify';
+  if (!supported) {
+    if (typeof showToast === 'function') {
+      showToast((provider || 'This platform') + ' sign-in was removed in this build — it is only used for saved tracks');
+    }
+    return;
+  }
   closeUserModal();
   loginProvider = provider;
   showLoginModal({ provider: provider });

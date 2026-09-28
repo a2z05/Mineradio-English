@@ -45,6 +45,10 @@ function playbackRestrictionMissingPlaybackKey(data) {
 function playbackRestrictionCategory(song, data) {
   var category = playbackRestrictionRawCategory(song, data);
   var provider = playbackLoginProvider(song);
+  // EN-FORK: a provider that cannot stream has no sign-in that would help.
+  // Reclassify those failures so the player switches source instead of
+  // opening a sign-in window that cannot unlock playback.
+  if (!playbackProviderCanStream(provider)) return 'provider_limited';
   var status = platformStatus(provider) || {};
   var mergedStatus = Object.assign({}, status, data || {}, data && data.restriction || {});
   var loggedIn = !!(status.loggedIn || data && data.loggedIn);
@@ -134,10 +138,16 @@ function playbackRestrictionNotice(song, data) {
     };
   }
   if (category === 'provider_limited') {
+    var streamNote = playbackProviderCapabilityNote(providerKey);
+    // EN-FORK: name the real limitation so users stop chasing a sign-in or a
+    // Premium upgrade that this build cannot turn into audio.
+    var limitedBody = (!playbackProviderCanStream(providerKey) && streamNote)
+      ? provider + ' cannot start audio in this player (' + streamNote + '), so signing in or upgrading will not help. Playing a matched version from another source instead.'
+      : (message || (provider + ' currently only provides search/match info; playback will automatically find another playable version.'));
     return {
       category: category,
       title: 'Platform is match-only',
-      body: message || (provider + ' currently only provides search/match info; playback will automatically find another playable version.'),
+      body: limitedBody,
       action: 'switch_source',
       toast: 'Switching source automatically'
     };
@@ -305,7 +315,10 @@ function isSameTitleArtist(source, candidate) {
 var SOURCE_FALLBACK_SEARCH_TIMEOUT_MS = 6500;
 // EN-FORK: global free services first (no login needed), then Chinese services
 // as additional fallback targets when the user is logged in.
-var SOURCE_FALLBACK_DIRECT_PROVIDERS = ['ytmusic', 'soundcloud', 'deezer', 'netease', 'qq', 'kugou'];
+// EN-FORK: the keyless sources lead. They are the only ones that resolve on a
+// network where the streaming services are DNS-blocked, so a fallback walk that
+// skips them has nothing left to try.
+var SOURCE_FALLBACK_DIRECT_PROVIDERS = ['archive', 'itunes', 'ytmusic', 'soundcloud', 'deezer', 'netease', 'qq', 'kugou'];
 var SOURCE_FALLBACK_RECOVERY_TIMEOUT_MS = 20000;
 var SOURCE_FALLBACK_MAX_QUEUE_ADVANCES = 2;
 var SOURCE_FALLBACK_MAX_PROVIDER_ATTEMPTS = 4;
@@ -468,20 +481,163 @@ function sourceFallbackProviderTitle(provider) {
   if (provider === 'kugou') return 'Kugou Music';
   return 'NetEase Cloud Music';
 }
+// EN-FORK: which providers can actually hand the player a playable URL.
+// Spotify's Web API never returns audio URLs, so the server reports
+// playableUrl:false — signing in (Premium or not) can never start playback
+// here, it only syncs playlists, likes and recommendations. YouTube Music
+// answers LOGIN_REQUIRED on every unauthenticated innertube client, so it is
+// search/metadata only until that changes. Offering a sign-in window for
+// either one is a dead end, so the player routes around them instead.
+var PLAYBACK_STREAM_CAPABILITY = {
+  // EN-FORK: the Internet Archive and iTunes lead. They are the only sources
+  // that reach the network with no account and no proxy, so they are the ones
+  // that actually play when the streaming services are DNS-blocked.
+  archive: { canStream: true, note: 'Full tracks, no sign-in, no proxy' },
+  itunes: { canStream: true, note: '30-second preview, no sign-in, no proxy' },
+  soundcloud: { canStream: true, note: 'Full tracks, no sign-in (needs proxy)' },
+  deezer: { canStream: true, note: '30-second preview, no sign-in' },
+  ytmusic: { canStream: false, note: 'Search and lyrics only' },
+  spotify: { canStream: false, note: 'Library and metadata only' },
+  netease: { canStream: true, note: 'Needs sign-in' },
+  qq: { canStream: true, note: 'Needs sign-in' },
+  kugou: { canStream: true, note: 'Needs sign-in' },
+  qishui: { canStream: true, note: 'Needs sign-in' }
+};
+function playbackProviderCapability(provider) {
+  provider = normalizePlaybackProvider(provider);
+  return PLAYBACK_STREAM_CAPABILITY[provider] || { canStream: true, note: '' };
+}
+function playbackProviderCanStream(provider) {
+  return !!playbackProviderCapability(provider).canStream;
+}
+function playbackProviderCapabilityNote(provider) {
+  return playbackProviderCapability(provider).note || '';
+}
+// EN-FORK: user-facing order for player sources. The player walks this list
+// whenever a track cannot play on its own provider.
+var PLAYBACK_PROVIDER_ORDER_STORE_KEY = 'mineradio-playback-provider-order-v1';
+// The Internet Archive leads because it returns full-length streams and needs
+// neither an account nor a proxy. iTunes follows as the wide-catalog preview.
+// SoundCloud and Deezer come next. YouTube Music and Spotify stay listed for
+// reordering but are skipped while they cannot stream.
+var PLAYBACK_PROVIDER_ORDER_DEFAULT = ['archive', 'itunes', 'soundcloud', 'deezer', 'ytmusic', 'spotify', 'netease', 'qq', 'kugou', 'qishui'];
+function normalizePlaybackProviderOrder(list) {
+  var seen = {};
+  var out = [];
+  (Array.isArray(list) ? list : []).forEach(function (provider) {
+    if (typeof provider !== 'string' || PLAYBACK_PROVIDER_ORDER_DEFAULT.indexOf(provider) < 0) return;
+    if (seen[provider]) return;
+    seen[provider] = true;
+    out.push(provider);
+  });
+  PLAYBACK_PROVIDER_ORDER_DEFAULT.forEach(function (provider) {
+    if (seen[provider]) return;
+    seen[provider] = true;
+    out.push(provider);
+  });
+  return out;
+}
+function playbackProviderOrder() {
+  var stored = null;
+  try {
+    stored = JSON.parse(localStorage.getItem(PLAYBACK_PROVIDER_ORDER_STORE_KEY) || 'null');
+  } catch (e) {
+    stored = null;
+  }
+  return normalizePlaybackProviderOrder(stored);
+}
+function savePlaybackProviderOrder(order) {
+  var next = normalizePlaybackProviderOrder(order);
+  try {
+    localStorage.setItem(PLAYBACK_PROVIDER_ORDER_STORE_KEY, JSON.stringify(next));
+  } catch (e) { /* private mode — order stays session-only */ }
+  return next;
+}
+function movePlaybackProvider(provider, delta) {
+  if (typeof provider !== 'string') return playbackProviderOrder();
+  var order = playbackProviderOrder();
+  var from = order.indexOf(provider);
+  if (from < 0) return order;
+  var to = from + (delta < 0 ? -1 : 1);
+  if (to < 0 || to >= order.length) return order;
+  order.splice(from, 1);
+  order.splice(to, 0, provider);
+  return savePlaybackProviderOrder(order);
+}
+function resetPlaybackProviderOrder() {
+  return savePlaybackProviderOrder(PLAYBACK_PROVIDER_ORDER_DEFAULT.slice());
+}
+function playbackProviderDisplayLabel(provider) {
+  if (provider === 'archive') return 'Internet Archive';
+  if (provider === 'itunes') return 'Apple Music preview';
+  if (provider === 'ytmusic') return 'YouTube Music';
+  if (provider === 'deezer') return 'Deezer';
+  if (provider === 'soundcloud') return 'SoundCloud';
+  if (provider === 'spotify') return 'Spotify';
+  if (provider === 'qq') return 'QQ Music';
+  if (provider === 'kugou') return 'Kugou Music';
+  if (provider === 'qishui') return 'Soda Music';
+  return 'NetEase Cloud Music';
+}
+function movePlaybackProviderStep(provider, delta) {
+  movePlaybackProvider(provider, delta);
+  renderPlaybackProviderOrderList();
+}
+function resetPlaybackProviderOrderAndRender() {
+  resetPlaybackProviderOrder();
+  renderPlaybackProviderOrderList();
+  if (typeof showToast === 'function') showToast('Playback source order reset');
+}
+// Renders the "Playback sources" section of the account modal.
+function renderPlaybackProviderOrderList() {
+  var list = document.getElementById('playback-provider-order-list');
+  if (!list) return;
+  var order = playbackProviderOrder();
+  list.innerHTML = order.map(function (provider, index) {
+    var capability = playbackProviderCapability(provider);
+    var usable = !!capability.canStream && sourceFallbackProviderReady(provider);
+    var status = capability.canStream
+      ? (usable ? capability.note : 'Sign in to use as a fallback')
+      : capability.note;
+    var position = index + 1;
+    return '<div class="playback-source-row' + (capability.canStream ? '' : ' playback-source-row-off') + '"' +
+      ' data-playback-provider="' + provider + '">' +
+      '<span class="playback-source-rank">' + position + '</span>' +
+      '<span class="playback-source-name">' + playbackProviderDisplayLabel(provider) + '</span>' +
+      '<span class="playback-source-status">' + status + '</span>' +
+      '<span class="playback-source-actions">' +
+      '<button type="button" class="playback-source-move" aria-label="Move up" title="Move up"' +
+      (index === 0 ? ' disabled' : '') +
+      ' onclick="movePlaybackProviderStep(\'' + provider + '\', -1)">&#9650;</button>' +
+      '<button type="button" class="playback-source-move" aria-label="Move down" title="Move down"' +
+      (index === order.length - 1 ? ' disabled' : '') +
+      ' onclick="movePlaybackProviderStep(\'' + provider + '\', 1)">&#9660;</button>' +
+      '</span>' +
+      '</div>';
+  }).join('');
+}
 function sourceFallbackProviderReady(provider) {
   provider = normalizePlaybackProvider(provider);
   if (SOURCE_FALLBACK_DIRECT_PROVIDERS.indexOf(provider) < 0) return false;
-  // Global free providers need no account or playback key.
-  if (provider === 'ytmusic' || provider === 'deezer' || provider === 'soundcloud') return true;
+  // A provider that cannot stream is never worth trying — it only burns the
+  // fallback budget before landing on the same dead end.
+  if (!playbackProviderCanStream(provider)) return false;
+  // Global free providers need no account or playback key. The keyless sources
+  // used to miss this branch, fall through to the NetEase loginStatus, and be
+  // reported as "Sign in to use as a fallback" — the one message that told the
+  // user to sign in for providers that have no sign-in.
+  if (provider === 'deezer' || provider === 'soundcloud' || provider === 'itunes' || provider === 'archive') return true;
   var status = typeof platformStatus === 'function' ? platformStatus(provider) : null;
   if (!status || !status.loggedIn) return false;
   return true;
 }
 function alternatePlaybackProviders(song) {
   var currentProvider = normalizePlaybackProvider(songProviderKey(song));
-  var ordered = typeof accountProviderOrder === 'function'
-    ? accountProviderOrder()
-    : SOURCE_FALLBACK_DIRECT_PROVIDERS.slice();
+  var ordered = typeof playbackProviderOrder === 'function'
+    ? playbackProviderOrder()
+    : (typeof accountProviderOrder === 'function'
+      ? accountProviderOrder()
+      : SOURCE_FALLBACK_DIRECT_PROVIDERS.slice());
   var seen = {};
   var providers = [];
   ordered.concat(SOURCE_FALLBACK_DIRECT_PROVIDERS).forEach(function (provider) {
@@ -495,6 +651,22 @@ function alternatePlaybackProviders(song) {
 function alternatePlaybackProvider(song) {
   return alternatePlaybackProviders(song)[0] || '';
 }
+// EN-FORK: one table for fallback searches. A chained ternary silently routed
+// any provider it did not know about to YouTube Music, which is exactly the
+// source that cannot stream here — so the keyless providers were unreachable.
+var SOURCE_FALLBACK_SEARCH_URLS = {
+  archive: function (q) { return '/api/archive/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
+  itunes: function (q) { return '/api/itunes/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
+  soundcloud: function (q) { return '/api/soundcloud/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
+  deezer: function (q) { return '/api/deezer/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
+  ytmusic: function (q) { return '/api/ytmusic/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
+  qq: function (q) { return '/api/qq/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
+  kugou: function (q) { return '/api/kugou/search?keywords=' + encodeURIComponent(q) + '&limit=8'; }
+};
+function sourceFallbackSearchUrl(provider, query) {
+  var build = SOURCE_FALLBACK_SEARCH_URLS[provider];
+  return build ? build(query) : '/api/ytmusic/search?keywords=' + encodeURIComponent(query) + '&limit=12';
+}
 async function searchAlternatePlatformSong(song, requestedTarget, recovery) {
   var target = requestedTarget || alternatePlaybackProvider(song);
   if (!target || !sourceFallbackProviderReady(target)) return null;
@@ -502,17 +674,7 @@ async function searchAlternatePlatformSong(song, requestedTarget, recovery) {
   var artist = artistNameParts(song)[0] || '';
   var query = [song.name || song.title || '', song.artist || artist].filter(Boolean).join(' ').trim();
   if (!query) return null;
-  var url = target === 'ytmusic'
-    ? '/api/ytmusic/search?keywords=' + encodeURIComponent(query) + '&limit=8'
-    : (target === 'deezer'
-      ? '/api/deezer/search?keywords=' + encodeURIComponent(query) + '&limit=8'
-      : (target === 'soundcloud'
-        ? '/api/soundcloud/search?keywords=' + encodeURIComponent(query) + '&limit=8'
-        : (target === 'qq'
-          ? '/api/qq/search?keywords=' + encodeURIComponent(query) + '&limit=8'
-          : (target === 'kugou'
-            ? '/api/kugou/search?keywords=' + encodeURIComponent(query) + '&limit=8'
-            : '/api/ytmusic/search?keywords=' + encodeURIComponent(query) + '&limit=12'))));
+  var url = sourceFallbackSearchUrl(target, query);
   var data = await awaitSourceFallbackBudget(
     apiJson(url, { timeoutMs: SOURCE_FALLBACK_SEARCH_TIMEOUT_MS }),
     recovery
@@ -770,6 +932,9 @@ function handlePlaybackUnavailable(song, data) {
   showSourceFallbackNotice(notice.title, notice.body);
   if (category === 'login_required') {
     setTimeout(function () {
+      // EN-FORK: never open a sign-in window for a provider that cannot
+      // stream — the account would connect and playback would still fail.
+      if (!playbackProviderCanStream(provider)) return;
       var modal = document.getElementById('login-modal');
       if (!modal || modal.classList.contains('show')) return;
       openProviderLogin(provider);

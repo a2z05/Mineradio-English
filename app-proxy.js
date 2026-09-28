@@ -18,7 +18,10 @@ const tls = require('tls');
 
 const PROXY_CONFIG_FILE = path.join(__dirname, 'data', 'app-proxy.json');
 
-const PROXY_APPS = ['spotify', 'ytmusic', 'deezer', 'soundcloud'];
+// EN-FORK: itunes and archive are opt-in here. They reach the network without a
+// proxy, so they stay off by default and the user only enables them if their
+// network needs it.
+const PROXY_APPS = ['spotify', 'ytmusic', 'deezer', 'soundcloud', 'itunes', 'archive'];
 const PROXY_PROTOCOLS = ['http', 'https', 'socks5'];
 
 const DEFAULT_CONFIG = {
@@ -28,7 +31,7 @@ const DEFAULT_CONFIG = {
   port: 0,
   username: '',
   password: '',
-  apps: { spotify: true, ytmusic: true, deezer: true, soundcloud: true },
+  apps: { spotify: true, ytmusic: true, deezer: true, soundcloud: true, itunes: false, archive: false },
 };
 
 let cachedConfig = null;

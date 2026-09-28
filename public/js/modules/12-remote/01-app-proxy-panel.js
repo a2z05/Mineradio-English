@@ -10,6 +10,10 @@
     ['ytmusic', 'YT Music'],
     ['deezer', 'Deezer'],
     ['soundcloud', 'SoundCloud'],
+    // EN-FORK: these two normally work without a proxy at all, so they are
+    // offered but off by default.
+    ['itunes', 'Apple Music (previews)'],
+    ['archive', 'Internet Archive'],
   ];
 
   function el(id) { return document.getElementById(id); }

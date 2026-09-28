@@ -1616,6 +1616,16 @@
           <button id="account-add-soundcloud" class="modal-btn" onclick="openProviderLogin('soundcloud')">SoundCloud — ready</button>
         </div>
         <div id="account-hint" class="account-hint">YouTube Music, Deezer and SoundCloud need no sign-in — Spotify syncs playlists and likes.</div>
+        <div class="playback-source-order" id="playback-source-order">
+          <div class="playback-source-order-head">
+            <h3>Playback sources</h3>
+            <button type="button" class="playback-source-reset" id="playback-provider-order-reset"
+              onclick="resetPlaybackProviderOrderAndRender()">Reset</button>
+          </div>
+          <p class="account-hint">The player walks this list top to bottom whenever a track cannot play on its
+            own source. Reorder with the arrows.</p>
+          <div class="playback-source-list" id="playback-provider-order-list"></div>
+        </div>
         <div class="btn-row">
           <button class="modal-btn" onclick="closeUserModal()">Close</button>
           <button id="account-logout-btn" class="modal-btn primary" onclick="logoutActiveAccount()">Sign out of this platform</button>

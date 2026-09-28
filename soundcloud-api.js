@@ -14,6 +14,10 @@ const SOUNDCLOUD_BASE = 'https://soundcloud.com';
 const SOUNDCLOUD_API_BASE = 'https://api-v2.soundcloud.com';
 const SOUNDCLOUD_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 const REQUEST_TIMEOUT_MS = 8000;
+// The bundle that carries client_id is ~2.9 MB decoded and routinely takes
+// 7+ s through a proxy — the API timeout above is far too tight for it.
+const ASSET_TIMEOUT_MS = 30000;
+const ASSET_FETCH_ATTEMPTS = 2;
 const ASSET_SCAN_LIMIT = 8;
 const CLIENT_ID_TTL_MS = 6 * 60 * 60 * 1000;
 const SEARCH_LIMIT_MAX = 30;
@@ -44,12 +48,20 @@ function extractClientIds(text) {
 }
 
 function requestRaw(url, options) {
+  const requested = Number(options && options.timeout);
+  const timeoutMs = requested > 0 ? requested : REQUEST_TIMEOUT_MS;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const fetchOptions = {
     method: 'GET',
     signal: controller.signal,
-    headers: Object.assign({ 'User-Agent': SOUNDCLOUD_UA, Accept: 'application/json, text/html;q=0.9,*/*;q=0.5' }, (options && options.headers) || {}),
+    headers: Object.assign({
+      'User-Agent': SOUNDCLOUD_UA,
+      Accept: 'application/json, text/html;q=0.9,*/*;q=0.5',
+      // The id-bearing bundle is 2.9 MB decoded / ~97 KB compressed. Without
+      // this we pull the whole raw file through the proxy for nothing.
+      'Accept-Encoding': 'gzip, br',
+    }, (options && options.headers) || {}),
   };
   if (applyProxyOptions) {
     // applyToOptions returns a new object rather than mutating its argument.
@@ -62,8 +74,8 @@ function requestRaw(url, options) {
 }
 
 async function acquireClientIds() {
-  const home = await requestRaw(`${SOUNDCLOUD_BASE}/`, {});
-  if (!home.ok !== false && home.status >= 400) throw new Error(`SOUNDCLOUD_HOME_FAILED_${home.status}`);
+  const home = await requestRaw(`${SOUNDCLOUD_BASE}/`, { timeout: ASSET_TIMEOUT_MS });
+  if (home.status >= 400) throw new Error(`SOUNDCLOUD_HOME_FAILED_${home.status}`);
   const scriptUrls = [];
   const regex = /(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"']+?\.js)/g;
   let match;
@@ -74,14 +86,25 @@ async function acquireClientIds() {
   const candidates = scriptUrls.reverse().slice(0, ASSET_SCAN_LIMIT);
   const found = [];
   for (const assetUrl of candidates) {
-    try {
-      const asset = await requestRaw(assetUrl, { headers: { Referer: `${SOUNDCLOUD_BASE}/` } });
-      const ids = extractClientIds(asset.text);
-      for (const id of ids) {
-        if (found.indexOf(id) < 0) found.push(id);
+    let asset = null;
+    for (let attempt = 1; attempt <= ASSET_FETCH_ATTEMPTS && !asset; attempt += 1) {
+      try {
+        asset = await requestRaw(assetUrl, {
+          timeout: ASSET_TIMEOUT_MS,
+          headers: { Referer: `${SOUNDCLOUD_BASE}/` },
+        });
+      } catch (_) {
+        // transient (proxy hiccups on the big bundle) — retry up to the cap
       }
-      if (found.length >= 3) break;
-    } catch (_) { /* asset failures are non-fatal */ }
+    }
+    if (!asset) continue;
+    const ids = extractClientIds(asset.text);
+    for (const id of ids) {
+      if (found.indexOf(id) < 0) found.push(id);
+    }
+    // The id-bearing bundle is the expensive one (~2.9 MB). Stop as soon as
+    // we have a usable candidate rather than downloading every bundle.
+    if (found.length) break;
   }
   if (!found.length) throw new Error('SOUNDCLOUD_CLIENT_ID_UNAVAILABLE');
   return found;
@@ -186,7 +209,7 @@ function mapSoundCloudTrack(track, index, query) {
   const artists = artist ? [{ id: normalizeText(track.user && track.user.permalink), name: artist }] : [];
   const durationMs = Math.max(0, Number(track.full_duration || track.duration) || 0);
   const snippetOnly = !isPlayablePolicy(track.policy);
-  const hasTranscodings = Array.isArray(track.media && track.media.transcodings) && track.media.transcodings.some((t) => t && t.format && t.format.mime_type === 'audio/mpeg' && t.protocol === 'progressive');
+  const hasTranscodings = Array.isArray(track.media && track.media.transcodings) && track.media.transcodings.some((t) => t && t.format && t.format.mime_type === 'audio/mpeg' && t.format.protocol === 'progressive');
   const playable = hasTranscodings && !snippetOnly;
   return {
     provider: 'soundcloud',
@@ -255,7 +278,7 @@ async function handleSoundCloudSearch(keywords, limit, offset) {
 
 async function resolveProgressiveStream(track) {
   const transcodings = track && track.media && Array.isArray(track.media.transcodings) ? track.media.transcodings : [];
-  const progressive = transcodings.find((entry) => entry && entry.format && entry.format.mime_type === 'audio/mpeg' && entry.protocol === 'progressive');
+  const progressive = transcodings.find((entry) => entry && entry.format && entry.format.mime_type === 'audio/mpeg' && entry.format.protocol === 'progressive');
   if (!progressive || !progressive.url) return null;
   const clientId = await ensureSoundCloudClientId(false);
   const separator = progressive.url.includes('?') ? '&' : '?';
@@ -275,7 +298,7 @@ async function resolveProgressiveStream(track) {
 
 async function resolveProgressiveStreamRetry(track) {
   const transcodings = track && track.media && Array.isArray(track.media.transcodings) ? track.media.transcodings : [];
-  const progressive = transcodings.find((entry) => entry && entry.format && entry.format.mime_type === 'audio/mpeg' && entry.protocol === 'progressive');
+  const progressive = transcodings.find((entry) => entry && entry.format && entry.format.mime_type === 'audio/mpeg' && entry.format.protocol === 'progressive');
   if (!progressive || !progressive.url) return null;
   const clientId = await ensureSoundCloudClientId(true);
   const separator = progressive.url.includes('?') ? '&' : '?';

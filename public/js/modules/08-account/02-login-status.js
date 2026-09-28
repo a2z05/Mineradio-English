@@ -467,7 +467,10 @@ function normalizeSpotifyLoginStatus(info) {
     tokenFileExists: !!(info && info.tokenFileExists),
     credentialsFileExists: !!(info && info.credentialsFileExists),
     localConfigMissing: !!(info && info.localConfigMissing),
-    playbackKeyReady: loggedIn,
+    // EN-FORK: Spotify's API never returns an audio URL here, so a connected
+    // account is not a playback key — the server reports playableUrl:false
+    // and the player switches source instead.
+    playbackKeyReady: !!(capabilities.playableUrl),
     playbackMode: 'recommend-match',
     searchReady: !!(capabilities.search || info && info.searchReady),
     stale: !!(info && info.stale),

@@ -217,11 +217,21 @@ test('search pagination carries provider offsets and ignores stale sessions', ()
   assert.match(sandbox.url('qq', '晴天', 12, 24), /limit=12&offset=24$/);
   assert.match(sandbox.url('spotify', 'Muse', 10, 30), /limit=10&offset=30$/);
 
-  assert.match(searchSource, /fetchMusicSearchResults\(q, mode, previousPages\)/);
+  // The fan-out grew a fourth onProgress argument for streaming paints, but the
+  // third parameter must stay previousPages or load-more stops carrying offsets.
+  assert.match(searchSource, /fetchMusicSearchResults\(q, mode, previousPages/);
+  assert.match(searchSource, /fetchMusicSearchResults\(q, mode, searchMusicRenderState\.providerPages\)/);
   assert.match(searchSource, /value\.nextOffset/);
   assert.match(searchSource, /value\.hasMore/);
   assert.match(searchSource, /new IntersectionObserver/);
   assert.match(searchSource, /MUSIC_SEARCH_INITIAL_VISIBLE\s*=\s*18/);
+  // apiJson defaults to no timeout, so one hung upstream held every finished
+  // provider off screen; and the fan-out must be able to hand back a partial
+  // merge instead of waiting for its slowest member.
+  assert.match(searchSource, /MUSIC_SEARCH_PROVIDER_TIMEOUT_MS\s*=\s*\d+/);
+  assert.match(searchSource, /timeoutMs:\s*MUSIC_SEARCH_PROVIDER_TIMEOUT_MS/);
+  assert.match(searchSource, /async function fetchMusicSearchResults\(q, mode, previousPages, onProgress\)/);
+  assert.match(searchSource, /onProgress\(collect\(\)\)/);
   assert.match(searchSource, /loadNextMusicSearchPage\(expectedKey\)/);
   assert.match(searchSource, /requestSeq\s*!==\s*searchRequestSeq/);
   assert.match(searchSource, /searchMode\s*!==\s*mode/);

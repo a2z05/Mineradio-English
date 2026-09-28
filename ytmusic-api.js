@@ -78,7 +78,6 @@ async function innertubePost(endpoint, body, clientContext, userAgent) {
       Origin: YTMUSIC_BASE,
       Referer: `${YTMUSIC_BASE}/`,
       Accept: 'application/json',
-      'Content-Length': String(Buffer.byteLength(payload)),
     },
     body: payload,
   };

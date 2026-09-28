@@ -18209,3 +18209,109 @@ body.desktop-shell.desktop-wallpaper-mode.diy-mode #bottom-bar.stage-mode {
     width: calc(100vw - var(--desktop-safe-left) - var(--desktop-safe-right) - 24px);
   }
 }
+
+/* EN-FORK: "Playback sources" order section inside the account modal. */
+.playback-source-order {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, .08)
+}
+
+.playback-source-order-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px
+}
+
+.playback-source-order-head h3 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  color: rgba(255, 255, 255, .72)
+}
+
+.playback-source-reset {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, .55);
+  font-size: 10.5px;
+  padding: 3px 9px;
+  cursor: pointer
+}
+
+.playback-source-reset:hover {
+  color: rgba(255, 255, 255, .9);
+  border-color: rgba(255, 255, 255, .3)
+}
+
+.playback-source-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px
+}
+
+.playback-source-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .045);
+  font-size: 11.5px
+}
+
+.playback-source-row-off {
+  opacity: .58
+}
+
+.playback-source-rank {
+  width: 15px;
+  flex: 0 0 15px;
+  text-align: center;
+  color: rgba(255, 255, 255, .34);
+  font-size: 10.5px
+}
+
+.playback-source-name {
+  flex: 0 0 auto;
+  min-width: 96px;
+  color: rgba(255, 255, 255, .84)
+}
+
+.playback-source-status {
+  flex: 1 1 auto;
+  color: rgba(255, 255, 255, .4);
+  font-size: 10.5px
+}
+
+.playback-source-actions {
+  display: flex;
+  gap: 3px
+}
+
+.playback-source-move {
+  width: 21px;
+  height: 21px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: none;
+  color: rgba(255, 255, 255, .6);
+  font-size: 8px;
+  line-height: 1;
+  cursor: pointer
+}
+
+.playback-source-move:hover:not(:disabled) {
+  color: #fff;
+  border-color: rgba(255, 255, 255, .32)
+}
+
+.playback-source-move:disabled {
+  opacity: .25;
+  cursor: default
+}

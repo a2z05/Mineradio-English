@@ -18,6 +18,18 @@ async function apiJson(url, opts) {
   }
 }
 function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// EN-FORK: the audio bridge is a one-time wrapper, not a decoration. The global
+// providers (deezer/itunes/archive/soundcloud/ytmusic) already answer song/url
+// with a routed "/api/audio?url=..." because only the server knows the per-app
+// proxy. Wrapping that a second time asks the bridge to fetch a localhost path,
+// which it cannot resolve, so every track failed with 502 and "no supported
+// source" — including the two sources that stream perfectly on their own.
+function audioBridgeUrl(value) {
+  var raw = String(value == null ? '' : value);
+  if (!raw) return '';
+  if (/^https?:/i.test(raw) || raw.charAt(0) === '/') return raw;
+  return '/api/audio?url=' + encodeURIComponent(raw);
+}
 function normalizePlaybackQuality(value) {
   value = String(value || '').toLowerCase();
   if (value === 'jymaster' || value === 'master' || value === 'svip') return 'jymaster';
@@ -32,6 +44,9 @@ function normalizePlaybackProvider(provider) {
   if (provider === 'ytmusic') return 'ytmusic';
   if (provider === 'deezer') return 'deezer';
   if (provider === 'soundcloud') return 'soundcloud';
+  // EN-FORK: keyless sources — reachable without a proxy and without an account.
+  if (provider === 'itunes') return 'itunes';
+  if (provider === 'archive') return 'archive';
   if (provider === 'spotify') return 'spotify';
   if (provider === 'qq') return 'qq';
   if (provider === 'kugou') return 'kugou';
@@ -288,8 +303,9 @@ function setPlaybackQuality(value) {
     return;
   }
   if (provider === 'netease' && next === 'jymaster' && !hasProviderSvip('netease', loginStatus)) {
-    showToast(hasPlatformLogin('netease') ? 'Ultra Master requires NetEase SVIP' : 'Sign in to NetEase with SVIP to use Ultra Master');
-    if (!hasPlatformLogin('netease')) openProviderLogin('netease');
+    // EN-FORK: NetEase sign-in was removed from this build, so telling anyone to
+    // sign in pointed at a window that cannot open. Say what to do instead.
+    showToast('Ultra Master is not available — NetEase sign-in is not part of this build. Pick a different quality.');
     return;
   }
   setProviderPlaybackQuality(provider, next);

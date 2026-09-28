@@ -593,6 +593,12 @@ async function resolveAlbumGaplessPlaybackData(song) {
   if (playbackProvider === 'soundcloud') {
     return apiJson('/api/soundcloud/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || song.permalink || '') + qualityParam, { timeoutMs: 12000 });
   }
+  if (playbackProvider === 'itunes') {
+    return apiJson('/api/itunes/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 9000 });
+  }
+  if (playbackProvider === 'archive') {
+    return apiJson('/api/archive/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 12000 });
+  }
   // Legacy Chinese providers keep their endpoints for persisted queue items;
   // the default branch now targets YouTube Music instead of NetEase.
   if (playbackProvider === 'netease' && /^\d+$/.test(String(song.id || ''))) {
@@ -777,7 +783,7 @@ async function scheduleAlbumGaplessPreloadForCurrent(token, reason) {
       || !albumGaplessQueueCanAdvance(currentIdx)
     ) return false;
     if (!data || !data.url) return false;
-    var proxyAudioUrl = '/api/audio?url=' + encodeURIComponent(data.url);
+    var proxyAudioUrl = audioBridgeUrl(data.url);
     var media = new Audio();
     media.crossOrigin = 'anonymous';
     media.preload = 'auto';
@@ -1159,6 +1165,10 @@ async function playQueueAt(idx, opts) {
         data = await apiJson('/api/deezer/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 9000 });
       } else if (playbackProvider === 'soundcloud') {
         data = await apiJson('/api/soundcloud/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || song.permalink || '') + qualityParam, { timeoutMs: 12000 });
+      } else if (playbackProvider === 'itunes') {
+        data = await apiJson('/api/itunes/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 9000 });
+      } else if (playbackProvider === 'archive') {
+        data = await apiJson('/api/archive/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 12000 });
       } else if (playbackProvider === 'netease' && /^\d+$/.test(String(song.id || ''))) {
         // Legacy Chinese items from persisted queues keep their endpoint.
         data = await apiJson('/api/song/url?id=' + encodeURIComponent(song.id || '') + neteasePlaybackMatchQuery(song) + qualityParam, { timeoutMs: 14000 });
@@ -1216,20 +1226,26 @@ async function playQueueAt(idx, opts) {
       }
       if (data.trial) {
         var txt;
-        if (data.loggedIn && data.vipLevel === 'svip') txt = 'This song requires a single, album purchase, or higher tier';
+        // EN-FORK: Deezer's free preview is a fixed 30 seconds in this build,
+        // so an account never extends it — say that plainly instead of
+        // blaming the missing sign-in.
+        var deezerPreview = playbackProvider === 'deezer';
+        var trialSignInHelps = !deezerPreview && playbackProviderCanStream(playbackProvider);
+        if (deezerPreview) txt = 'Deezer free preview · 30 seconds, then switching source automatically';
+        else if (data.loggedIn && data.vipLevel === 'svip') txt = 'This song requires a single, album purchase, or higher tier';
         else if (data.loggedIn && data.vipLevel === 'vip') txt = 'This song requires SVIP or purchase · Playing preview only';
         else if (data.loggedIn) txt = 'This song requires VIP · Playing preview only';
         else txt = 'Not signed in · Playing preview only';
         document.getElementById('trial-text').textContent = txt;
         var trialLoginBtn = document.getElementById('trial-login-btn');
         if (trialLoginBtn) {
-          trialLoginBtn.style.display = data.loggedIn ? 'none' : '';
-          trialLoginBtn.onclick = function () { openProviderLogin(playbackProvider); };
+          trialLoginBtn.style.display = (data.loggedIn || !trialSignInHelps) ? 'none' : '';
+          if (trialSignInHelps) trialLoginBtn.onclick = function () { openProviderLogin(playbackProvider); };
         }
         document.getElementById('trial-banner').classList.add('show');
       }
       markPlayPhase('audio-element');
-      var proxyAudioUrl = opts.preloadedProxyAudioUrl || '/api/audio?url=' + encodeURIComponent(data.url);
+      var proxyAudioUrl = opts.preloadedProxyAudioUrl || audioBridgeUrl(data.url);
       window.__mineradioLastSourceUrl = data.url; // remembered for track download
       window.__mineradioLastSourceSong = song;
       if (albumGaplessHandoff) {
