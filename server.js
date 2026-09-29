@@ -2423,25 +2423,29 @@ async function handleDiscoverHome() {
   // Global providers (YT Music / Deezer / SoundCloud) need no login; consider the
   // home discoverable for everyone so the UI never blocks on a NetEase cookie.
   const loggedIn = true;
-  let dailySongs = [];
+  // EN-FORK mirrors upstream: map every valid upstream song in order, no fixed
+  // cap. Each source is already asked for a bounded page, so trimming the
+  // merged list again is what hid daily songs from the home grid.
+  // mapSongRecord is NetEase-shaped, so Spotify/Deezer/YT rows pass through
+  // unchanged instead of being re-stamped with a provider that is not theirs.
+  function mergedDailySongs(results) {
+    const raw = [];
+    for (const rec of results) {
+      if (rec && Array.isArray(rec.songs)) raw.push(...rec.songs);
+    }
+    return raw.filter(song => song && (song.id || song.videoId) && (song.name || song.title));
+  }
+  const dailyCandidates = [];
   if (spotifyLoggedIn) {
-    try {
-      const rec = await handleSpotifyRecommendations(12);
-      if (rec && Array.isArray(rec.songs) && rec.songs.length) dailySongs = rec.songs.slice(0, 12);
-    } catch (_) {}
+    try { dailyCandidates.push(await handleSpotifyRecommendations(12)); } catch (_) {}
   }
-  if (!dailySongs.length) {
-    try {
-      const chart = await handleDeezerChart(12);
-      if (chart && Array.isArray(chart.songs) && chart.songs.length) dailySongs = chart.songs.slice(0, 12);
-    } catch (_) {}
+  if (!dailyCandidates.length || !(dailyCandidates[0] && dailyCandidates[0].songs && dailyCandidates[0].songs.length)) {
+    try { dailyCandidates.push(await handleDeezerChart(12)); } catch (_) {}
   }
-  if (!dailySongs.length) {
-    try {
-      const yt = await handleYtMusicSearch('trending hits', 12, 0);
-      if (yt && Array.isArray(yt.songs) && yt.songs.length) dailySongs = yt.songs.slice(0, 12);
-    } catch (_) {}
+  if (!dailyCandidates.length || !(dailyCandidates[0] && dailyCandidates[0].songs && dailyCandidates[0].songs.length)) {
+    try { dailyCandidates.push(await handleYtMusicSearch('trending hits', 12, 0)); } catch (_) {}
   }
+  const dailySongs = mergedDailySongs(dailyCandidates);
   return {
     loggedIn,
     user: spotifyUser,

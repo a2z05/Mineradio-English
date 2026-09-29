@@ -271,7 +271,10 @@ test('renderer and Electron wiring restore persistent tracks instead of blob-onl
   assert.match(upload, /importPersistentLocalAudioFiles/);
   assert.match(upload, /copy\.localMissing = false/);
   assert.match(upload, /persistentLocalLibraryTracks = tracks\.map\(cloneSong\)/);
-  assert.match(upload, /仅本次可用，重启后不会保留/);
+  // EN-FORK: the "these songs are available this session only and will not
+  // survive a restart" warning, translated. The warning is what tells the user
+  // their files never reached the persistent library, so it must keep existing.
+  assert.match(upload, /will not survive a restart/);
   assert.match(coreState, /var persistentLocalLibraryTracks = \[\]/);
   assert.match(homeLocal, /loadPersistedLocalLibraryIntoQueue/);
   assert.doesNotMatch(playerControls, /forgetPersistentLocalTracks/);

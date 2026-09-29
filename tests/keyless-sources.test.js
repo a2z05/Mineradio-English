@@ -143,14 +143,82 @@ test('the Archive search query is not built with URLSearchParams', () => {
   // silently omits the fields, so every doc came back with an undefined
   // identifier and the search returned nothing.
   const source = fs.readFileSync(path.join(appRoot, 'internet-archive-api.js'), 'utf8');
-  const fetchDocs = source.slice(source.indexOf('const fetchDocs = async'), source.indexOf('const seen = new Set();'));
-  assert.ok(fetchDocs.length > 0, 'expected the fetchDocs helper');
+  const params = source.slice(source.indexOf('function archiveDocQueryParams'), source.indexOf('async function fetchArchiveDocs'));
+  assert.ok(params.length > 0, 'expected the archiveDocQueryParams helper');
   // The field names must be written literally; the comment naming
   // URLSearchParams is the bug this test exists to prevent.
-  assert.ok(fetchDocs.includes("'fl[]=identifier'"), 'field names must be written literally');
-  assert.ok(fetchDocs.includes("'fl[]=title'"));
-  assert.ok(fetchDocs.includes("'fl[]=subject'"));
-  assert.ok(!/new URLSearchParams\(/.test(fetchDocs), 'fetchDocs must not build params with URLSearchParams');
+  assert.ok(params.includes("'fl[]=identifier'"), 'field names must be written literally');
+  assert.ok(params.includes("'fl[]=title'"));
+  assert.ok(params.includes("'fl[]=subject'"));
+  assert.ok(!/new URLSearchParams\(/.test(params), 'archiveDocQueryParams must not build params with URLSearchParams');
+});
+
+test('the Archive query confines the words to fields instead of OR-ing them bare', () => {
+  // This is the reason every result was a 30-second preview. A bare
+  // "mediatype:(audio) AND (daft punk)" is an OR over every field of every
+  // document: it answered 2204 items whose top was radio mixtapes, so the one
+  // full-length source never survived into the results and nothing else on this
+  // network can stream. Confining the words to the fields a music item fills in
+  // turns the same query into 9-89 documents with the track typed at the top.
+  const t = archive.__test;
+  assert.deepStrictEqual(t.archiveQueryTerms('Bohemian Rhapsody Queen'), ['bohemian', 'rhapsody', 'queen']);
+
+  const query = t.archiveDocQuery(['daft', 'punk']);
+  assert.ok(query.includes('title:(daft punk)'), 'the words must be scoped to title');
+  assert.ok(query.includes('creator:(daft punk)'), 'and to creator');
+  assert.ok(query.includes('subject:(daft punk)'), 'and to subject');
+  // The bare OR-ed form is what produced the junk page; it must not come back.
+  assert.ok(!/AND \(daft punk\)/.test(query), 'the words must not be OR-ed bare');
+
+  // Measured on the Archive: mixing AND and OR at the same nesting level
+  // collapses the entire query to zero results, and q.op=AND is rejected
+  // outright with UNSUPPORTED_VALUE. Every clause must therefore be one
+  // operator, and q.op must never be sent. The assertion looks at the request
+  // builder, not the file, because this comment names the parameter too.
+  const inner = query.slice(query.indexOf('AND (') + 5, query.lastIndexOf(')'));
+  assert.ok(!/\bAND\b/.test(inner), 'nested AND inside the OR list collapses the query to zero results');
+  const source = fs.readFileSync(path.join(appRoot, 'internet-archive-api.js'), 'utf8');
+  const paramsSource = source.slice(source.indexOf('function archiveDocQueryParams'), source.indexOf('function archiveDocQueryParams') + 700);
+  assert.ok(!/q\.op/.test(paramsSource), 'the Archive rejects q.op=AND outright');
+
+  // Popularity is the only real ranking signal available, and it comes from the
+  // downloads sort rather than a second query — a "creator:\"daft punk\""
+  // conjunction was measured returning zero on every attempt.
+  assert.match(source, /sort\[\]=downloads desc/);
+  assert.ok(source.includes("'fl[]=downloads'"), 'the sort field has to be requested to order the candidates');
+});
+
+test('archive ranks the candidates that match what was typed', () => {
+  // The document query is popularity-sorted, so a hit on every word has to be
+  // able to lead regardless of how many downloads the item has.
+  const t = archive.__test;
+  const words = ['bohemian', 'rhapsody', 'queen'];
+  const match = { identifier: 'a', metadata: { title: 'Queen - Bohemian Rhapsody' }, downloads: 10 };
+  const near = { identifier: 'b', metadata: { title: 'Bohemian Folk Night' }, downloads: 5000 };
+  const miss = { identifier: 'c', metadata: { title: 'Radio Program 12' }, downloads: 9000 };
+  assert.ok(t.archiveSongRelevance(match, words) > t.archiveSongRelevance(near, words));
+  assert.ok(t.archiveSongRelevance(match, words) > t.archiveSongRelevance(miss, words));
+  // The handler sorts on exactly this score, with downloads as the tie-break.
+  const source = fs.readFileSync(path.join(appRoot, 'internet-archive-api.js'), 'utf8');
+  assert.match(source, /\.sort\(\(a, b\) => \(b\.score - a\.score\) \|\| \(b\.item\.downloads - a\.item\.downloads\)\)/);
+});
+
+test('archive reports a real duration instead of zero', () => {
+  const t = archive.__test;
+  assert.strictEqual(t.fileDurationMs({ length: '06:42' }), 402000);
+  assert.strictEqual(t.fileDurationMs({ length: '1:02:03' }), 3723000);
+  assert.strictEqual(t.fileDurationMs({ length: '245' }), 245000);
+  assert.strictEqual(t.fileDurationMs({}), 0);
+  const song = t.mapItemToSong(
+    { identifier: 'u2atlanta20051', metadata: { title: 'U2 2006-12-09', creator: 'U2' } },
+    [{ name: '01 City of Blinding Lights.mp3', size: '9283043', length: '06:42' }],
+    0
+  );
+  assert.strictEqual(song.durationMs, 402000);
+  assert.strictEqual(song.duration, 402);
+  // services/img answers image/jpeg for any identifier, so a missing explicit
+  // thumbnail must not leave the row without a cover.
+  assert.match(song.cover, /services\/img\/u2atlanta20051$/);
 });
 
 test('the search fan-out actually asks the keyless providers', () => {
@@ -239,7 +307,7 @@ test('archive search rejects spoken-word hits before paying for their metadata',
   assert.strictEqual(t.looksLikeMusic({ identifier: 'some_podcast_ep12', metadata: { subject: 'Podcast' } }, null), false);
 
   const source = read('internet-archive-api.js');
-  assert.match(source, /items\.filter\(\(item\) => !looksLikeSpokenWord\(item\)\)/);
+  assert.match(source, /items\.filter\(\(item\) => !looksLikeSpokenWord\(item\) && !looksLikeDatedBroadcast\(item\)\)/);
 });
 
 test('archive resolves item metadata in parallel waves, not one request at a time', () => {
@@ -252,8 +320,69 @@ test('archive resolves item metadata in parallel waves, not one request at a tim
     !/for \(const item of[\s\S]{0,300}await fetchItemFiles\(/.test(source),
     'metadata must not be awaited one item at a time'
   );
-  // Stop as soon as the requested page is full rather than resolving all twenty.
-  assert.match(source, /songs\.length < wanted/);
+  // Enough waves to fill the page, then no more. The page used to be filled from
+  // the first wave that produced anything, which made result order an accident
+  // of where a wave boundary fell: "blinding lights weeknd" returned three hits
+  // because the third wave filled it, not because three were the best three.
+  assert.match(source, /if \(found\.length >= wanted\) break;/);
+  assert.ok(
+    !/songs\.length < wanted/.test(source),
+    'the page must be ranked after the wave loop, not filled wave by wave'
+  );
+});
+
+test('archive ranks whole words, and does not let filler words match everything', () => {
+  const t = archive.__test;
+  // "the" is a substring of half the English language. Counting it as a matched
+  // word made "blinding lights the weeknd" a full match for a Chilean chart
+  // show whose subject line lists THE WEEKND, BLACKPINK and CAMILO.
+  const chartShow = {
+    identifier: 'LISTA_10_17-05-2020',
+    metadata: { title: 'LISTA 10 - 17/05/2020', creator: '', subject: 'PALOMA MAMI,GOTEO,THE WEEKND' },
+  };
+  const clubNight = {
+    identifier: 'DNA_Lounge_Blinding_Lights_Weeknd_Dance_Party',
+    metadata: { title: 'DNA Lounge: Blinding Lights: The Weeknd Dance Party (2025-04-05)', creator: '', subject: 'DNA Lounge' },
+  };
+  const track = {
+    identifier: 'Blinding_lights_signature',
+    metadata: { title: 'Blinding lights signature', creator: 'The weeknd', subject: '' },
+  };
+  const words = t.archiveQueryTerms('blinding lights weeknd');
+  assert.ok(t.archiveSongRelevance(track, words) > t.archiveSongRelevance(chartShow, words),
+    'the song must outrank a chart show that merely lists the artist in its subject');
+  assert.ok(t.archiveSongRelevance(track, words) > t.archiveSongRelevance(clubNight, words),
+    'a four-hour club night whose title contains every word must not outrank the song');
+  // A word is only a match as a whole word.
+  assert.strictEqual(t.fileWordsMatch('tonight.mp3', ['night']), 0);
+  assert.strictEqual(t.fileWordsMatch('the night.mp3', ['night']), 1);
+});
+
+test('archive offers the track that was searched for, not the first file in the item', () => {
+  // An album item holds a dozen files and they were sorted by format and name
+  // alone, so "hotel california eagles" came back as "01 Pump It.mp3".
+  const album = [
+    { name: '01 Pump It.mp3', size: 3000000, length: '2:30' },
+    { name: 'eagles-hotel california.mp3', size: 5000000, length: '6:30' },
+  ];
+  const words = archive.__test.archiveQueryTerms('hotel california eagles');
+  const picked = archive.__test.pickAudioFile(album, words);
+  assert.strictEqual(picked.name, 'eagles-hotel california.mp3');
+  // With no query to match, the old format-then-name order still applies.
+  assert.strictEqual(archive.__test.pickAudioFile(album).name, '01 Pump It.mp3');
+});
+
+test('archive keeps unnumbered audio instead of dropping it, but ranks it below a track', () => {
+  // "01 - HOTEL CALIFORNIA" was read as a 2-character name and the item was
+  // thrown away; a bare unnumbered file is a weaker candidate, not no candidate.
+  const t = archive.__test;
+  const item = { identifier: 'eagles_hotel_california_1977', metadata: { subject: 'Eagles,Hotel California' } };
+  const numbered = t.archiveMusicScore(item, [{ name: '01 - HOTEL CALIFORNIA.flac', size: 1, length: '6:30' }]);
+  const unnumberedSingle = t.archiveMusicScore(item, [{ name: 'hotel california.mp3', size: 1, length: '6:30' }]);
+  assert.ok(numbered > 0, 'a "01 - Name" file must not be read as a two-character name');
+  assert.ok(unnumberedSingle > 0, 'an unnumbered but correctly-named file must survive');
+  assert.ok(numbered > unnumberedSingle);
+  assert.strictEqual(t.archiveMusicScore({ identifier: 'x', metadata: {} }, [{ name: 'notes.txt', size: 1 }]), 0);
 });
 
 test('archive reuses one metadata cache and never stores a failure', () => {
@@ -307,6 +436,36 @@ test('the iTunes bridge retries a dropped connection instead of failing the sear
   }
 });
 
+test('the login modal never claims a provider is ready when it cannot be reached', () => {
+  // Deezer, YT Music and SoundCloud are keyless, so the modal used to say "no
+  // sign-in needed — search and play instantly" and stop. On this network all
+  // three are DNS-sinkholed: their /status route still answers
+  // configured:true, loggedIn:true from a hardcoded default, and only the
+  // search itself fails. The promise is kept by nothing, so the modal has to
+  // probe reachability and say so.
+  const loginText = read('public/js/modules/08-account/03-login-modal-flows.js');
+  assert.match(loginText, /async function probeProviderReachability\(provider\)/);
+  assert.match(loginText, /\/api\/' \+ provider \+ '\/status/);
+  assert.match(loginText, /function providerReachabilityStatus\(provider, overrideReachable\)/);
+  // An unreachable provider must not be shown as ready, and its button must not
+  // stay a dead control.
+  const branch = loginText.slice(
+    loginText.indexOf('if (loginProvider === \'ytmusic\''),
+    loginText.lastIndexOf('updateLoginNodeGraphUi();'));
+  assert.ok(branch.length > 0, 'expected the keyless-provider branch of updateLoginProviderUi');
+  assert.match(branch, /providerReachabilityStatus\(loginProvider\)/);
+  assert.ok(!/provMeta\.label \|\| loginProvider\) \+ ' — no sign-in needed\. Search and play instantly\.'/.test(branch),
+    'the unconditional "play instantly" copy must be gone');
+
+  // The account panel rows are the other place that printed "ready".
+  const modalText = read('public/js/modules/08-account/04-user-modal-logout.js');
+  for (const provider of ['ytmusic', 'deezer', 'soundcloud']) {
+    assert.match(modalText, new RegExp("providerReachabilityStatus\\('" + provider + "'\\)"),
+      provider + ' row must reflect reachability');
+  }
+  assert.ok(!/addDeezer\.textContent = 'Deezer — ready'/.test(modalText), 'an unconditional "ready" must be gone');
+});
+
 test('the iTunes bridge waits long enough to answer instead of 502ing', () => {
   const source = read('itunes-api.js');
   const match = /REQUEST_TIMEOUT_MS = (\d+)/.exec(source);
@@ -316,4 +475,103 @@ test('the iTunes bridge waits long enough to answer instead of 502ing', () => {
   // A track with no preview can never play through this provider, and the
   // search API ranks those first — the top result became a dead click.
   assert.match(source, /if \(!mapped \|\| !mapped\.playable \|\| seen\.has\(mapped\.id\)\) continue;/);
+});
+
+test('an empty archive result is never cached, and one slow search never gets thrown away', () => {
+  // Both of these were found from the same live symptom. Searching "blinding
+  // lights" returned zero songs in 3 MILLISECONDS, twenty times in a row, while
+  // "hotel california eagles" took 36s and returned twelve — through a proxy
+  // that was answering HTTP 200. Two separate defects were stacked on top of
+  // each other here, and both had to be fixed or the query stayed dead:
+  //
+  //   1. cacheWrap stored `[]` for thirty minutes. fetchArchiveDocs throws when
+  //      the 15s request timeout fires, and the catch that swallowed it returns
+  //      [] — an empty ARRAY, which is not null, so it was cached. One timeout
+  //      during the initial burst turned that query into a permanent 3ms "no
+  //      results" for the rest of the session, and every later retry just
+  //      re-read the poison.
+  //   2. SEARCH_PROVIDER_TIMEOUT_BY_PROVIDER.archive is 25s, but the archive
+  //      fan-out is ~12 HTTP round-trips (1 search + ~10 metadata) and each one
+  //      costs 2-6s through this network's proxy, so the total lands at 35-40s.
+  //      The frontend gave up at 25s and discarded results that were seconds from
+  //      arrival — which is why the very first search of a session showed
+  //      previews only and a repeat search (now served from cache) showed the
+  //      full-length tracks all along.
+  const source = read('internet-archive-api.js');
+  assert.match(
+    source,
+    /return \[\];\s*\}/,
+    'expected the search producer to still return an empty list on failure'
+  );
+  // The fix: an empty search is a failure to learn, not an answer. Storing it
+  // is what turned a 15s timeout into a permanent 3ms empty result.
+  assert.match(
+    source,
+    /if \(Array\.isArray\(value\) && value\.length === 0\) return value;/,
+    'an empty search result must not be cached'
+  );
+
+  const search = read('public/js/modules/05-playback/07-search.js');
+  const budget = /SEARCH_PROVIDER_TIMEOUT_BY_PROVIDER = \{ archive: (\d+) \}/.exec(search);
+  assert.ok(budget, 'the archive needs its own timeout budget');
+  const ms = Number(budget[1]);
+  // Measured worst case on this network through the proxy: 38s. The old 25s
+  // budget threw those results away and the UI fell back to 30-second previews.
+  assert.ok(ms >= 45000, 'archive fan-out must outlast its own round-trips; got ' + ms + 'ms');
+
+  // The inner request timeout is what produces the cached-empty in the first
+  // place, so it has to leave room for the waves to run.
+  const inner = /REQUEST_TIMEOUT_MS = (\d+)/.exec(source);
+  assert.ok(inner, 'the archive request timeout must be declared');
+  assert.ok(Number(inner[1]) >= 20000, 'a 15s per-request timeout expires mid-wave; got ' + inner[1]);
+});
+
+test('a dead proxy can no longer take down the sources that reach the network on their own', () => {
+  // THE root cause of "every song is a 30-second preview", found by probing the
+  // live app rather than reading it. Three measurements, all at once:
+  //
+  //   proxy 192.168.1.99:10808 -> TCP connect TIMES OUT entirely
+  //   archive.org DIRECT       -> 200 in 1362ms
+  //   itunes.apple.com DIRECT  -> 200 in 1046ms
+  //   lrclib.net DIRECT        -> 200 in 565ms
+  //
+  // The two sources that need no account were still being routed through that
+  // dead proxy (data/app-proxy.json had archive:true and itunes:true, written at
+  // 21:04). So a proxy the user had stopped running silently removed the only
+  // two full-length sources on the machine: every request hung until it timed
+  // out, the archive search caught the failure and reported zero results, and
+  // the UI fell back to Deezer/iTunes previews — which is exactly the "all songs
+  // still preview" report. Same single cause for the broken login modal and the
+  // empty lyrics, which is why three unrelated features failed together.
+  //
+  // A user-selected proxy stays a user-selected proxy, and an explicit "off"
+  // is still honoured. What must not happen is a dead proxy taking a working
+  // direct route with it — the two keyless sources always have one.
+  const source = read('app-proxy.js');
+  assert.match(
+    source,
+    /function isSelectedFor\(/,
+    'expected the per-app proxy selector'
+  );
+  assert.match(
+    source,
+    /KEYLESS_DIRECT_FALLBACK_APPS/,
+    'the keyless sources must be able to bypass a dead proxy'
+  );
+  // The fallback has to be an actual retry, not a flag: the applier runs before
+  // the request exists, so the decision has to be made from a live probe.
+  assert.match(
+    source,
+    /function markProxyHostUnreachable\(/,
+    'a failed tunnel must mark the proxy host unreachable'
+  );
+  assert.match(
+    source,
+    /function proxyHostIsUnreachable\(/,
+    'the applier must be able to skip a proxy already known to be dead'
+  );
+  // And the panel has to stop reporting a dead proxy as "Active".
+  const panel = read('public/js/modules/12-remote/01-app-proxy-panel.js');
+  assert.match(panel, /proxyHostIsUnreachable|hostUnreachable|unreachable/,
+    'the proxy panel must not report a dead proxy as active');
 });

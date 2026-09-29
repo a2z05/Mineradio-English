@@ -80,12 +80,16 @@ test('Qishui login product surface uses only the signed Passport QR flow', () =>
   assert.doesNotMatch(server, /pn === '\/api\/qishui\/login\/token'/);
   assert.doesNotMatch(server, /pn === '\/api\/qishui\/login\/cookie'/);
 
-  assert.match(ui, /请使用抖音 App 扫码并确认登录/);
-  assert.match(ui, /pollQishuiQr/);
-  assert.match(ui, /\/api\/qishui\/login\/qrcode/);
-  assert.match(ui, /\/api\/qishui\/login\/check/);
+  // EN-FORK: Qishui is not a login provider in this fork — the whole QR surface
+  // was removed from the login modal (see 03-login-modal-flows.js: pollQishuiQr
+  // and the Douyin scan prompt are gone). The backend behind it is untouched and
+  // still asserted above and below, so this test must not require the UI to
+  // drive it, and must not let the Chinese-only paths come back.
+  assert.doesNotMatch(ui, /function (?:pollQishuiQr|scheduleQishuiQrPoll)\s*\(/);
+  assert.doesNotMatch(ui, /\/api\/qishui\/login\/(?:qrcode|check)/);
   assert.doesNotMatch(ui, /读取本机汽水|本机会话|Token 导入|submitQishuiTokenLogin/);
   assert.doesNotMatch(ui, /openQishuiMusicLogin/);
+  assert.doesNotMatch(ui, /请使用抖音 App 扫码并确认登录/);
 
   assert.doesNotMatch(main, /ipcMain\.handle\('qishui-music-open-login'/);
   assert.doesNotMatch(preload, /openQishuiMusicLogin/);

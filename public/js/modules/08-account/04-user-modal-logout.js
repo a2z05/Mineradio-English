@@ -27,13 +27,19 @@ function updateUserModalUi() {
       vipEl.textContent = 'ID: ' + ((st && st.userId) || '-') + '  /  ' + spProduct + '  /  Syncs playlists and Liked Songs';
       vipEl.style.color = hasProviderVip('spotify', st) ? 'rgba(30,215,96,0.86)' : 'rgba(30,215,96,0.60)';
     } else if (activeAccountProvider === 'ytmusic') {
-      vipEl.textContent = 'YT Music — ready to play · No sign-in needed';
+      vipEl.textContent = providerReachabilityStatus('ytmusic').reachable
+        ? 'YT Music — ready to play · No sign-in needed'
+        : 'YT Music — not reachable on this network · No sign-in needed';
       vipEl.style.color = 'rgba(255,60,60,0.78)';
     } else if (activeAccountProvider === 'deezer') {
-      vipEl.textContent = 'Deezer — ready to play · Previews + auto fallback';
+      vipEl.textContent = providerReachabilityStatus('deezer').reachable
+        ? 'Deezer — ready to play · Previews + auto fallback'
+        : 'Deezer — not reachable on this network · No sign-in needed';
       vipEl.style.color = 'rgba(254,223,0,0.86)';
     } else if (activeAccountProvider === 'soundcloud') {
-      vipEl.textContent = 'SoundCloud — ready to play · Direct streams';
+      vipEl.textContent = providerReachabilityStatus('soundcloud').reachable
+        ? 'SoundCloud — ready to play · Direct streams'
+        : 'SoundCloud — not reachable on this network · No sign-in needed';
       vipEl.style.color = 'rgba(255,110,0,0.86)';
     } else {
       var spProduct2 = st && st.product === 'premium' ? 'Spotify Premium' : (st && st.product ? ('Spotify ' + String(st.product).toUpperCase()) : 'Spotify plan unknown');
@@ -46,9 +52,12 @@ function updateUserModalUi() {
     if (btn) btn.classList.toggle('active', key === 'both' ? dualAccountMode : (!dualAccountMode && activeAccountProvider === key));
   });
   if (addSpotify) addSpotify.textContent = hasPlatformLogin('spotify') ? 'View Spotify' : 'Connect Spotify';
-  if (addYtmusic) addYtmusic.textContent = 'YT Music — ready';
-  if (addDeezer) addDeezer.textContent = 'Deezer — ready';
-  if (addSoundcloud) addSoundcloud.textContent = 'SoundCloud — ready';
+  // EN-FORK: these three are keyless, so "ready" was always printed. Where the
+  // network blocks them that promise is what a click then fails to keep, so the
+  // row says whether it can actually be reached.
+  if (addYtmusic) addYtmusic.textContent = 'YT Music — ' + (providerReachabilityStatus('ytmusic').reachable ? 'ready' : 'unreachable here');
+  if (addDeezer) addDeezer.textContent = 'Deezer — ' + (providerReachabilityStatus('deezer').reachable ? 'ready' : 'unreachable here');
+  if (addSoundcloud) addSoundcloud.textContent = 'SoundCloud — ' + (providerReachabilityStatus('soundcloud').reachable ? 'ready' : 'unreachable here');
   if (logoutBtn) logoutBtn.textContent =
     activeAccountProvider === 'spotify' ? 'Log out of Spotify' :
     (activeAccountProvider === 'ytmusic' ? 'YT Music — no sign-out needed' :

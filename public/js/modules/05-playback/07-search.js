@@ -1012,7 +1012,12 @@ function scoreSongSearchResult(song, q, sourceIndex) {
     else score -= (coverage.total - coverage.matched) * 46;
   }
   if (queryVersion) {
-    score += songVersion === queryVersion ? 64 : -72;
+    // A derivative version ("2013 Remaster", "Live at The Forum") scores below
+    // the same song as released. The gap is -120 rather than -72 so the
+    // full-length bonus above can still carry a full-length recording of the
+    // derivative above a 30-second preview of the original — the user asked
+    // for that exact recording.
+    score += songVersion === queryVersion ? 64 : -120;
   } else if (songVersion) {
     score -= 46;
   } else if (searchLooksLikeDerivative(raw)) {
@@ -1020,6 +1025,23 @@ function scoreSongSearchResult(song, q, sourceIndex) {
   }
   score += searchPopularityScore(song, sourceIndex);
   if (song && song.playable === false) score -= 6;
+  // A whole track is worth much more than a 30-second preview of the same
+  // song, and "much more" is the operative word. playbackMode is the only field
+  // that distinguishes them: iTunes and Deezer declare 'preview' on every
+  // search result they return, the Archive declares 'direct-url'.
+  //
+  // The bonus used to be +30 against a coverage band of ±100 and a name-match
+  // band of up to 170, so it was routinely smaller than the difference between
+  // two Deezer results — "Hotel California (2013 Remaster)" and its live cut
+  // took the top two slots ahead of every full-length copy. On this network
+  // those previews are the whole visible failure: Deezer, iTunes, Spotify and
+  // SoundCloud either block or gate playback, so a preview at rank 1 is a dead
+  // click and a full-length track at rank 4 never gets chosen. The bonus now
+  // dominates the bands it is meant to override, and the identical-version
+  // penalty (-72) is scaled to match so "prefer the record" and "prefer the
+  // whole thing" do not cancel out.
+  if (song && song.playbackMode === 'direct-url' && song.playable !== false) score += 220;
+  else if (song && song.playbackMode === 'preview') score -= 60;
   return score;
 }
 // EN-FORK global swap: merge across the global providers. Legacy Chinese
@@ -1045,8 +1067,13 @@ function mergeSongSearchResults(ytmusicSongs, deezerSongs, soundcloudSongs, spot
     if (canonicalKey) canonicalSeen[canonicalKey] = out.length;
     out.push(song);
   }
-  (itunesSongs || []).forEach(function (song, i) { push(song, i); });
+  // Full-length sources are merged before previews. Where two results are
+  // equally relevant to what was typed, the earlier push wins — and iTunes can
+  // only ever offer a 30-second preview, so on a network where every other
+  // provider is blocked an equal-score iTunes hit was the only one showing, and
+  // the full-length Archive track it shadowed was dropped entirely.
   (archiveSongs || []).forEach(function (song, i) { push(song, i); });
+  (itunesSongs || []).forEach(function (song, i) { push(song, i); });
   (ytmusicSongs || []).forEach(function (song, i) { push(song, i); });
   (deezerSongs || []).forEach(function (song, i) { push(song, i); });
   (soundcloudSongs || []).forEach(function (song, i) { push(song, i); });
@@ -1085,6 +1112,17 @@ function mergeUniqueSearchSongPools(existing, incoming) {
 // as fast as its slowest member — ten to twenty seconds on this network — and a
 // dead host could hold the whole search open indefinitely.
 var MUSIC_SEARCH_PROVIDER_TIMEOUT_MS = 12000;
+// The Internet Archive resolves each item with its own metadata request, so it
+// is the slowest source by construction. Twelve seconds discarded every one of
+// them, which is why the only full-length source on this network never appeared
+// and every result the user clicked was a 30-second iTunes preview. The 25s
+// budget that followed was STILL too short: measured through this network's
+// proxy the fan-out is one advancedsearch (3.1-6.4s) plus a dozen metadata
+// lookups (~2-11s each, 6 at a time), landing at 35-40s — so the frontend kept
+// aborting results that were seconds from arrival and falling back to previews.
+// The budget below covers the measured worst case with headroom. The other
+// sources keep the short one, because none of them can stream here anyway.
+var SEARCH_PROVIDER_TIMEOUT_BY_PROVIDER = { archive: 60000 };
 
 // onProgress, when given, is called with the merge-so-far every time a provider
 // settles, so the fastest source paints first instead of waiting for the slowest.
@@ -1162,7 +1200,9 @@ async function fetchMusicSearchResults(q, mode, previousPages, onProgress) {
     var previous = previousPages && previousPages[provider];
     var offset = previous ? Math.max(0, Number(previous.nextOffset) || 0) : 0;
     var limit = pageLimitByProvider[provider] || 12;
-    return apiJson(searchProviderUrl(provider, q, limit, offset), { timeoutMs: MUSIC_SEARCH_PROVIDER_TIMEOUT_MS })
+    return apiJson(searchProviderUrl(provider, q, limit, offset), {
+      timeoutMs: SEARCH_PROVIDER_TIMEOUT_BY_PROVIDER[provider] || MUSIC_SEARCH_PROVIDER_TIMEOUT_MS
+    })
       .then(function (value) {
         slots[provider] = { status: 'fulfilled', value: { provider: provider, offset: offset, requestedLimit: limit, value: value || {} } };
       }, function (reason) {

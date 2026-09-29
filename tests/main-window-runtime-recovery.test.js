@@ -18,15 +18,17 @@ function sourceBlock(text, startNeedle, endNeedle) {
 }
 
 function testLoginWishTitle() {
+  // EN-FORK: the panel title is the English translation of the original
+  // "心愿是" (Your wish is). The lock itself is unchanged — only this heading.
   assert.match(
     htmlText,
-    /<h1>\s*心愿是\s*<\/h1>/,
-    '彩蛋解锁面板标题必须保持为“心愿是”'
+    /<h1>\s*Your wish is\s*<\/h1>/,
+    'the easter-egg unlock panel heading must stay "Your wish is"'
   );
   assert.doesNotMatch(
     htmlText,
     /<h1>\s*我希望\s*<\/h1>/,
-    '旧的“我希望”标题不应回归'
+    'the old "我希望" heading must not come back'
   );
 }
 

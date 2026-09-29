@@ -52,7 +52,9 @@ test('daily recommendation modal consumes the full frontend dataset without an e
   assert.doesNotMatch(render, /homeDiscoverState\.songs\.slice\s*\(\s*0\s*,\s*8\s*\)/);
   assert.match(render, /id="home-platform-daily-grid"/);
   assert.match(render, /renderHomePlatformDailyWindow\s*\(\s*true\s*\)/);
-  assert.match(render, /已读取全部/);
+  // EN-FORK: same promise, English copy — the status line reports the whole
+  // list as loaded rather than a truncated prefix.
+  assert.match(render, /All ' \+ songs\.length \+ ' daily picks loaded/);
   assert.doesNotMatch(render, /热门播客|网易云热门播客|netease-podcast/);
 });
 
@@ -81,7 +83,10 @@ test('virtualized daily cards preserve absolute indexes and full-queue playback'
   const renderWindow = namedFunctionSource(dashboardScript, 'renderHomePlatformDailyWindow');
   assert.ok(renderWindow, 'expected renderHomePlatformDailyWindow()');
   assert.match(renderWindow, /for \(var index = range\.start; index < range\.end; index \+= 1\)/);
-  assert.match(renderWindow, /homePlatformRecommendationCard\('netease-song', index, songs\[index\]/);
+  // EN-FORK: 'daily-song' replaces the old 'netease-song' card kind; the index is
+  // still the absolute index into the daily list, which is what the click
+  // handler hands to playHomeSong().
+  assert.match(renderWindow, /homePlatformRecommendationCard\('daily-song', index, songs\[index\]/);
   assert.match(renderWindow, /homePlatformRecommendationSpacer\(range\.topRows/);
   assert.match(renderWindow, /homePlatformRecommendationSpacer\(range\.bottomRows/);
 
@@ -90,6 +95,7 @@ test('virtualized daily cards preserve absolute indexes and full-queue playback'
   assert.match(playDaily, /playQueue\s*=\s*homeDiscoverState\.songs\.map\(cloneSong\)/);
   assert.match(playSong, /playQueue\s*=\s*homeDiscoverState\.songs\.map\(cloneSong\)/);
   assert.doesNotMatch(playDaily + playSong, /\.slice\s*\(/);
+  assert.match(dashboardScript, /kind === 'daily-song'\) \{ playHomeSong\(index\); return; \}/);
 });
 
 test('daily viewport updates are scroll-driven and animation-frame throttled', () => {

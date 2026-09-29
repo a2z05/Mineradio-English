@@ -63,7 +63,12 @@ test('daily recommendation mapper preserves every valid upstream song in order',
 test('discover home returns the complete mapped daily list without a fixed song cap', () => {
   const discoverSource = namedFunctionSource(source, 'handleDiscoverHome');
   assert.ok(discoverSource, 'expected handleDiscoverHome()');
-  assert.match(discoverSource, /dailySongs\s*=\s*mapDailyRecommendationSongs\(raw\)/);
+  // EN-FORK: the global providers' songs are already mapped by their own API
+  // modules and must pass through whole. The NetEase-shaped mapper is kept for
+  // that shape only — running Spotify/Deezer/YT rows through it would stamp
+  // them with a provider that is not theirs.
+  assert.match(discoverSource, /const dailySongs = mergedDailySongs\(dailyCandidates\)/);
+  assert.doesNotMatch(discoverSource, /dailySongs\s*=\s*\w+\.songs\.slice/);
   assert.doesNotMatch(discoverSource, /dailySongs[\s\S]{0,300}\.slice\s*\(\s*0\s*,\s*(?:8|12)\s*\)/);
   assert.match(discoverSource, /dailySongTotal:\s*dailySongs\.length/);
   assert.match(discoverSource, /dailySongsComplete:\s*true/);

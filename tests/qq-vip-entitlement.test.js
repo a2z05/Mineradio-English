@@ -405,21 +405,22 @@ function testDesktopReauthCookieSelectionAndBudgets() {
     'an already-complete QQ playback partition must be recovered before force reauthorization clears partial state'
   );
   assert(/ipcRenderer\.invoke\('qq-music-open-login', options \|\| \{\}\)/.test(preloadSource));
+  // EN-FORK: QQ is not a login provider in this fork (normalizeLoginProviderKey
+  // folds everything non-global to Spotify), so the renderer no longer builds a
+  // forceReauth flag at all. What still has to hold is the main-process side:
+  // a completed playback partition is recovered BEFORE forceReauth is allowed to
+  // clear state, and a merely-logged-in account never forces a clear.
   assert(
-    /forceReauth:\s*!!\(qqLoginStatus && qqLoginStatus\.authorizationIncomplete && qqLoginStatus\.playbackKeyReady === false\)/.test(loginSource),
-    'QQ reauthorization must not clear a valid partition merely because the account is logged in'
+    !/forceReauth/.test(loginSource),
+    'the login modal must not be able to clear the official QQ partition at all'
   );
   assert(
-    !/forceReauth:\s*!!\(qqLoginStatus && qqLoginStatus\.loggedIn\)/.test(loginSource),
+    /qqLoginStatus\.loggedIn/.test(loginSource) === false || !/forceReauth/.test(loginSource),
     'loggedIn alone must never force-clear the official QQ login partition'
   );
   assert(
-    /qqLoginStatus\.authorizationIncomplete[\s\S]{0,100}qqLoginStatus\.playbackKeyReady === false/.test(loginSource),
-    'the login panel must distinguish missing playback authorization from membership refresh'
-  );
-  assert(
-    /qqNeedsAuthRefresh \? openQQWebLogin : \(qqLoginStatus\.loggedIn \? refreshQr : openQQWebLogin\)/.test(loginSource),
-    'membership refresh must use the status probe instead of reopening and clearing OAuth'
+    /const initialCookie = await readQQLoginCookieHeader\(cookieSession\);[\s\S]{0,300}qqCookieHasPlaybackLogin\(initialCookie\)/.test(mainSource),
+    'the QQ playback partition must still be probed before any state is cleared'
   );
   assert(
     /function isTrustedQQLoginUrl[\s\S]{0,700}tencent\.com/.test(mainSource) &&
@@ -550,7 +551,9 @@ function testDesktopReauthCookieSelectionAndBudgets() {
 
   const fallbackSource = fs.readFileSync(path.join(ROOT, 'public/js/modules/05-playback/11-provider-fallback.js'), 'utf8');
   assert(/membershipUnknown[\s\S]{0,700}!membershipUnknown/.test(fallbackSource));
-  assert(/会员待同步/.test(fallbackSource), 'unknown QQ membership must not be rendered as an ordinary account');
+  // EN-FORK: "会员待同步" is translated as "Membership pending sync"; an
+  // unknown membership must still not read as an ordinary account.
+  assert(/Membership pending sync/.test(fallbackSource), 'unknown QQ membership must not be rendered as an ordinary account');
   assert(/membershipUnknown[\s\S]{0,500}vipSyncState:\s*authIncomplete/.test(serverSource));
   assert(
     /preserveQQVipStalePositive\(cached,\s*value/.test(serverSource),

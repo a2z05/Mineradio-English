@@ -89,11 +89,20 @@
     if (!line) return;
     if (!status.configured) {
       line.textContent = 'No proxy configured.';
+      line.style.color = '';
       return;
     }
     var selected = APP_LABELS.filter(function (p) { return status.apps && status.apps[p[0]]; }).map(function (p) { return p[1]; });
-    line.textContent = (status.enabled ? 'Active' : 'Saved but off') + ' — ' + status.protocol.toUpperCase() + ' ' + status.hostLabel +
-      (selected.length ? ' · for: ' + selected.join(', ') : ' · for: nothing');
+    // EN-FORK: "Active" used to mean "you ticked the box", so a proxy that had
+    // stopped answering still read as Active and nothing told the user why
+    // their sources were dead. Say which of the two is wrong.
+    var head = status.hostUnreachable
+      ? 'Not answering'
+      : (status.enabled ? 'Active' : 'Saved but off');
+    line.style.color = status.hostUnreachable ? '#ff7a7a' : '';
+    line.textContent = head + ' — ' + status.protocol.toUpperCase() + ' ' + status.hostLabel +
+      (selected.length ? ' · for: ' + selected.join(', ') : ' · for: nothing') +
+      (status.hostUnreachable ? ' · nothing is listening there, so the apps above are connecting directly' : '');
   }
 
   function loadIntoForm() {
@@ -183,11 +192,15 @@
     if (!btn) return;
     var configured = !!(status && status.configured);
     var enabled = !!(status && status.enabled);
-    btn.classList.toggle('on', enabled);
-    btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-    btn.title = configured
-      ? (enabled ? 'Proxy: ON — click to disable' : 'Proxy: OFF — click to enable')
-      : 'Proxy not configured — click to set up';
+    // Unreachable outranks "on": the light should follow the truth, not the tick.
+    var unreachable = !!(status && status.hostUnreachable);
+    btn.classList.toggle('on', enabled && !unreachable);
+    btn.setAttribute('aria-pressed', enabled && !unreachable ? 'true' : 'false');
+    btn.title = unreachable
+      ? 'Proxy not answering — keyless sources are going direct (double-click for details)'
+      : configured
+        ? (enabled ? 'Proxy: ON — click to disable' : 'Proxy: OFF — click to enable')
+        : 'Proxy not configured — click to set up';
   }
 
   function syncProxyToggle() {

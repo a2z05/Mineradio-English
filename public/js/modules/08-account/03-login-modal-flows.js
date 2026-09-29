@@ -586,6 +586,61 @@ function setLoginProvider(provider, silent) {
   updateLoginProviderUi();
   if (!silent && document.getElementById('login-modal').classList.contains('show')) refreshQr();
 }
+// What this network can actually reach, refreshable from the modal with one
+// request. "Search and play instantly" is what the build wants to say about
+// the three global providers, and it is true wherever those providers resolve.
+// Where they are DNS-sinkholed it is a lie the user discovers only by typing a
+// search that returns nothing, so the modal states the constraint up front: the
+// provider needs no account, but this network cannot reach it. The result is
+// cached per provider (TTL below) because re-probing on every modal open would
+// add three network round-trips to something that changes on router time.
+var providerReachabilityCache = {};
+var PROVIDER_REACHABILITY_TTL_MS = 5 * 60 * 1000;
+function providerReachabilityKey(provider) { return String(provider || ''); }
+async function probeProviderReachability(provider) {
+  provider = providerReachabilityKey(provider);
+  var now = Date.now();
+  var hit = providerReachabilityCache[provider];
+  if (hit && hit.expiresAt > now) return hit.reachable;
+  var reachable = true;
+  try {
+    var res = await apiJson('/api/' + provider + '/status?t=' + now, { timeoutMs: 8000 });
+    // "logged in" is a build-side default; reachability is whether the provider
+    // actually answered instead of timing out. A configured:false (soundcloud
+    // here) means it answers with no catalogue, which is also usable.
+    reachable = !!(res && typeof res === 'object' && !res.error);
+  } catch (e) {
+    reachable = false;
+  }
+  providerReachabilityCache[provider] = { reachable: reachable, expiresAt: now + PROVIDER_REACHABILITY_TTL_MS };
+  return reachable;
+}
+function providerReachabilityStatus(provider, overrideReachable) {
+  provider = providerReachabilityKey(provider);
+  var label = (typeof platformMeta === 'function' && platformMeta(provider).label) || provider;
+  var reachable = overrideReachable;
+  if (typeof reachable !== 'boolean') {
+    var hit = providerReachabilityCache[provider];
+    reachable = hit ? hit.reachable : true;
+    // A stale "reachable" is worse than a stale "unreachable": re-probe in the
+    // background so the next open shows the truth.
+    if (!hit) probeProviderReachability(provider).then(function () { try { updateLoginProviderUi(); } catch (e) { } });
+  }
+  if (reachable) {
+    return {
+      reachable: true,
+      summary: label + ' is ready — no sign-in needed.',
+      detail: label + ' — no sign-in needed. Search and play instantly.',
+      action: 'No sign-in needed',
+    };
+  }
+  return {
+    reachable: false,
+    summary: label + ' cannot be reached on this network.',
+    detail: label + ' needs no account, but this network cannot reach it — it resolves to a blocked address here. Spotify and Internet Archive work; this provider will answer again on a network where it resolves.',
+    action: 'Proxy settings…',
+  };
+}
 function spotifyLoginStatusText(info) {
   info = info || spotifyLoginStatus || {};
   if (info.loggedIn) return 'Spotify connected / ' + (info.product === 'premium' ? 'Premium' : (info.product ? String(info.product).toUpperCase() : 'Plan unknown')) + ' / Syncs playlists and Liked Songs';
@@ -738,14 +793,31 @@ function updateLoginProviderUi() {
   if (loginProvider === 'ytmusic' || loginProvider === 'deezer' || loginProvider === 'soundcloud') {
     if (spotifyBtn) spotifyBtn.classList.toggle('active', false);
     var provMeta = platformMeta(loginProvider);
+    // EN-FORK: "no sign-in needed" is true, and it used to be the whole message.
+    // That read as "nothing here works" on any network where the provider is
+    // unreachable, because the modal never asked whether it could be reached:
+    // Deezer, YT Music and SoundCloud report configured:true and loggedIn:true
+    // from a hardcoded default and only fail when a search is actually sent.
+    // The honest status is the reachability probe — which provider it is, that
+    // it needs no account, and whether this network can reach it at all.
+    var provStatus = providerReachabilityStatus(loginProvider);
     if (title) title.textContent = provMeta.label || loginProvider;
-    if (desc) desc.textContent = (provMeta.label || loginProvider) + ' — no sign-in needed. Search and play instantly.';
+    if (desc) desc.textContent = provStatus.detail;
     if (shell) { shell.classList.remove('qq-preview', 'netease-preview'); shell.classList.remove('web-login-preview'); }
     if (qqPanel) { qqPanel.classList.remove('show', 'spotify-guide-panel'); }
     if (qqCookieToggle) qqCookieToggle.classList.remove('show');
     if (qqCard) { qqCard.style.display = 'none'; }
-    if (st) { st.className = 'preview'; st.textContent = (provMeta.label || loginProvider) + ' is ready — no sign-in needed.'; }
-    if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = 'No sign-in needed'; refreshBtn.onclick = null; }
+    if (st) { st.className = provStatus.reachable ? 'scan' : 'fail'; st.textContent = provStatus.summary; }
+    if (refreshBtn) {
+      refreshBtn.disabled = !provStatus.reachable;
+      refreshBtn.textContent = provStatus.action;
+      // A blocked provider has nothing to retry, so the button becomes the way
+      // to find out why rather than a dead control.
+      refreshBtn.onclick = provStatus.reachable ? null : function () {
+        if (typeof window.openAppProxyPanel === 'function') window.openAppProxyPanel();
+        else if (typeof showToast === 'function') showToast('No proxy panel is available in this build');
+      };
+    }
     if (qqCookieSaveBtn) { qqCookieSaveBtn.disabled = true; qqCookieSaveBtn.textContent = 'No sign-in needed'; }
     updateLoginNodeGraphUi();
     return;

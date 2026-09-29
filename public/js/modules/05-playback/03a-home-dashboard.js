@@ -962,8 +962,38 @@ function homePlatformRecommendationSpacer(rows, position) {
 }
 
 function renderHomePlatformDailyWindow(force) {
-  // EN-FORK: NetEase daily window removed — platform picks now use feed cards only.
-  void force;
+  // EN-FORK: the daily window used to be a NetEase-only branch. NetEase is gone,
+  // but the daily list itself is not: /api/discover/home now fills it from
+  // Spotify/Deezer/YT, and the stub left every one of those songs unrendered.
+  var list = document.getElementById('home-platform-recommend-list');
+  var grid = document.getElementById('home-platform-daily-grid');
+  if (!list || !grid) return;
+  var songs = Array.isArray(homeDiscoverState.songs) ? homeDiscoverState.songs : [];
+  if (!songs.length) return;
+  var columns = homePlatformRecommendationGridColumns(grid);
+  var range = homePlatformRecommendationDailyRange(
+    songs.length,
+    columns,
+    list.scrollTop,
+    list.clientHeight,
+    grid.offsetTop
+  );
+  var signature = songs.length + '|' + columns + '|' + range.start + '|' + range.end;
+  if (!force && grid.getAttribute('data-render-window') === signature) return;
+  var html = [homePlatformRecommendationSpacer(range.topRows, 'top')];
+  for (var index = range.start; index < range.end; index += 1) {
+    html.push(homePlatformRecommendationCard('daily-song', index, songs[index], 'Daily picks'));
+  }
+  html.push(homePlatformRecommendationSpacer(range.bottomRows, 'bottom'));
+  grid.innerHTML = html.join('');
+  grid.setAttribute('data-render-window', signature);
+  grid.setAttribute('aria-label', 'All daily picks, ' + songs.length + ' songs');
+  var count = document.getElementById('home-platform-daily-count');
+  if (count) {
+    count.textContent = songs.length
+      ? ' · ' + (range.start + 1) + '–' + range.end + ' / ' + songs.length
+      : '';
+  }
 }
 
 function scheduleHomePlatformDailyWindowRender() {
@@ -997,6 +1027,38 @@ function renderHomePlatformRecommendations() {
     tab.classList.toggle('active', selected);
   });
   status.classList.remove('is-error');
+
+  // EN-FORK: the daily list lives in its own virtualized section. It used to sit
+  // behind `if (source === 'netease')`; NetEase is gone, so the branch went with
+  // it and the daily songs the server still returns had nowhere to be drawn.
+  if (source === homePlatformRecommendationDefaultSource()) {
+    var playlists = Array.isArray(homeDiscoverState.playlists) ? homeDiscoverState.playlists.slice(0, 6) : [];
+    var songs = Array.isArray(homeDiscoverState.songs) ? homeDiscoverState.songs : [];
+    var sections = [];
+    if (playlists.length) {
+      sections.push('<section><h3>Recommended playlists</h3><div class="home-platform-recommend-grid">' + playlists.map(function (item, index) {
+        return homePlatformRecommendationCard('daily-playlist', index, item, 'Recommended playlist');
+      }).join('') + '</div></section>');
+    }
+    if (songs.length) {
+      sections.push('<section><h3>Daily picks<span id="home-platform-daily-count"></span></h3>' +
+        '<div id="home-platform-daily-grid" class="home-platform-recommend-grid" role="list" aria-label="All daily picks"></div></section>');
+    }
+    if (sections.length) {
+      status.textContent = songs.length
+        ? 'All ' + songs.length + ' daily picks loaded; only the songs near the viewport are drawn while scrolling'
+        : 'From platform recommended playlists';
+      list.innerHTML = sections.join('');
+      if (songs.length) renderHomePlatformDailyWindow(true);
+    } else {
+      status.textContent = homeDiscoverState.error ? 'Failed to load platform recommendations' : 'The platform returned no recommendations yet';
+      status.classList.toggle('is-error', !!homeDiscoverState.error);
+      list.innerHTML = homePlatformRecommendationEmptyHtml(source, homeDiscoverState.loggedIn
+        ? 'The platform returned no recommendations this time; keyword search was not used to fill in.'
+        : 'Connect a platform to load recommended playlists and daily picks; keyword search was not used as a substitute.');
+    }
+    return;
+  }
 
   var feedConfig = homePlatformRecommendationFeedConfig(source);
   var feedState = homePlatformRecommendationState.feeds[source];
@@ -1140,6 +1202,10 @@ function bindHomePlatformRecommendationControls() {
     var kind = card.getAttribute('data-home-recommend-kind');
     var index = Number(card.getAttribute('data-home-recommend-index')) || 0;
     closeHomePlatformRecommendations();
+    // EN-FORK: daily cards carry the absolute index into the daily list, and
+    // playHomeSong() queues all of it — not just the visible window.
+    if (kind === 'daily-song') { playHomeSong(index); return; }
+    if (kind === 'daily-playlist') { playHomePlaylist(index); return; }
     if (/^(spotify|ytmusic|deezer|soundcloud)-song$/.test(kind)) playHomePlatformFeedSong(kind.replace(/-song$/, ''), index);
   });
   if (list) list.addEventListener('scroll', scheduleHomePlatformDailyWindowRender, { passive: true });

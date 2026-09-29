@@ -229,7 +229,12 @@ test('search pagination carries provider offsets and ignores stale sessions', ()
   // provider off screen; and the fan-out must be able to hand back a partial
   // merge instead of waiting for its slowest member.
   assert.match(searchSource, /MUSIC_SEARCH_PROVIDER_TIMEOUT_MS\s*=\s*\d+/);
-  assert.match(searchSource, /timeoutMs:\s*MUSIC_SEARCH_PROVIDER_TIMEOUT_MS/);
+  // The default budget still applies, but a source that is structurally slower
+  // than the deadline needs its own: the Archive resolves each item with its own
+  // metadata request and measured 13-22s cold, so the flat 12s discarded every
+  // one of its results and left only 30-second iTunes previews on screen.
+  assert.match(searchSource, /SEARCH_PROVIDER_TIMEOUT_BY_PROVIDER\s*=\s*\{[^}]*archive:/);
+  assert.match(searchSource, /timeoutMs:\s*SEARCH_PROVIDER_TIMEOUT_BY_PROVIDER\[provider\]\s*\|\|\s*MUSIC_SEARCH_PROVIDER_TIMEOUT_MS/);
   assert.match(searchSource, /async function fetchMusicSearchResults\(q, mode, previousPages, onProgress\)/);
   assert.match(searchSource, /onProgress\(collect\(\)\)/);
   assert.match(searchSource, /loadNextMusicSearchPage\(expectedKey\)/);

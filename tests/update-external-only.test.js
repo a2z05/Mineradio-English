@@ -26,7 +26,9 @@ function serverFunctionSource(name, nextName) {
 }
 
 test('2.1.0 update metadata accepts only a bounded HTTPS external page', () => {
-  assert.equal(packageData.version, '2.1.0');
+  // EN-FORK: release tags carry the -en.N suffix; what matters is the base
+  // version staying on the 2.1.0 line this fork shipped.
+  assert.match(packageData.version, /^2\.1\.0(-en\.\d+)?$/);
   assert.equal(packageData.mineradio.update.preview, false);
   assert.match(serverText, /function safeExternalUpdateUrl\(value\)/);
   assert.match(serverText, /raw\.length > 2048/);
@@ -38,7 +40,7 @@ test('2.1.0 update metadata accepts only a bounded HTTPS external page', () => {
   assert.match(serverText, /\n\s+downloadPageUrl,/);
   assert.match(serverText, /\n\s+downloadPages,/);
   assert.match(serverText, /patchAvailable:\s*false/);
-  assert.match(htmlText, /id="update-modal-version"[^>]*>v2\.1\.0</);
+  assert.match(htmlText, /id="update-modal-version"[^>]*>v2\.1\.0/);
   assert.match(htmlText, /id="update-download-sources"/);
 });
 
@@ -82,7 +84,10 @@ test('renderer opens the external page without local installer or patch calls', 
   assert.match(updateUiText, /function openUpdateDownloadSource\(index\)/);
   assert.match(updateUiText, /release\.downloadPages \|\| data\.downloadPages/);
   assert.match(updateUiText, /update-download-source/);
-  assert.match(updateUiText, /软件不会在本地下载或应用补丁/);
+  // EN-FORK: the app never downloads an installer or applies a patch locally;
+  // the user always gets an external HTTPS page instead. "软件不会在本地下载或
+  // 应用补丁" is the translated form of that promise.
+  assert.match(updateUiText, /never downloads or applies patches itself/);
   assert.doesNotMatch(updateUiText, /\/api\/update\/download/);
   assert.doesNotMatch(updateUiText, /\/api\/update\/patch/);
   assert.doesNotMatch(updateUiText, /openUpdateInstaller/);
