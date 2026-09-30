@@ -1358,6 +1358,12 @@ function searchSongResultHtml(s, i) {
     var imgTag = thumb
       ? '<img src="' + thumb + '" alt="" loading="lazy" onerror="this.style.opacity=0.2">'
       : '<div style="width:40px;height:40px;border-radius:6px;background:rgba(255,255,255,0.06);flex-shrink:0"></div>';
+    // EN-FORK: a forget control on local-library rows only. Nora's panel and
+    // ours share the problem that a saved library outgrows its folders; the
+    // difference is ours never deletes the file — it drops the index entry.
+    var localForgetBtn = (searchLastResultQuery === 'local-library' && isLocalLibrarySong(s))
+      ? '<button class="song-action-btn" title="Remove from library (file stays on disk)" onclick="event.stopPropagation();forgetLocalLibraryResult(' + i + ')">' + forgetIconSvg() + '</button>'
+      : '';
     return '<div class="search-result ' + sourceClass + '">' +
       '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0" onclick="playSearchResult(' + i + ')">' +
       imgTag +
@@ -1369,7 +1375,11 @@ function searchSongResultHtml(s, i) {
       '<button class="song-action-btn' + (isSongLiked(s) ? ' liked' : '') + '" data-like-index="' + i + '" title="' + (isSongLiked(s) ? 'Unlike' : 'Like') + '" onclick="event.stopPropagation();toggleLikeSearchResult(' + i + ')">' + heartIconSvg() + '</button>' +
       '<button class="song-action-btn" title="Save to playlist" onclick="event.stopPropagation();collectSearchResult(' + i + ')">' + playlistPlusIconSvg() + '</button>' +
       '<button class="add-btn" title="Play next" onclick="event.stopPropagation();queueSearchResult(' + i + ')">+</button>' +
+      localForgetBtn +
       '</div>';
+}
+function isLocalLibrarySong(song) {
+  return !!(song && (song.provider === 'local' || song.source === 'local' || song.localKey || song.localFileId));
 }
 function searchLoadMoreSentinelHtml() {
   var remaining = Math.max(0, searchMusicRenderState.songs.length - searchMusicRenderState.visibleCount);

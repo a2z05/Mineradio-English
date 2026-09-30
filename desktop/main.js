@@ -4688,6 +4688,31 @@ ipcMain.handle('mineradio-local-library-lyric', async (event, localFileId) => {
   }
 });
 
+// EN-FORK: forget saved tracks from the library panel. The renderer only ever
+// hands back ids it got from listTracks; removeTracks() independently filters
+// to 24-hex ids, so there is no path input to abuse here — and it only ever
+// unlinks the cached cover copy, never the audio file.
+ipcMain.handle('mineradio-local-library-remove', async (event, localFileIds) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, count: 0, tracks: [], removed: 0, error: 'UNTRUSTED_SENDER' };
+  try {
+    return await localMusicLibrary.removeTracks(localFileIds);
+  } catch (error) {
+    return { ok: false, count: 0, tracks: [], removed: 0, error: error.message || 'LOCAL_LIBRARY_REMOVE_FAILED' };
+  }
+});
+
+// EN-FORK: rescan the folders the library already came from. Takes no path
+// input — rescan() only walks directories its own index already points at —
+// so a renderer compromise cannot turn this into a disk walk of anywhere else.
+ipcMain.handle('mineradio-local-library-rescan', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, count: 0, tracks: [], added: 0, changed: 0, removed: 0, error: 'UNTRUSTED_SENDER' };
+  try {
+    return await localMusicLibrary.rescan();
+  } catch (error) {
+    return { ok: false, count: 0, tracks: [], added: 0, changed: 0, removed: 0, error: error.message || 'LOCAL_LIBRARY_RESCAN_FAILED' };
+  }
+});
+
 function pruneLocalMusicImportCapabilities() {
   const now = Date.now();
   for (const [token, capability] of localMusicImportCapabilities) {

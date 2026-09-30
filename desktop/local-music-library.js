@@ -621,7 +621,7 @@ class LocalMusicLibrary {
       .map((id) => cleanText(id, '', 64).replace(/^local:/, '').toLowerCase())
       .filter((id) => /^[a-f0-9]{24}$/.test(id)));
     const operation = async () => {
-      if (!requested.size) return this.listTracksSync();
+      if (!requested.size) return { ...this.listTracksSync(), removed: 0 };
       const nextRecords = new Map(this.records);
       const removed = [];
       for (const id of requested) {
@@ -633,12 +633,108 @@ class LocalMusicLibrary {
       await this.persistSnapshot(nextOrder, nextRecords);
       this.records = nextRecords;
       this.order = nextOrder;
+      // Only the cover copy cached under our own directory goes. record.audioPath
+      // is the user's file and is deliberately never unlinked here.
       for (const record of removed) safeUnlink(record.coverPath);
-      return this.listTracksSync();
+      return { ...this.listTracksSync(), removed: removed.length };
     };
     const pending = this.mutation.then(operation, operation);
     this.mutation = pending.catch(() => {});
     return pending;
+  }
+
+  // Re-read every folder the library already came from. New files turn up,
+  // edited files get re-tagged, files that were deleted stop showing up as a
+  // row that can never play. Only folders this library already imported are
+  // scanned, so a rescan never reaches into a directory the user never chose.
+  async rescan() {
+    // Snapshotted synchronously, before the first await, so a concurrent
+    // import cannot change the set of folders under our feet.
+    const orderSnapshot = this.order.slice();
+    const recordsSnapshot = new Map(this.records);
+    const directories = [];
+    const seenDirectories = new Set();
+    const relativePrefixes = new Map();
+    for (const id of orderSnapshot) {
+      const record = recordsSnapshot.get(id);
+      if (!record) continue;
+      const directory = path.dirname(record.audioPath);
+      const identity = normalizedPathIdentity(directory);
+      if (!identity || seenDirectories.has(identity)) continue;
+      seenDirectories.add(identity);
+      directories.push(directory);
+      // A file dropped next to its siblings keeps the folder the siblings are
+      // filed under, instead of arriving as a bare filename.
+      const relativeDirectory = path.dirname(record.relativePath || '');
+      relativePrefixes.set(identity, relativeDirectory && relativeDirectory !== '.' ? `${relativeDirectory}/` : '');
+    }
+
+    const entries = [];
+    const found = new Set();
+    const unreadable = new Set();
+    await mapWithConcurrency(directories, METADATA_CONCURRENCY, async (directory) => {
+      let names = [];
+      try {
+        names = await fs.promises.readdir(directory);
+      } catch (_) {
+        unreadable.add(normalizedPathIdentity(directory));
+        return;
+      }
+      const prefix = relativePrefixes.get(normalizedPathIdentity(directory)) || '';
+      for (const name of names) {
+        const filePath = supportedAudioPath(path.join(directory, name));
+        if (!filePath) continue;
+        const identity = normalizedPathIdentity(filePath);
+        if (!identity || found.has(identity)) continue;
+        found.add(identity);
+        const previous = recordsSnapshot.get(localFileId(filePath));
+        let stat = null;
+        try {
+          const candidate = await fs.promises.stat(filePath);
+          if (candidate.isFile()) stat = candidate;
+        } catch (_) {
+          continue;
+        }
+        // Unchanged files are skipped rather than re-parsed: a 500-track
+        // library would otherwise re-read every tag on each rescan. Both sides
+        // are rounded because record.mtimeMs is stored at whatever precision
+        // the OS handed out (and survives JSON untouched), while audioRevision()
+        // fingerprints with Math.round — comparing one rounded side against one
+        // raw side would report every track as newly edited forever.
+        if (previous
+          && Math.round(Number(previous.mtimeMs) || 0) === Math.round(Number(stat.mtimeMs) || 0)
+          && Number(previous.size) === Number(stat.size)) continue;
+        entries.push({ path: filePath, relativePath: `${prefix}${name}` });
+      }
+    });
+
+    // A record whose file is gone is a row that can never play. Directories
+    // that could not be read are left alone — a locked folder must not empty
+    // half the library.
+    const gone = orderSnapshot.filter((id) => {
+      const record = recordsSnapshot.get(id);
+      if (!record) return false;
+      if (unreadable.has(normalizedPathIdentity(path.dirname(record.audioPath)))) return false;
+      return !found.has(normalizedPathIdentity(record.audioPath));
+    });
+
+    let snapshot;
+    let removed = 0;
+    if (gone.length) {
+      snapshot = await this.removeTracks(gone);
+      removed = snapshot.removed || 0;
+    }
+    let added = 0;
+    let changed = 0;
+    if (entries.length) {
+      const before = recordsSnapshot.size;
+      snapshot = await this.importFiles(entries, { replace: false });
+      const after = snapshot.count - removed;
+      added = Math.max(0, after - before);
+      changed = Math.max(0, entries.length - added);
+    }
+    if (!snapshot) snapshot = this.listTracksSync();
+    return { ...snapshot, added, changed, removed };
   }
 
   recordForRequest(requestUrl) {

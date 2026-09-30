@@ -267,7 +267,15 @@ test('renderer and Electron wiring restore persistent tracks instead of blob-onl
   assert.match(preload, /listLocalMusicLibrary/);
   assert.match(preload, /readLocalMusicLyric/);
   assert.doesNotMatch(preload, /getPathForLocalFile:/);
-  assert.doesNotMatch(preload, /mineradio-local-library-remove/);
+  // EN-FORK: this used to assert the remove channel could NOT exist — the
+  // original release shipped removeTracks() with nothing able to reach it, on
+  // the grounds that a library entry was too easy to delete by accident. A
+  // library you can only ever add to is the worse trade, so the channel exists
+  // now and the guard says the opposite. It takes ids, never paths (see
+  // tests/local-library-manage.test.js), and removeTracks() only ever unlinks
+  // the cover copy under our own directory — never the audio file.
+  assert.match(preload, /removeLocalMusicTracks/);
+  assert.match(preload, /rescanLocalMusicLibrary/);
   assert.match(upload, /importPersistentLocalAudioFiles/);
   assert.match(upload, /copy\.localMissing = false/);
   assert.match(upload, /persistentLocalLibraryTracks = tracks\.map\(cloneSong\)/);

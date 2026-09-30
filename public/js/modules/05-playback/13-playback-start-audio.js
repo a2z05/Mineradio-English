@@ -838,28 +838,99 @@ function applyLocalTrackLyricOnDemand(song, token) {
     applyFetchedLyricResponse(song, token, { lyric: song.lyric }, { persist: false });
     return;
   }
-  setOriginalLyricsState(withLyricFallback([]), false, 'fallback');
+  // Early hold, not a verdict: the bridge read below (or the online lookup
+  // after it) may still bring lyrics. The fallback timer in the global path
+  // does the same — paint nothing until something is known to have failed.
+  setOriginalLyricsState([], false, 'pending', [], 'none');
   applyPreferredLyricsForCurrent(true);
+  var diskDone = false;
+  var fetchStarted = false;
+  var fallbackScheduled = false;
+  // The offline path never produces a translation, so a translated line set
+  // must come from the online lookup even when the file has lyrics of its own.
+  var wantsTranslation = (function () {
+    if (typeof normalizeLyricTranslationMode !== 'function') return false;
+    return normalizeLyricTranslationMode(fx && fx.lyricTranslationMode) !== 'off';
+  })();
+  function startLocalOnlineLyricLookup() {
+    if (fetchStarted || !song || !song.name) return false;
+    if (typeof fetchLyric !== 'function') return false;
+    fetchStarted = true;
+    scheduleTrackSwitchFallbackLyrics(song, token, 16000);
+    fetchLyric(song, token);
+    return true;
+  }
+  function scheduleLocalMissingLyricFallback() {
+    if (fallbackScheduled || token !== trackSwitchToken) return;
+    fallbackScheduled = true;
+    // The global endpoint answers in well under a second when it has a match;
+    // when it does not, this is what finally downgrades the hold to the
+    // title placeholder (or, when translations are on, the online fetch).
+    setTimeout(function () {
+      if (token !== trackSwitchToken) return;
+      if (diskDone && fetchStarted) return;
+      if (!diskDone) { startLocalOnlineLyricLookup(); return; }
+      if (wantsTranslation) { startLocalOnlineLyricLookup(); return; }
+      // The store is a renderer global, but a throw inside a timer is invisible:
+      // it would leave the panel stuck on the empty hold forever instead of
+      // downgrading to the title placeholder. Read it defensively.
+      if (typeof originalLyricsState !== 'undefined' && hasUsableLyricLines(originalLyricsState && originalLyricsState.lines)) return;
+      setOriginalLyricsState(withLyricFallback([]), false, 'fallback');
+      applyPreferredLyricsForCurrent(true);
+    }, 1500);
+  }
+  // Armed up front: this is what un-sticks a bridge read that never returns,
+  // and its own handlers are no-ops once an answer has landed.
+  scheduleLocalMissingLyricFallback();
   if (
-    !song
-    || !song.hasLyric
-    || !song.localFileId
-    || !window.desktopWindow
-    || typeof window.desktopWindow.readLocalMusicLyric !== 'function'
-  ) return;
-  window.desktopWindow.readLocalMusicLyric(song.localFileId).then(function (result) {
-    if (
-      token !== trackSwitchToken
-      || !currentLocalSong
-      || queueItemKey(currentLocalSong) !== queueItemKey(song)
-      || !result
-      || result.ok !== true
-      || !result.lyric
-    ) return;
-    song.lyric = result.lyric;
-    song.lyricSource = result.lyricSource || song.lyricSource || '';
-    applyFetchedLyricResponse(song, token, { lyric: result.lyric }, { persist: false });
-  }).catch(function () { });
+    song
+    && song.hasLyric
+    && song.localFileId
+    && window.desktopWindow
+    && typeof window.desktopWindow.readLocalMusicLyric === 'function'
+  ) {
+    window.desktopWindow.readLocalMusicLyric(song.localFileId).then(function (result) {
+      // A newer track owns the panel now; both this handler and the hold
+      // above bail on the same token, so nothing is left running.
+      if (token !== trackSwitchToken) return;
+      diskDone = true;
+      var usable = !!(
+        result
+        && result.ok === true
+        && result.lyric
+        && currentLocalSong
+        && queueItemKey(currentLocalSong) === queueItemKey(song)
+      );
+      // EN-FORK (borrowed from Nora's offline→online chain): a local file with
+      // no usable lyrics of its own is exactly the case every online provider
+      // already knows how to solve. The global endpoint resolves purely by
+      // title/artist/album/duration — nothing about the song says "local" in a
+      // way it could reject — so a lyrics-less local track gets the same
+      // LRCLIB→YT→Apple→NetEase→QQ chain as everything else.
+      if (!usable) {
+        startLocalOnlineLyricLookup();
+        return;
+      }
+      song.lyric = result.lyric;
+      song.lyricSource = result.lyricSource || song.lyricSource || '';
+      var applied = applyFetchedLyricResponse(song, token, { lyric: result.lyric }, { persist: false });
+      // Two reasons to keep going: the file's lyrics did not parse into
+      // anything usable, or the user has translations on and an embedded /
+      // sidecar file almost never carries one — and the global chain is also
+      // the translation source, NetEase sitting at step 4.
+      if (applied && applied.usableLyric && !wantsTranslation) return;
+      startLocalOnlineLyricLookup();
+    }).catch(function () {
+      if (token !== trackSwitchToken) return;
+      diskDone = true;
+      startLocalOnlineLyricLookup();
+    });
+  } else {
+    // No offline source at all (hasLyric false, or no desktop bridge): the
+    // online chain is the only chance lyrics have.
+    diskDone = true;
+    startLocalOnlineLyricLookup();
+  }
 }
 
 async function playLocalQueueSong(song, idx, token, firstVisualPlay, opts, resumeAt) {

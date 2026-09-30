@@ -42,6 +42,21 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   },
   listLocalMusicLibrary: () => ipcRenderer.invoke('mineradio-local-library-list'),
   readLocalMusicLyric: (localFileId) => ipcRenderer.invoke('mineradio-local-library-lyric', String(localFileId || '')),
+  // EN-FORK: forgetting a track is how a saved library stops being a pile you
+  // can never shrink. The main process has had removeTracks() since the
+  // original release, but nothing could reach it — no channel, no button. This
+  // is that channel. It drops the index entry and the cached cover; the audio
+  // file on disk is never touched.
+  removeLocalMusicTracks: (localFileIds) => ipcRenderer.invoke(
+    'mineradio-local-library-remove',
+    (Array.isArray(localFileIds) ? localFileIds : [localFileIds])
+      .map((id) => String(id || ''))
+      .filter(Boolean)
+  ),
+  // EN-FORK: re-read the folders the library already came from. No paths are
+  // sent — rescan() only walks directories its own index points at — so this
+  // cannot be aimed anywhere else.
+  rescanLocalMusicLibrary: () => ipcRenderer.invoke('mineradio-local-library-rescan'),
   importLocalMusicFiles: async (files) => {
     const entries = [];
     for (const file of Array.from(files || [])) {

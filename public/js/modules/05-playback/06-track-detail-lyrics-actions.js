@@ -1300,6 +1300,11 @@ function artistCollectTrayIconSvg() {
 function artistNextPlusIconSvg() {
   return '<svg fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13"/><path d="M5.5 12h13"/></svg>';
 }
+// EN-FORK: "forget this track" — only ever rendered on a local-library row, so
+// it reads as leaving the library rather than deleting anything from disk.
+function forgetIconSvg() {
+  return '<svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14"/><path d="M10 7V5h4v2"/><path d="M7 7l.9 12h8.2L17 7"/><path d="M10.5 10.5v5M13.5 10.5v5"/></svg>';
+}
 function songActionHtml(kind, source, index, song) {
   var liked = isSongLiked(song);
   if (kind === 'like') {

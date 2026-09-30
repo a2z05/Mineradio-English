@@ -1987,6 +1987,21 @@ body.empty-home-active.diy-mode #search-area:not(.has-results) #search-mode-tabs
   background: rgba(255, 255, 255, .16);
 }
 
+.search-local-head-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.search-local-head button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.search-local-head button:disabled:hover {
+  background: rgba(255, 255, 255, .07);
+}
+
 .search-local-actions {
   display: flex;
   gap: 8px;

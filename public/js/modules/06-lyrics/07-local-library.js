@@ -47,11 +47,68 @@ function updateLocalLibraryChoiceLabel(count) {
   else sub.textContent = 'Nothing saved yet — import a file or folder';
 }
 
+// Nora points at this: its library panel refreshes against the watched
+// folders it already knows, rather than asking the user to re-pick every
+// folder after a single download outside the app.
+var localLibraryRefreshing = false;
+
 function localLibraryHeadHtml(count) {
   return '<div class="search-empty search-local-head" data-local-library-head="1">' +
     '<span><strong>Local library</strong> · ' + count + ' track' + (count === 1 ? '' : 's') + ' on this device</span>' +
+    '<div class="search-local-head-actions">' +
     '<button type="button" onclick="playAllLocalLibraryTracks()">Play all</button>' +
+    '<button type="button" onclick="refreshLocalLibraryResults()">Refresh</button>' +
+    '</div>' +
     '</div>';
+}
+
+async function refreshLocalLibraryResults() {
+  if (localLibraryRefreshing) return;
+  if (!window.desktopWindow || typeof window.desktopWindow.rescanLocalMusicLibrary !== 'function') {
+    showToast('Refresh needs the desktop app');
+    return;
+  }
+  localLibraryRefreshing = true;
+  updateLocalLibraryRefreshingUi(true);
+  try {
+    var result = await window.desktopWindow.rescanLocalMusicLibrary();
+    if (!result || result.ok !== true) throw new Error(result && result.error || 'LOCAL_LIBRARY_RESCAN_FAILED');
+    var tracks = Array.isArray(result.tracks) ? result.tracks : [];
+    persistentLocalLibraryTracks = tracks.map(cloneSong);
+    if (tracks.length) renderLocalLibraryResults(localLibraryTracksNow());
+    else showLocalLibraryEmpty();
+    var added = Number(result.added) || 0;
+    var removed = Number(result.removed) || 0;
+    var changed = Number(result.changed) || 0;
+    if (added || removed || changed) {
+      var parts = [];
+      if (added) parts.push('added ' + added);
+      if (changed) parts.push('updated ' + changed);
+      if (removed) parts.push('removed ' + removed);
+      showToast('Library refreshed — ' + parts.join(', '));
+    } else {
+      showToast('Library is up to date');
+    }
+  } catch (err) {
+    console.warn('[LocalLibrary] rescan failed', err);
+    showToast('Could not refresh the library');
+  } finally {
+    localLibraryRefreshing = false;
+    updateLocalLibraryRefreshingUi(false);
+  }
+}
+
+// The head is rebuilt rather than patched so the track count comes back
+// exactly as a fresh render would draw it.
+function updateLocalLibraryRefreshingUi(active) {
+  var head = $results && $results.querySelector('[data-local-library-head]');
+  if (!head) return;
+  if (active) {
+    head.innerHTML = '<span>Checking your music folders…</span>' +
+      '<div class="search-local-head-actions"><button type="button" disabled>Refresh</button></div>';
+    return;
+  }
+  head.outerHTML = localLibraryHeadHtml(localLibraryTracksNow().length);
 }
 
 function localLibraryEmptyHtml() {
@@ -111,4 +168,42 @@ function playAllLocalLibraryTracks() {
   }
   if (typeof importLocalAudioSongs !== 'function') return false;
   return importLocalAudioSongs(tracks.map(cloneSong), { mode: 'persistent-library' });
+}
+
+// Take one track back out of the saved library. Two things deliberately do
+// NOT happen: the audio file on disk is never deleted (removeTracks only
+// unlinks the cover copy cached under our own directory), and the queue is
+// left alone, the way removing a song from your library leaves whatever is
+// already playing alone. Both keep this reversible.
+function forgetLocalLibraryResult(index) {
+  var song = playlist && playlist[index];
+  var id = String((song && (song.localFileId || song.localKey)) || '').replace(/^local:/, '');
+  if (!id) return false;
+  if (!window.desktopWindow || typeof window.desktopWindow.removeLocalMusicTracks !== 'function') {
+    showToast('Removing tracks needs the desktop app');
+    return false;
+  }
+  window.desktopWindow.removeLocalMusicTracks([id]).then(function (result) {
+    if (!result || result.ok !== true || !Array.isArray(result.tracks)) {
+      showToast('Could not remove that track');
+      return false;
+    }
+    var tracks = result.tracks
+      .map(function (track) {
+        var copy = hydrateCustomCover(Object.assign({}, track));
+        copy.localMissing = false;
+        return copy;
+      })
+      .filter(function (track) { return track && track.localUrl && track.localKey; });
+    persistentLocalLibraryTracks = tracks.map(cloneSong);
+    if (tracks.length) renderLocalLibraryResults(tracks);
+    else showLocalLibraryEmpty();
+    showToast('Removed from your library — the file is still on disk');
+    return true;
+  }).catch(function (err) {
+    console.warn('[LocalLibrary] remove failed', err);
+    showToast('Could not remove that track');
+    return false;
+  });
+  return true;
 }
