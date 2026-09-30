@@ -45,15 +45,21 @@ const PROXY_PROTOCOLS = ['http', 'https', 'socks5'];
 // ---------------------------------------------------------------------------
 const KEYLESS_DIRECT_FALLBACK_APPS = ['itunes', 'archive'];
 
-// How long a failed proxy is assumed dead before it is tried again, and how
-// long a successful one is trusted before re-probing. Long enough that a
-// restarted local proxy is picked up without a manual save, short enough that a
-// proxy that comes back mid-session starts being used again on its own.
-const PROXY_UNREACHABLE_TTL_MS = 60 * 1000;
+// How long a successful probe is trusted before the endpoint is re-tested.
+// Long enough that a restarted local proxy is picked up without a manual save,
+// short enough that a proxy that comes back mid-session starts being used again
+// on its own.
 const PROXY_PROBE_TTL_MS = 5 * 60 * 1000;
 const PROXY_PROBE_TIMEOUT_MS = 2500;
+// How long a *proven* dead verdict survives. It must outlast PROXY_PROBE_TTL_MS
+// by construction: if it expires first, there is a window in which nobody has
+// re-tested the proxy but it is already being treated as healthy again — which
+// is what happened live (a 60s verdict against a 5min probe meant every window
+// reopened an archive search that was still dead). A proxy shown not to answer
+// stays out of the way until something actually re-probes it.
+const PROXY_DEAD_STICKY_TTL_MS = 2 * PROXY_PROBE_TTL_MS;
 
-let proxyHostState = null; // { key, reachable, checkedAt }
+let proxyHostState = null; // { key, reachable, checkedAt, tcp }
 
 const DEFAULT_CONFIG = {
   enabled: false,
@@ -75,6 +81,12 @@ function loadConfig() {
   } catch (_) {
     cachedConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   }
+  // A saved proxy config is tested before the first request decides anything
+  // about it. Without this, the first call after every restart races a 20s+
+  // connect timeout through a proxy nobody is listening on, because
+  // applyToOptions is synchronous and can only launch the probe in the
+  // background — the verdict it needs arrives one request too late.
+  if (cachedConfig.enabled && cachedConfig.host && cachedConfig.port) startProxyHostProbe(cachedConfig);
   return cachedConfig;
 }
 
@@ -138,13 +150,19 @@ function proxyKey(config) {
   return `${config.protocol}|${config.host}|${config.port}`;
 }
 
-function markProxyHostUnreachable(config) {
+function markProxyHostUnreachable(config, evidence) {
   if (!config || !config.host) return false;
   const key = proxyKey(config);
   const same = proxyHostState && proxyHostState.key === key;
-  // Never let a stale result for a DIFFERENT host decide about this one.
-  if (same && !proxyHostState.reachable && Date.now() - proxyHostState.checkedAt < PROXY_UNREACHABLE_TTL_MS) return true;
-  proxyHostState = { key, reachable: false, checkedAt: Date.now() };
+  const tcp = !!(evidence && evidence.tcp);
+  if (same && !proxyHostState.reachable) {
+    // Never let a stale result for a DIFFERENT host decide about this one, and
+    // never let a vaguer CONNECT failure overwrite a TCP-level verdict: a port
+    // that refused the proxy's own socket already said everything.
+    if (proxyHostState.tcp) return true;
+    if (!tcp && Date.now() - proxyHostState.checkedAt < PROXY_DEAD_STICKY_TTL_MS) return true;
+  }
+  proxyHostState = { key, reachable: false, checkedAt: Date.now(), tcp };
   // The tunnel agent was built for a host that is no longer answering; drop it
   // so a later probe that succeeds starts from a clean connection.
   agentsCache.clear();
@@ -155,7 +173,7 @@ function markProxyHostReachable(config) {
   if (!config || !config.host) return false;
   const key = proxyKey(config);
   const wasDown = proxyHostState && proxyHostState.key === key && !proxyHostState.reachable;
-  proxyHostState = { key, reachable: true, checkedAt: Date.now() };
+  proxyHostState = { key, reachable: true, checkedAt: Date.now(), tcp: false };
   if (wasDown) { agentsCache.clear(); undiciAgentCache = null; }
   return true;
 }
@@ -167,7 +185,26 @@ function proxyHostIsUnreachable(config) {
   if (!config || !config.host || !config.port) return false;
   if (!proxyHostState || proxyHostState.key !== proxyKey(config)) return false;
   if (proxyHostState.reachable) return false;
-  return Date.now() - proxyHostState.checkedAt < PROXY_UNREACHABLE_TTL_MS;
+  // A TCP failure against the proxy's own port is definitive and never expires
+  // on a timer: a host that stopped listening does not come back at a
+  // scheduled moment, only when something re-tests it. So the verdict stands
+  // until a probe succeeds, and callers kick one off on every use (TTL-gated),
+  // which is a floor rather than a lockout.
+  if (proxyHostState.tcp) return true;
+  // Hold the weaker verdict while its re-probe is still in flight. Otherwise an
+  // expired verdict re-routes traffic through the dead host for the seconds
+  // before the probe lands — the exact hole that reopened every failed search.
+  if (proxyProbeInFlight) return true;
+  return Date.now() - proxyHostState.checkedAt < PROXY_DEAD_STICKY_TTL_MS;
+}
+
+// The strongest form of the verdict above: nothing is listening on the proxy's
+// own port. No request can traverse such a host by definition, so bypassing it
+// is not a workaround for a region block — it is the only route that exists.
+function proxyHostIsTcpDead(config) {
+  if (!config || !config.host || !config.port) return false;
+  if (!proxyHostState || proxyHostState.key !== proxyKey(config)) return false;
+  return !proxyHostState.reachable && proxyHostState.tcp === true;
 }
 
 let proxyProbeInFlight = false;
@@ -189,7 +226,11 @@ function probeProxyHost(config) {
       if (settled) return;
       settled = true;
       proxyProbeInFlight = false;
-      if (reachable) markProxyHostReachable(config); else markProxyHostUnreachable(config);
+      // The probe opens a bare TCP socket to the proxy's own port — no tunnel,
+      // no target host. A failure here is therefore evidence about the proxy
+      // process itself, and is recorded as such (tcp) so it outranks and
+      // outlives any later CONNECT error.
+      if (reachable) markProxyHostReachable(config); else markProxyHostUnreachable(config, { tcp: true });
       resolve(proxyHostState);
     };
     let socket;
@@ -239,13 +280,19 @@ class ProxyConnectAgent extends https.Agent {
     const targetHost = options.host;
     const targetPort = Number(options.port) || 443;
     let done = false;
+    // Set the moment the CONNECT line is written. A failure before this point
+    // never got as far as talking to the proxy protocol — the endpoint itself
+    // refused or timed out — which is the same class of evidence as the bare
+    // TCP probe. A failure after it only says the proxy could not reach THIS
+    // target, which says nothing about the proxy's own liveness.
+    let connectIssued = false;
     const finish = (err, socket) => {
       if (done) return;
       done = true;
       // Any failure to reach the proxy is evidence the proxy is not answering.
       // The fetch() path has no equivalent hook (undici owns its own sockets),
       // so this agent failing is the only signal the keyless fallback gets.
-      if (err) markProxyHostUnreachable(config);
+      if (err) markProxyHostUnreachable(config, { tcp: !connectIssued });
       else markProxyHostReachable(config);
       callback(err, socket);
     };
@@ -274,6 +321,7 @@ class ProxyConnectAgent extends https.Agent {
       else issueConnect(upgraded);
 
       function issueConnect(socket) {
+        connectIssued = true;
         socket.write(
           `CONNECT ${targetHost}:${targetPort} HTTP/1.1\r\n` +
           `Host: ${targetHost}:${targetPort}\r\n` +
@@ -373,6 +421,17 @@ function applyToOptions(fetchOpts, appName) {
   if (proxyHostIsUnreachable(config) && KEYLESS_DIRECT_FALLBACK_APPS.indexOf(appName) !== -1) {
     return opts;
   }
+  // …unless nothing is listening on the proxy's own port at all. Then there is
+  // no route through it for ANY app — measured live: Spotify status calls hung
+  // 21s in a connect timeout to 192.168.1.99:10808 while api.spotify.com
+  // answered directly in 719ms, and a login's token exchange failed with the
+  // same ETIMEDOUT. Waiting out a dead port cannot protect a region block; it
+  // can only produce guaranteed failure. Only a TCP-level verdict takes this
+  // branch — a proxy that accepts connections but refuses one CONNECT keeps the
+  // strict behaviour above.
+  if (proxyHostIsTcpDead(config)) {
+    return opts;
+  }
   const out = Object.assign({}, opts);
   const dispatcher = getDispatcher();
   if (dispatcher && !out.dispatcher) out.dispatcher = dispatcher;
@@ -388,6 +447,7 @@ function status() {
   // only the second one is worth making to the user. Reporting the first as
   // "Active" is what let a stopped proxy look healthy for as long as it did.
   const hostUnreachable = proxyHostIsUnreachable(config);
+  const hostNotListening = proxyHostIsTcpDead(config);
   const active = !!(config.enabled && configured && config.protocol !== 'socks5') && !hostUnreachable;
   return {
     enabled: config.enabled,
@@ -398,6 +458,9 @@ function status() {
     socksSupported: false,
     active,
     hostUnreachable,
+    // Separate so the panel can distinguish "not answering" from "nothing is
+    // listening there": only the second one means every app is going direct.
+    hostNotListening,
     // Kept separate so the panel can say "not answering" without having to
     // infer it from active===false, which is also what a switched-off proxy says.
     savedActive: !!(config.enabled && configured && config.protocol !== 'socks5'),

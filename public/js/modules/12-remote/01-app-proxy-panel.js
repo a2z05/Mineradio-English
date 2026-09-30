@@ -102,7 +102,10 @@
     line.style.color = status.hostUnreachable ? '#ff7a7a' : '';
     line.textContent = head + ' — ' + status.protocol.toUpperCase() + ' ' + status.hostLabel +
       (selected.length ? ' · for: ' + selected.join(', ') : ' · for: nothing') +
-      (status.hostUnreachable ? ' · nothing is listening there, so the apps above are connecting directly' : '');
+      // Only a TCP-level verdict means NOTHING can go through, so only that one
+      // earns the "every app is direct" sentence. A CONNECT that failed for one
+      // target still leaves the other apps proxying.
+      (status.hostNotListening ? ' · nothing is listening there, so the apps above are connecting directly' : '');
   }
 
   function loadIntoForm() {
@@ -196,8 +199,13 @@
     var unreachable = !!(status && status.hostUnreachable);
     btn.classList.toggle('on', enabled && !unreachable);
     btn.setAttribute('aria-pressed', enabled && !unreachable ? 'true' : 'false');
+    // hostNotListening = no process on that port at all, so EVERY app bypasses;
+    // hostUnreachable without it means the proxy answered but this target failed,
+    // which only lets the keyless sources through.
     btn.title = unreachable
-      ? 'Proxy not answering — keyless sources are going direct (double-click for details)'
+      ? (status && status.hostNotListening
+        ? 'Nothing is listening on the proxy port — every source is going direct (double-click for details)'
+        : 'Proxy not answering — keyless sources are going direct (double-click for details)')
       : configured
         ? (enabled ? 'Proxy: ON — click to disable' : 'Proxy: OFF — click to enable')
         : 'Proxy not configured — click to set up';

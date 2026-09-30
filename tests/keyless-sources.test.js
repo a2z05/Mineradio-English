@@ -575,3 +575,83 @@ test('a dead proxy can no longer take down the sources that reach the network on
   assert.match(panel, /proxyHostIsUnreachable|hostUnreachable|unreachable/,
     'the proxy panel must not report a dead proxy as active');
 });
+
+test('a proxy proven dead stays out of the way until something re-probes it', () => {
+  const source = read('app-proxy.js');
+  // Measured live: this proxy needs ~12s to fail a CONNECT. With a dead-verdict
+  // TTL shorter than the probe interval, there is a window where nothing has
+  // re-tested it but the keyless sources are being routed back through it —
+  // an archive search then takes 40s and returns zero songs, which is the
+  // original symptom. The verdict has to outlast the probe interval.
+  const sticky = /const PROXY_DEAD_STICKY_TTL_MS\s*=\s*2\s*\*\s*PROXY_PROBE_TTL_MS/.test(source);
+  assert.ok(sticky,
+    'the dead-verdict TTL must be derived from (and longer than) the probe TTL');
+  // Both places that ask "is it dead?" must use the sticky one, not a shorter
+  // ad-hoc window that would reopen the same request every minute.
+  const callers = source.match(/PROXY_[A-Z_]*TTL_MS/g) || [];
+  assert.ok(!/PROXY_UNREACHABLE_TTL_MS/.test(source),
+    'no shorter unreachable TTL may survive alongside the sticky one');
+  assert.ok(callers.length > 0, 'expected TTL usages in app-proxy.js');
+  assert.match(source, /function proxyHostIsUnreachable\([\s\S]{0,1400}PROXY_DEAD_STICKY_TTL_MS/,
+    'the bypass decision must honour the sticky verdict');
+});
+
+test('a proxy with nothing listening on its port is skipped by every app', () => {
+  // Measured live, same machine: /api/spotify/status took 21.1s because the
+  // request was still being tunnelled to 192.168.1.99:10808, while a bare
+  // https request to api.spotify.com answered in 719ms. The keyless bypass
+  // above only rescues itunes and archive, so every other app — Spotify's
+  // search, its login token exchange, the audio bridge — was paying a
+  // guaranteed connect timeout for a route that cannot exist. Nothing is
+  // listening: that is not a region block to be respected, it is a dead port.
+  const source = read('app-proxy.js');
+  assert.match(source, /function proxyHostIsTcpDead\(/,
+    'the applier needs a stronger verdict than "not answering"');
+
+  // The tcp-dead branch must sit inside applyToOptions, before any transport is
+  // attached, and must return opts untouched — no dispatcher, no tunnel agent.
+  const apply = source.slice(source.indexOf('function applyToOptions'), source.indexOf('function status()'));
+  assert.match(apply, /proxyHostIsUnreachable\(config\) && KEYLESS_DIRECT_FALLBACK_APPS/,
+    'the keyless bypass must survive');
+  const tcpBranch = apply.indexOf('proxyHostIsTcpDead(config)');
+  assert.ok(tcpBranch !== -1, 'applyToOptions must consult the tcp-dead verdict');
+  assert.ok(tcpBranch < apply.indexOf('getDispatcher()'),
+    'the bypass must run before a transport is built');
+  assert.match(apply.slice(tcpBranch, tcpBranch + 120), /return opts;/,
+    'a dead port must leave the options untouched for every app');
+  assert.match(apply, /KEYLESS_DIRECT_FALLBACK_APPS\.indexOf\(appName\)/,
+    'the weak verdict still applies only to the keyless apps');
+
+  // Only a TCP-level failure earns it. A CONNECT that was issued and then
+  // failed only says the proxy could not reach THAT target, which is exactly
+  // the case where routing around it would dodge a region block.
+  assert.match(source, /markProxyHostUnreachable\(config, \{ tcp: true \}\)/,
+    'the bare-socket probe must record a tcp verdict');
+  assert.match(source, /markProxyHostUnreachable\(config, \{ tcp: !connectIssued \}\)/,
+    'a tunnel failure must report tcp only when CONNECT was never written');
+  assert.match(source, /if \(err\) markProxyHostUnreachable\(config, \{ tcp: !connectIssued \}\)/);
+  // …and that verdict must not be downgraded by a later vaguer one.
+  const mark = source.slice(source.indexOf('function markProxyHostUnreachable'), source.indexOf('function markProxyHostReachable'));
+  assert.match(mark, /if \(proxyHostState\.tcp\) return true;/,
+    'a tcp verdict outranks any later CONNECT failure');
+
+  // The verdict has to exist before the first request, not be learned from it:
+  // applyToOptions is synchronous and can only launch a probe in the
+  // background, so without a probe on load the first call after every restart
+  // races a 20s+ connect timeout.
+  const load = source.slice(source.indexOf('function loadConfig'), source.indexOf('function saveConfig'));
+  assert.match(load, /startProxyHostProbe\(cachedConfig\)/,
+    'loadConfig must start probing a saved proxy immediately');
+
+  // status() reports it separately, and only the tcp-dead case may claim that
+  // every app is going direct.
+  assert.match(source, /const hostNotListening = proxyHostIsTcpDead\(config\);/);
+  assert.match(source, /hostNotListening,/);
+  const panel = proxyPanelText;
+  assert.match(panel, /status\.hostNotListening \? ' · nothing is listening there/,
+    'the panel may only say "nothing is listening" on a tcp verdict');
+  assert.ok(!/status\.hostUnreachable \? ' · nothing is listening there/.test(panel),
+    'a weak CONNECT failure must not claim every app went direct');
+  assert.match(panel, /hostNotListening/,
+    'the titlebar toggle needs the same distinction');
+});
