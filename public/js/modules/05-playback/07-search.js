@@ -25,6 +25,80 @@ var searchMusicRenderState = {
   providerPages: {},
   remoteHasMore: false
 };
+// The full-length sources are the slow ones. Measured on this network: iTunes
+// answers a search in ~0.6s with nothing but 30-second previews, while the
+// Archive needs 3-30s for the same query because it resolves each item with its
+// own metadata request. The merge ranks a whole track far above a preview, but
+// only AFTER both have arrived — so the first paint of every search was
+// previews-only, and a click during that window committed the queue to 29
+// seconds. Three things read the flag below:
+//   * the first paint waits out SEARCH_PREVIEW_GRACE_MS before showing a
+//     preview-only list, so a search whose Archive answers quickly never
+//     presents previews at all;
+//   * the results header marks a preview-only list as provisional while the
+//     full-length source is still in flight;
+//   * playSearchResult waits for that source instead of playing the clip the
+//     user happened to click first.
+var searchFullLengthPending = false;
+var searchFullLengthSeq = 0;
+var searchFullLengthWaiters = [];
+var SEARCH_PREVIEW_GRACE_MS = 4500;
+var SEARCH_FULL_LENGTH_WAIT_MS = 12000;
+
+function settleSearchFullLengthWaiters() {
+  if (!searchFullLengthWaiters.length) return;
+  var waiters = searchFullLengthWaiters;
+  searchFullLengthWaiters = [];
+  waiters.forEach(function (resolve) {
+    try { resolve(); } catch (err) { console.warn('search settle waiter failed:', err); }
+  });
+}
+
+function beginSearchFullLengthWait(seq, pending) {
+  searchFullLengthSeq = seq;
+  searchFullLengthPending = !!pending;
+  // Anyone waiting on the previous query is answered by the new one starting;
+  // their result list has already been replaced.
+  settleSearchFullLengthWaiters();
+}
+
+function endSearchFullLengthWait(seq) {
+  if (seq !== searchFullLengthSeq) return;
+  searchFullLengthPending = false;
+  settleSearchFullLengthWaiters();
+}
+
+function searchFullLengthIsPending() {
+  return searchFullLengthPending === true;
+}
+// Which in-flight results could still turn into a whole track. The Archive is
+// the one that always can: iTunes and Deezer declare playbackMode 'preview' on
+// every result they return, so waiting for those two only ever delays a list
+// that is already final.
+var SEARCH_FULL_LENGTH_PROVIDERS = ['archive', 'soundcloud'];
+
+function waitForFullLengthResults(timeoutMs) {
+  return new Promise(function (resolve) {
+    if (!searchFullLengthPending) { resolve(); return; }
+    var settled = false;
+    var finish = function () {
+      if (settled) return;
+      settled = true;
+      var at = searchFullLengthWaiters.indexOf(finish);
+      if (at >= 0) searchFullLengthWaiters.splice(at, 1);
+      resolve();
+    };
+    searchFullLengthWaiters.push(finish);
+    setTimeout(finish, Math.max(0, Number(timeoutMs) || 0));
+  });
+}
+
+function searchFullLengthPendingHtml() {
+  if (!searchFullLengthPending) return '';
+  return '<div class="search-empty search-pending-full" data-search-pending-full="1" role="status">' +
+    'Still looking for full-length tracks — these previews may be replaced in a moment</div>';
+}
+
 var $input = document.getElementById('search-input');
 var $results = document.getElementById('search-results');
 var $loading = document.getElementById('loading-overlay');
@@ -987,6 +1061,67 @@ function searchCanonicalSongKey(song) {
   var version = searchVersionSignature(((song && song.name) || '') + ' ' + ((song && song.album) || '')) || 'studio';
   return title + '|' + artists.join('/') + '|' + version;
 }
+// The merge cannot collapse a preview and a full-length copy of the same track
+// into one row, because their titles rarely match exactly: the Archive calls
+// the file "01 - HOTEL CALIFORNIA" where iTunes calls it "Hotel California",
+// and searchCanonicalSongKey is exact. Both rows therefore show, and the
+// preview is what a fast click lands on. This is the looser test that pairs
+// them: same canonical key when there is one, otherwise the same normalized
+// title (exactly, or one contained in the other so a track number does not
+// break it) plus an artist the two agree on.
+function searchFullLengthLooksSameSong(key, title, artists, other) {
+  if (key && searchCanonicalSongKey(other) === key) return true;
+  var otherTitle = simpleSearchNorm(other && (other.name || other.title));
+  if (!title || !otherTitle) return false;
+  var exactTitle = title === otherTitle;
+  var contained = title.length >= 5 && otherTitle.length >= 5 &&
+    (otherTitle.indexOf(title) >= 0 || title.indexOf(otherTitle) >= 0);
+  if (!exactTitle && !contained) return false;
+  var otherArtists = typeof artistNameParts === 'function' ? artistNameParts(other) : [];
+  // One side missing an artist means the title is all there is to go on, and
+  // only an exact title is safe then — a contained one is how covers sneak in.
+  if (!artists.length || !otherArtists.length) return exactTitle;
+  return artists.some(function (name) { return otherArtists.indexOf(name) >= 0; });
+}
+// A result is a whole track unless it declares itself a preview or is too
+// short to be one. playbackMode is the only field that distinguishes them:
+// iTunes and Deezer say 'preview' on everything they return, the Archive says
+// 'direct-url', and a provider that says nothing at all is believed.
+function searchSongIsFullLength(song) {
+  if (!song || song.playbackMode === 'preview') return false;
+  // Anything under 45s is a clip whatever it is labelled, and a preview row
+  // that "upgrades" to another preview is the bug this exists to remove.
+  var duration = Number(song.duration || 0);
+  if (duration > 0 && duration < 45) return false;
+  return true;
+}
+function searchListHasFullLength(list) {
+  if (!Array.isArray(list)) return false;
+  for (var i = 0; i < list.length; i += 1) if (searchSongIsFullLength(list[i])) return true;
+  return false;
+}
+// The whole-track copy of a 30-second preview that the user just clicked, if
+// this result list has one. Returns the highest-scoring match, since several
+// Archive items can be the same song and only the best of them should replace
+// the row that was clicked.
+function searchFullLengthTwin(song, songs) {
+  if (!song || song.playbackMode !== 'preview') return null;
+  var list = Array.isArray(songs) ? songs : (Array.isArray(typeof playlist !== 'undefined' ? playlist : null) ? playlist : []);
+  if (!list || !list.length) return null;
+  var key = searchCanonicalSongKey(song);
+  var title = simpleSearchNorm(song.name || song.title);
+  var artists = typeof artistNameParts === 'function' ? artistNameParts(song) : [];
+  var best = null;
+  var bestScore = -Infinity;
+  for (var i = 0; i < list.length; i += 1) {
+    var other = list[i];
+    if (!other || other === song || !searchSongIsFullLength(other)) continue;
+    if (!searchFullLengthLooksSameSong(key, title, artists, other)) continue;
+    var score = Number(other._searchScore) || 0;
+    if (score > bestScore) { bestScore = score; best = other; }
+  }
+  return best;
+}
 function scoreSongSearchResult(song, q, sourceIndex) {
   var nq = simpleSearchNorm(q);
   var name = simpleSearchNorm(song && song.name);
@@ -1349,7 +1484,7 @@ function renderSongSearchResults(songs, opts) {
   searchMusicRenderState.songs = playlist;
   var wanted = Number(opts.visibleCount) > 0 ? Number(opts.visibleCount) : MUSIC_SEARCH_INITIAL_VISIBLE;
   searchMusicRenderState.visibleCount = Math.min(playlist.length, wanted);
-  var html = '';
+  var html = searchFullLengthPendingHtml();
   for (var i = 0; i < searchMusicRenderState.visibleCount; i++) html += searchSongResultHtml(playlist[i], i);
   $results.innerHTML = html + searchLoadMoreSentinelHtml();
   $results.classList.add('show');
@@ -1370,11 +1505,19 @@ async function doSearch(q, opts) {
     return;
   }
   var requestSeq = ++searchRequestSeq;
+  var searchStartedAt = Date.now();
   disconnectSearchLoadMoreObserver();
   setSearchHistorySurface(false);
   try {
     var mode = searchMode;
     var painted = false;
+    // Whether anything still in flight can turn this list into whole tracks.
+    // Set before the fan-out starts so a click that lands during it waits, and
+    // cleared the moment it settles so nothing waits on a source that is done.
+    var fullLengthProviders = typeof activeSearchProvidersForMode === 'function' ? activeSearchProvidersForMode(mode) : [];
+    beginSearchFullLengthWait(requestSeq, fullLengthProviders.some(function (provider) {
+      return SEARCH_FULL_LENGTH_PROVIDERS.indexOf(provider) !== -1;
+    }));
     // Paint whatever has settled so far rather than holding every finished
     // provider hostage to the slowest one. Later paints only ever add songs,
     // so the list grows instead of flickering.
@@ -1382,6 +1525,15 @@ async function doSearch(q, opts) {
       if (requestSeq !== searchRequestSeq || searchMode !== mode || $input.value.trim() !== q) return;
       var list = data && Array.isArray(data.songs) ? data.songs : [];
       if (!list.length) return;
+      // A preview-only list is provisional while a whole-track source is still
+      // coming, and the first rows of it are exactly the rows that get clicked.
+      // Holding it back for the grace window costs nothing when the Archive is
+      // quick (measured 3.5s cold for a cached-warm query) and saves the click
+      // that would otherwise commit to 29 seconds. Once the window is up the
+      // list shows with the strip above it, so a slow source never leaves an
+      // empty results panel either.
+      if (!isFinal && searchFullLengthPending && !searchListHasFullLength(list) &&
+          Date.now() - searchStartedAt < SEARCH_PREVIEW_GRACE_MS) return;
       var keepScroll = $results.scrollTop;
       var expanded = painted && searchMusicRenderState.visibleCount > MUSIC_SEARCH_INITIAL_VISIBLE;
       // Never yank a list the user has already started scrolling or growing.
@@ -1406,6 +1558,7 @@ async function doSearch(q, opts) {
     var searchData = await fetchMusicSearchResults(q, mode, null, function (partial) {
       paint(partial, false);
     });
+    endSearchFullLengthWait(requestSeq);
     var songs = searchData && Array.isArray(searchData.songs) ? searchData.songs : [];
     if (requestSeq !== searchRequestSeq || searchMode !== mode || $input.value.trim() !== q) return;
     if (!songs.length) {
@@ -1420,6 +1573,7 @@ async function doSearch(q, opts) {
     if (painted && opts.autoPlayFirst) playSearchResult(0);
   } catch (err) {
     console.error('Search:', err);
+    endSearchFullLengthWait(requestSeq);
     if (requestSeq === searchRequestSeq) {
       resetSearchMusicRenderState();
       playlist = [];

@@ -84,8 +84,11 @@ function moveQueueIndex(fromIdx, toIdx, opts) {
   if (opts.persistSnapshot !== false && typeof saveLastPlaybackSnapshot === 'function') saveLastPlaybackSnapshot(true, 'queue-reorder');
   return true;
 }
-function playSearchResult(i) {
-  var song = playlist[i]; if (!song) return;
+// A token so a second click during the wait replaces the first instead of
+// committing the queue twice.
+var searchSelectToken = 0;
+function commitSearchResultSelection(song) {
+  if (!song) return;
   homeForcedOpen = false;
   homeSuppressed = false;
   setHomeControlsLocked(false);
@@ -100,4 +103,28 @@ function playSearchResult(i) {
   $results.classList.remove('show');
   $input.value = ''; $input.blur();
   playQueueAt(currentIdx);
+}
+function playSearchResult(i) {
+  var song = playlist[i]; if (!song) return;
+  // The row that got clicked can be a 30-second preview that shares its list
+  // with the whole track — or with a whole track that is seconds away from
+  // arriving. Play the whole one when there is one, and give the source still
+  // in flight a bounded chance to produce it, rather than committing the queue
+  // to 29 seconds because the preview happened to render first.
+  if (song.playbackMode === 'preview' && typeof searchFullLengthTwin === 'function') {
+    var twin = searchFullLengthTwin(song, playlist);
+    if (twin) { commitSearchResultSelection(twin); return; }
+    if (typeof searchFullLengthIsPending === 'function' && searchFullLengthIsPending()) {
+      var token = ++searchSelectToken;
+      var clickedSeq = searchRequestSeq;
+      showToast('Looking for the full track…');
+      waitForFullLengthResults(SEARCH_FULL_LENGTH_WAIT_MS).then(function () {
+        if (token !== searchSelectToken) return;
+        var better = clickedSeq === searchRequestSeq ? searchFullLengthTwin(song, playlist) : null;
+        commitSearchResultSelection(better || song);
+      });
+      return;
+    }
+  }
+  commitSearchResultSelection(song);
 }
