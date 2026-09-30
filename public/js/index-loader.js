@@ -83,6 +83,7 @@
     'js/modules/06-lyrics/04-progress-seek.js',
     'js/modules/06-lyrics/05-upload-dragdrop.js',
     'js/modules/06-lyrics/06-lyric-timing-offset.js',
+    'js/modules/06-lyrics/07-local-library.js',
     'js/modules/07-fx/00-preset-archive-data.js',
     'js/modules/07-fx/01-lyric-color-controls.js',
     'js/modules/07-fx/02-accent-background-controls.js',

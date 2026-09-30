@@ -27,6 +27,9 @@ var restoredPlaybackAtStartup = restoreLastPlaybackSnapshot();
 var persistedLocalLibraryRestorePromise = Promise.resolve(restorePersistedLocalLibrary()).then(function (restored) {
   if (restored) restoredPlaybackAtStartup = true;
   else if (!restoredLastPlaybackSnapshot) restoredPlaybackAtStartup = false;
+  // The import hub's "My library" entry states how many tracks are saved; that
+  // count is only known once the restore above has run.
+  if (typeof updateLocalLibraryChoiceLabel === 'function') updateLocalLibraryChoiceLabel(localLibraryTracksNow().length);
   return restored;
 }, function () { return false; });
 applyStartupStarfieldPreset();

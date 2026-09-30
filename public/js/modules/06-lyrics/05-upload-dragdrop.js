@@ -265,6 +265,8 @@ function importLocalAudioSongs(songs, opts) {
   safeShelfRebuild('local-import', true);
   forcePlaybackControlsInteractive();
   updateEmptyHomeVisibility({ forceLoad: false });
+  // The import hub quotes a track count, and importing is the moment it changes.
+  if (typeof updateLocalLibraryChoiceLabel === 'function') updateLocalLibraryChoiceLabel(localLibraryTracksNow().length);
   showToast(songs.length > 1 ? ('Imported ' + songs.length + ' local songs') : 'Playing local music');
   Promise.resolve(playQueueAt(0, { manual: true })).then(function () {
     if (opts.coverFile && currentIdx === 0 && playQueue[0]) {

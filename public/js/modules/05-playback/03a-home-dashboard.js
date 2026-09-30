@@ -852,6 +852,13 @@ function openHomeDashboardLibrary() {
   homeSuppressed = false;
   if (typeof setHomeControlsLocked === 'function') setHomeControlsLocked(false);
   if (typeof updateEmptyHomeVisibility === 'function') updateEmptyHomeVisibility();
+  // With no signed-in platform this card is the only door to "my music", and
+  // it used to open the import buttons even when a library was already saved
+  // on the machine — the tracks were there, they just had no way to be seen.
+  if (typeof openLocalLibraryResults === 'function' && localLibraryTracksNow().length) {
+    openLocalLibraryResults();
+    return;
+  }
   if (typeof openUploadPanel === 'function') openUploadPanel();
 }
 
