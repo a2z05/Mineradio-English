@@ -788,6 +788,15 @@ async function scheduleAlbumGaplessPreloadForCurrent(token, reason) {
     media.crossOrigin = 'anonymous';
     media.preload = 'auto';
     media.volume = 0;
+    // EN-FORK: a gapless preload rolls before it is the current element, so it
+    // has to be given the user's speed now — waiting for the track-ui step
+    // would let the first stretch of every crossfade play at the wrong rate.
+    try {
+      media.playbackRate = typeof normalizePlaybackSpeed === 'function'
+        ? normalizePlaybackSpeed(typeof playbackSpeedValue !== 'undefined' ? playbackSpeedValue : 1)
+        : 1;
+      media.preservesPitch = true;
+    } catch (e) { }
     media.src = proxyAudioUrl;
     await applyAudioOutputDevice(media);
     if (
@@ -969,6 +978,11 @@ async function playLocalQueueSong(song, idx, token, firstVisualPlay, opts, resum
       return;
     }
     finalizeListenSession(true);
+    // EN-FORK: "sleep at end of track" stops here instead of advancing.
+    if (typeof sleepTimerShouldStopAtTrackEnd === 'function' && sleepTimerShouldStopAtTrackEnd()) {
+      if (typeof fireSleepTimer === 'function') fireSleepTimer();
+      return;
+    }
     if (playAlbumGaplessNextOnEnded(token)) return;
     if (playMode === 'single') setTimeout(function () { playQueueAt(currentIdx, { autoRepeat: true, suppressPlayFailureNotice: true }); }, 0);
     else setTimeout(nextTrack, 0);
@@ -1144,6 +1158,10 @@ async function playQueueAt(idx, opts) {
       if (typeof publishMediaState === 'function') publishMediaState('track');
       if (typeof paintMiniPlayer === 'function') paintMiniPlayer();
       if (typeof paintNowPlaying === 'function') paintNowPlaying();
+      // EN-FORK: the media clock and the loudness measurement both belong to
+      // the track, so they are re-armed here — once per switch, not on a timer.
+      if (typeof applyPlaybackSpeed === 'function') applyPlaybackSpeed();
+      if (typeof beginPlaybackLoudnessMeasurement === 'function') beginPlaybackLoudnessMeasurement(song);
     });
     markPlayPhase('lyric-prep');
     safePlaybackStep('lyric-prep', function () {
@@ -1391,6 +1409,11 @@ async function playQueueAt(idx, opts) {
           return;
         }
         finalizeListenSession(true);
+        // EN-FORK: "sleep at end of track" stops here instead of advancing.
+        if (typeof sleepTimerShouldStopAtTrackEnd === 'function' && sleepTimerShouldStopAtTrackEnd()) {
+          if (typeof fireSleepTimer === 'function') fireSleepTimer();
+          return;
+        }
         if (playAlbumGaplessNextOnEnded(token)) return;
         if (playMode === 'single') setTimeout(function () { playQueueAt(currentIdx, { autoRepeat: true, suppressPlayFailureNotice: true }); }, 0);
         else setTimeout(nextTrack, 0);

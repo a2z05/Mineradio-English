@@ -1016,6 +1016,56 @@
                 onclick="openAudioOutputWorkflowPanel()">Panel</button></span></div>
             <div id="audio-output-list" class="audio-output-list"></div>
           </div>
+          <div class="fx-section-label">Playback quality</div>
+          <div class="fx-sub">Speed, sleep, tone and level — each switch below drives real audio, not a label</div>
+          <div class="fx-seg" id="pbq-speed-seg" title="Playback speed with pitch preserved. Applied to the current track, the next one, and any gapless preload already rolling">
+            <button data-pbq-speed="0.5">0.5×</button>
+            <button data-pbq-speed="0.75">0.75×</button>
+            <button data-pbq-speed="1">1×</button>
+            <button data-pbq-speed="1.25">1.25×</button>
+            <button data-pbq-speed="1.5">1.5×</button>
+            <button data-pbq-speed="2">2×</button>
+          </div>
+          <div class="fx-seg" id="pbq-sleep-seg" title="Timed modes fade the output down before pausing, so nothing is cut mid-note. End of track waits for the song to finish">
+            <button data-pbq-sleep="off">Off</button>
+            <button data-pbq-sleep="15">15m</button>
+            <button data-pbq-sleep="30">30m</button>
+            <button data-pbq-sleep="60">60m</button>
+            <button data-pbq-sleep="end">End of track</button>
+          </div>
+          <div class="fx-sub" id="pbq-sleep-status">Sleep timer off</div>
+          <div class="fx-toggle-grid">
+            <div class="fx-toggle" id="t-pbqEqualizer" onclick="togglePlaybackEqualizer()"
+              title="Seven peaking bands plus a preamp, in series on the last hop of the audio graph. Off = the bands sit flat"><span>Equaliser</span><span class="dot"></span></div>
+            <div class="fx-toggle" id="t-pbqNormalise" onclick="togglePlaybackNormalise()"
+              title="Measures each track's own level from the analyser and pulls louder tracks down toward the target. Cut only — it never boosts, so it cannot clip"><span>Volume normalisation</span><span class="dot"></span></div>
+            <div class="fx-toggle" id="t-pbqGapless" onclick="togglePlaybackGaplessDefault()"
+              title="Preloads the next track of the same album and equal-power crossfades across the boundary"><span>Gapless albums</span><span class="dot"></span></div>
+          </div>
+          <div class="fx-slider"><label>Preamp</label><input id="pbq-preamp" type="range" min="-12" max="12" step="0.5"
+              value="0" aria-label="Preamp in decibels"><output id="pbq-preamp-value">0 dB</output></div>
+          <div class="fx-slider"><label>60 Hz</label><input id="pbq-band-0" type="range" min="-12" max="12" step="0.5"
+              value="0" data-pbq-band="0" aria-label="60 hertz band"><output>0</output></div>
+          <div class="fx-slider"><label>150 Hz</label><input id="pbq-band-1" type="range" min="-12" max="12" step="0.5"
+              value="0" data-pbq-band="1" aria-label="150 hertz band"><output>0</output></div>
+          <div class="fx-slider"><label>400 Hz</label><input id="pbq-band-2" type="range" min="-12" max="12" step="0.5"
+              value="0" data-pbq-band="2" aria-label="400 hertz band"><output>0</output></div>
+          <div class="fx-slider"><label>1 kHz</label><input id="pbq-band-3" type="range" min="-12" max="12" step="0.5"
+              value="0" data-pbq-band="3" aria-label="1 kilohertz band"><output>0</output></div>
+          <div class="fx-slider"><label>2.4 kHz</label><input id="pbq-band-4" type="range" min="-12" max="12" step="0.5"
+              value="0" data-pbq-band="4" aria-label="2.4 kilohertz band"><output>0</output></div>
+          <div class="fx-slider"><label>6 kHz</label><input id="pbq-band-5" type="range" min="-12" max="12" step="0.5"
+              value="0" data-pbq-band="5" aria-label="6 kilohertz band"><output>0</output></div>
+          <div class="fx-slider"><label>14 kHz</label><input id="pbq-band-6" type="range" min="-12" max="12" step="0.5"
+              value="0" data-pbq-band="6" aria-label="14 kilohertz band"><output>0</output></div>
+          <div class="fx-seg" id="pbq-eq-preset-seg" title="Sets every band at once; the sliders stay live afterwards">
+            <button data-pbq-preset="flat">Flat</button>
+            <button data-pbq-preset="bass">Bass</button>
+            <button data-pbq-preset="vocal">Vocal</button>
+            <button data-pbq-preset="bright">Bright</button>
+            <button data-pbq-preset="loudness">Loudness</button>
+          </div>
+          <div class="fx-sub" id="pbq-status">Equaliser off · normalisation off</div>
           <div class="fx-section-label">Quality preset</div>
           <div class="fx-seg" id="performance-quality-seg" title="Controls the visible-state render pixel budget; persists after restart">
             <button data-performance-quality="eco">Low</button>
@@ -2082,6 +2132,7 @@
     if (typeof installMiniPlayer === 'function') installMiniPlayer();
     if (typeof installMediaSession === 'function') installMediaSession();
     if (typeof installNowPlaying === 'function') installNowPlaying();
+    if (typeof installPlaybackQuality === 'function') installPlaybackQuality();
   </script>
 </body>
 

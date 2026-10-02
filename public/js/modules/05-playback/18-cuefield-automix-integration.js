@@ -402,7 +402,15 @@ function cuefieldCreatePreparedAudioGraph(media) {
     graph.source.connect(graph.analyser);
     graph.source.connect(graph.beatAnalyser);
     graph.analyser.connect(graph.gainNode);
-    graph.gainNode.connect(audioCtx.destination);
+    // EN-FORK: this element is about to be heard alongside the current one, so
+    // it has to leave through the same equaliser/preamp/normalisation stage as
+    // everything else — otherwise the track that fades in would be the one
+    // track in the app that ignores the user's tone settings.
+    if (typeof connectPlaybackOutputHop === 'function') {
+      connectPlaybackOutputHop(graph.gainNode, audioCtx.destination);
+    } else {
+      graph.gainNode.connect(audioCtx.destination);
+    }
     media.__mineradioPreparedAudioGraph = graph;
     return graph;
   } catch (error) {

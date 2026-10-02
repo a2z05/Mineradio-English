@@ -3,6 +3,11 @@ function audioGraphHealthy() {
   return !!(audio && audioReady && audioCtx && audioCtx.state !== 'closed' && source && audioSourceMedia === audio && analyser && beatAnalyser && (gainNode || analysisSinkNode));
 }
 function disconnectAudioGraphNodes(keepSource) {
+  // EN-FORK: the equaliser chain deliberately survives this. It is scoped to
+  // the AudioContext, not to a graph, because a cuefield crossfade keeps a
+  // second media element alive across a rebuild — dropping the stage here
+  // would leave that element wired into a node nothing reads any more, and it
+  // would go silent mid-fade.
   [source, analyser, beatAnalyser, gainNode, analysisSinkNode].forEach(function (node) {
     if (!node) return;
     try { node.disconnect(); } catch (e) { }
@@ -47,6 +52,7 @@ function replaceAudioElementForGraphRecovery(reason, opts) {
     if (audioCtx && audioCtx.state !== 'closed' && audioCtx.close) audioCtx.close().catch(function () { });
   } catch (e) { }
   audioCtx = null;
+  if (typeof releasePlaybackToneChain === 'function') releasePlaybackToneChain();
   audio = new Audio();
   audio.crossOrigin = 'anonymous';
   audio.preload = oldAudio.preload || 'auto';
@@ -100,6 +106,13 @@ function resetPlaybackAudioGraphForSourceSwitch(reason) {
     audioSourceMedia = audio;
     audio.__mineradioMediaSourceBound = true;
     preparedGraph.adopted = true;
+    // EN-FORK: an adopted graph was wired when it was built, which may have
+    // been before the tone stage existed or in a context that has since been
+    // replaced. Re-assert the last hop so a crossfaded track cannot keep
+    // running around the equaliser for the rest of its life.
+    if (typeof connectPlaybackOutputHop === 'function') {
+      connectPlaybackOutputHop(gainNode, audioCtx.destination);
+    }
     audioReady = true;
   }
 }
@@ -184,7 +197,17 @@ function initAudio() {
   source.connect(beatAnalyser);
   if (gainNode) {
     analyser.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
+    // EN-FORK: the equaliser, preamp and normalisation stage sits on the last
+    // hop, after the output gain, so metering still reads the raw track (the
+    // beat engine and the loudness measurement must not see their own output)
+    // while everything audible passes through the tone stage. If the stage is
+    // unavailable this falls back to the direct connection — playback never
+    // depends on an optional feature.
+    if (typeof connectPlaybackOutputHop === 'function') {
+      connectPlaybackOutputHop(gainNode, audioCtx.destination);
+    } else {
+      gainNode.connect(audioCtx.destination);
+    }
   } else if (analysisSinkNode) {
     analyser.connect(analysisSinkNode);
     analysisSinkNode.connect(audioCtx.destination);

@@ -4,7 +4,7 @@
   // EN-FORK perf: stable cache key — the server answers with ETag/304, so
   // unchanged modules come from disk cache instead of being re-read every
   // launch. Bump MODULE_SET_VERSION when shipping changed modules.
-  const moduleCacheBust = 'v8-en';
+  const moduleCacheBust = 'v10-en';
   const modulePaths = [
     'js/modules/00-state/00-core-stores.js',
     'js/modules/00-state/01-perf-render-state.js',
@@ -76,6 +76,7 @@
     'js/modules/05-playback/16-cuefield-automix-core.js',
     'js/modules/05-playback/17-cuefield-timeline-executor.js',
     'js/modules/05-playback/18-cuefield-automix-integration.js',
+    'js/modules/05-playback/19-playback-quality.js',
     'js/modules/06-lyrics/00-lyrics-fetch-parse.js',
     'js/modules/06-lyrics/01-playlist-panel-shell.js',
     'js/modules/06-lyrics/02-playlist-detail.js',

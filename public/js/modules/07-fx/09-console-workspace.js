@@ -264,6 +264,29 @@ var FX_CONSOLE_LAYOUT = [
       { key: 'output', title: 'Playback output', hint: 'Audio output devices and routing panel', items: [
         fxConsoleItem('audio-output-panel', 'Playback output device', 'sound card headphones speakers routing', false)
       ] },
+      // EN-FORK: every control here has to be listed. The console workspace
+      // rebuilds the panel from this table and then deletes whatever is left
+      // in the original markup — a div with no input or button inside is never
+      // discovered as a residual, so an unregistered toggle is removed outright
+      // rather than merely left unlisted.
+      { key: 'playback', title: 'Playback quality', hint: 'Speed, sleep timer, tone control and level', open: true, items: [
+        fxConsoleItem('pbq-speed-seg', 'Playback speed', 'speed tempo slower faster rate 0.5 0.75 1.25 1.5 2 pitch'),
+        fxConsoleItem('pbq-sleep-seg', 'Sleep timer', 'sleep stop pause after minutes end of track'),
+        fxConsoleItem('pbq-sleep-status', 'Sleep countdown', 'sleep remaining time left', false),
+        fxConsoleItem('t-pbqEqualizer', 'Equaliser', 'eq tone bass treble mid bands preamp shape'),
+        fxConsoleItem('t-pbqNormalise', 'Volume normalisation', 'loudness level replay gain even out quieter louder tracks'),
+        fxConsoleItem('t-pbqGapless', 'Gapless albums', 'crossfade seamless album boundary no silence between tracks'),
+        fxConsoleItem('pbq-preamp', 'Preamp', 'gain boost cut decibels overall level'),
+        fxConsoleItem('pbq-band-0', 'EQ 60 Hz', 'sub bass shelf low end'),
+        fxConsoleItem('pbq-band-1', 'EQ 150 Hz', 'bass body warmth'),
+        fxConsoleItem('pbq-band-2', 'EQ 400 Hz', 'low mid boxiness'),
+        fxConsoleItem('pbq-band-3', 'EQ 1 kHz', 'mid presence voice'),
+        fxConsoleItem('pbq-band-4', 'EQ 2.4 kHz', 'high mid clarity edge'),
+        fxConsoleItem('pbq-band-5', 'EQ 6 kHz', 'treble detail sibilance'),
+        fxConsoleItem('pbq-band-6', 'EQ 14 kHz', 'air brilliance openness'),
+        fxConsoleItem('pbq-eq-preset-seg', 'EQ preset', 'flat bass vocal bright loudness'),
+        fxConsoleItem('pbq-status', 'Tone status', 'equaliser normalisation state active', false)
+      ] },
       { key: 'performance', title: 'Performance & background', hint: 'Quality tiers, background rendering and keep-alive', items: [
         fxConsoleItem('performance-quality-seg', 'Quality tier', 'low medium high ultra render quality'),
         fxConsoleItem('foreground-fps-seg', 'Foreground FPS cap', 'fps vsync vsync high refresh power saving 45 60 75 90 120'),

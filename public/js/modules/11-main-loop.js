@@ -395,6 +395,11 @@ function animate() {
     midPeak = Math.max(midPeak * 0.993, mInst, 0.026);
     treblePeak = Math.max(treblePeak * 0.992, tHigh, 0.018);
     energyPeak = Math.max(energyPeak * 0.995, rms, 0.030);
+    // EN-FORK: volume normalisation measures the raw track from the analyser —
+    // upstream of the output gain, so the level it records does not move when
+    // the user drags the volume slider. Returns at once once the window is
+    // closed or normalisation is off, so this is one boolean per audio frame.
+    if (typeof trackPlaybackLoudnessSample === 'function') trackPlaybackLoudnessSample(rms);
 
     var rb = Math.min(1, Math.pow(bKick / Math.max(0.038, bassPeak * 0.66), 0.78));
     var rm = Math.min(1, Math.pow(mInst / Math.max(0.025, midPeak * 0.70), 0.86));

@@ -306,7 +306,7 @@ test('stopping the watcher releases every timer and handle', async () => {
 
 test('the folder browser is registered and reachable', () => {
   assert.match(loaderSource, /'js\/modules\/13-library\/07-library-folder-browser\.js'/);
-  assert.match(loaderSource, /moduleCacheBust = 'v8-en'/);
+  assert.match(loaderSource, /moduleCacheBust = 'v10-en'/);
   assert.match(indexHtml, /css\/library-folders\.css/);
   // The side pane exists in the page markup, so switching views hides it
   // rather than rebuilding it.

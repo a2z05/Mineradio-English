@@ -110,6 +110,12 @@ var PLAYBACK_QUALITY_STORE_KEY = 'mineradio-playback-quality-v1';
 var AUDIO_OUTPUT_DEVICE_STORE_KEY = 'mineradio-audio-output-device-v1';
 var AUDIO_OUTPUT_MIRROR_STORE_KEY = 'mineradio-audio-output-mirror-v1';
 var AUDIO_INPUT_BRIDGE_STORE_KEY = 'mineradio-audio-input-bridge-v1';
+// EN-FORK playback quality: speed, equaliser, preamp, normalisation, gapless.
+// Separate from PLAYBACK_QUALITY_STORE_KEY, which holds the streaming bitrate
+// ladder per provider — a different kind of "quality" entirely.
+var PBQ_STORE_KEY = 'mineradio-playback-tone-v1';
+// Measured per-track level for volume normalisation, capped inside the module.
+var PBQ_NORM_STORE_KEY = 'mineradio-playback-norm-v1';
 var PROVIDER_VIP_AUDIT_STORE_KEY = 'mineradio-provider-vip-audit-v1';
 var QQ_PLAYBACK_VIP_EVIDENCE_STORE_KEY = 'mineradio-qq-playback-vip-evidence-v1';
 var LOGIN_COOKIE_EXPORT_STORE_KEY = 'mineradio-login-cookie-export-v1';
