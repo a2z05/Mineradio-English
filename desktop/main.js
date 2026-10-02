@@ -5168,6 +5168,34 @@ ipcMain.handle('mineradio-local-library-export-m3u', async (event, request = {})
   }
 });
 
+// Turning playlist text into files on this disk. The file dialog offers .m3u,
+// .m3u8 and .pls, and the three do not agree on a grammar: an M3U line IS the
+// path, while a PLS line wraps it in `FileN=`. Left unwrapped, every PLS line
+// resolves to a file literally named "File1=..." — no extension match, no
+// entries, and the import reports that the playlist held no audio at all.
+// Both are resolved against the folder the playlist came from, so a playlist
+// copied to another drive still finds its relative tracks.
+function parsePlaylistText(text, baseDirectory) {
+  const entries = [];
+  const seen = new Set();
+  const source = String(text || '').replace(/^\uFEFF/, '');
+  for (const raw of source.split(/\r?\n/)) {
+    const line = String(raw || '').trim();
+    if (!line || line.startsWith('#') || line.startsWith('[')) continue;
+    const wrapped = /^(?:file|filename)\d*\s*=\s*(.+)$/i.exec(line);
+    const entry = String((wrapped ? wrapped[1] : line) || '').trim();
+    if (!entry) continue;
+    const candidate = path.isAbsolute(entry) ? entry : path.resolve(String(baseDirectory || ''), entry);
+    if (!/\.(mp3|flac|wav|ogg|m4a|aac|opus)$/i.test(candidate)) continue;
+    const identity = process.platform === 'win32' ? candidate.toLowerCase() : candidate;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    entries.push({ path: candidate, relativePath: '' });
+    if (entries.length >= 50000) break;
+  }
+  return entries;
+}
+
 ipcMain.handle('mineradio-local-library-import-m3u', async (event) => {
   if (!isTrustedMainWindowIpc(event)) return { ok: false, count: 0, tracks: [], error: 'UNTRUSTED_SENDER' };
   try {
@@ -5180,22 +5208,7 @@ ipcMain.handle('mineradio-local-library-import-m3u', async (event) => {
     if (chosen.canceled || !chosen.filePaths || !chosen.filePaths[0]) return { ok: false, canceled: true };
     const text = fs.readFileSync(chosen.filePaths[0], 'utf8');
     const baseDirectory = path.dirname(chosen.filePaths[0]);
-    const entries = [];
-    const seen = new Set();
-    for (const raw of text.split(/\r?\n/)) {
-      const line = String(raw || '').trim();
-      if (!line || line.startsWith('#')) continue;
-      const candidates = path.isAbsolute(line) ? [line] : [path.resolve(baseDirectory, line)];
-      for (const candidate of candidates) {
-        const identity = process.platform === 'win32' ? candidate.toLowerCase() : candidate;
-        if (seen.has(identity)) continue;
-        if (!/\.(mp3|flac|wav|ogg|m4a|aac|opus)$/i.test(candidate)) continue;
-        seen.add(identity);
-        entries.push({ path: candidate, relativePath: '' });
-        break;
-      }
-      if (entries.length >= 50000) break;
-    }
+    const entries = parsePlaylistText(text, baseDirectory);
     if (!entries.length) return { ok: false, count: 0, tracks: [], error: 'PLAYLIST_HAD_NO_AUDIO' };
     const result = await localMusicLibrary.importFiles(entries, { replace: false });
     return { ...result, source: 'm3u' };

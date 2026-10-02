@@ -360,7 +360,7 @@ test('a listen becomes exactly one library counter event', () => {
 
 test('the guard is registered and hooked into playback', () => {
   assert.match(loaderSource, /'js\/modules\/13-library\/06-library-playback-guard\.js'/);
-  assert.match(loaderSource, /moduleCacheBust = 'v10-en'/,
+  assert.match(loaderSource, /moduleCacheBust = 'v11-en'/,
     'changed modules need a new cache key or the running app keeps the old ones');
 
   // The listener is installed by its own module: this script is concatenated,

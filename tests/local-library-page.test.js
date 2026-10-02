@@ -474,7 +474,10 @@ test('restoring refuses a file that is not one of ours', async () => {
       'function setLocalLibraryStoreTracks() {}',
       'function libraryPaintPlaylistPane() {}',
       'function libraryPaintNav() {}',
-      'function libraryRebuildRows() {}'].join('\n'),
+      'function libraryRebuildRows() {}',
+      // The settings half is covered on its own in
+      // library-transfer-settings-backup.test.js; here it only has to exist.
+      'function librarySettingsApply() { return 0; }'].join('\n'),
     sandbox
   );
 
