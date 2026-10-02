@@ -32,7 +32,11 @@ const STORE_NAMES = [
   'localLibraryUserState', 'localLibraryIsFavorite', 'localLibraryNormalizeTracks',
   'localLibraryFolderOf', 'localLibraryKeyFor', 'localLibraryBuildGroups',
   'localLibraryBuildIndex', 'libraryViewMeta', 'localLibrarySortedCopy',
-  'libraryViewRows', 'localLibraryScoreMatch', 'librarySearchTracks',
+  'libraryViewRows', 'localLibrarySearchBlob', 'localLibrarySearchBlobs',
+  'localLibraryScoreMatch', 'localLibraryScoreCeiling', 'localLibraryQueryTerms',
+  'localLibraryMatchScore', 'localLibraryBlobCouldMatch', 'localLibraryHitBetter',
+  'localLibraryCompareHits', 'localLibrarySearchSongs',
+  'librarySearchTracks', 'localLibrarySearchCandidates',
   'libraryGroupTracks', 'librarySetFavorite', 'libraryToggleFavorite',
   'librarySetRating', 'libraryRecordPlaybackEvent',
 ];

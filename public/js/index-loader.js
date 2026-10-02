@@ -4,7 +4,7 @@
   // EN-FORK perf: stable cache key — the server answers with ETag/304, so
   // unchanged modules come from disk cache instead of being re-read every
   // launch. Bump MODULE_SET_VERSION when shipping changed modules.
-  const moduleCacheBust = 'v12-en';
+  const moduleCacheBust = 'v13-en';
   const modulePaths = [
     'js/modules/00-state/00-core-stores.js',
     'js/modules/00-state/01-perf-render-state.js',

@@ -12,6 +12,13 @@ var SEARCH_HISTORY_MODES = ['song', 'ytmusic', 'deezer', 'soundcloud', 'spotify'
 var MUSIC_SEARCH_INITIAL_VISIBLE = 18;
 var MUSIC_SEARCH_APPEND_BATCH = 14;
 var MUSIC_SEARCH_MAX_RESULTS = 180;
+// How much of the on-device library one global query may contribute. This is a
+// search panel, not the Library page, and the merge keeps the highest-scoring
+// 180 of everything: without a ceiling a query like "the" matches tens of
+// thousands of local files, they score as well as any online row does, and the
+// online sources disappear from a list they are supposed to share. Forty is a
+// quarter of the panel and still four times the eighteen rows first painted.
+var MUSIC_SEARCH_LOCAL_CANDIDATE_LIMIT = 40;
 var searchLoadMoreObserver = null;
 var pendingSearchProviderPages = null;
 var searchMusicRenderState = {
@@ -496,6 +503,10 @@ updateSearchModeTabs();
 // EN-FORK global swap: default provider is YouTube Music. Legacy Chinese
 // keys still resolve so persisted queues/history degrade gracefully.
 function songProviderKey(song) {
+  // Ahead of everything else: a track from this device is never a stream, and
+  // falling through to the default tagged it "YT" — a local file presented as
+  // a YouTube Music result, with no way to tell the two apart in the row.
+  if (song && (song.provider === 'local' || song.source === 'local' || song.type === 'local' || song.localKey || song.localFileId)) return 'local';
   if (song && (song.provider === 'ytmusic' || song.source === 'ytmusic' || song.type === 'ytmusic' || song.videoId)) return 'ytmusic';
   // EN-FORK: the two keyless sources. iTunes and the Internet Archive are the
   // only providers that resolve on a network where the streaming services are
@@ -510,15 +521,15 @@ function songProviderKey(song) {
   if (song && (song.provider === 'kugou' || song.source === 'kugou' || song.type === 'kugou' || song.hash || song.audioHash)) return 'kugou';
   return 'ytmusic';
 }
-var SONG_SOURCE_TAG_LABELS = { ytmusic: 'YT', deezer: 'DZ', soundcloud: 'SC', spotify: 'SP', itunes: 'AP', archive: 'IA', netease: 'NE', qq: 'QQ', kugou: 'KG', qishui: 'QS' };
+var SONG_SOURCE_TAG_LABELS = { local: 'LC', ytmusic: 'YT', deezer: 'DZ', soundcloud: 'SC', spotify: 'SP', itunes: 'AP', archive: 'IA', netease: 'NE', qq: 'QQ', kugou: 'KG', qishui: 'QS' };
 function platformMeta(provider) {
-  var map = { ytmusic: { label: 'YouTube Music' }, deezer: { label: 'Deezer' }, soundcloud: { label: 'SoundCloud' }, spotify: { label: 'Spotify' }, itunes: { label: 'Apple Music preview' }, archive: { label: 'Internet Archive' }, netease: { label: 'NetEase' }, qq: { label: 'QQ Music' }, kugou: { label: 'Kugou' }, qishui: { label: 'Soda Music' } };
+  var map = { local: { label: 'This device' }, ytmusic: { label: 'YouTube Music' }, deezer: { label: 'Deezer' }, soundcloud: { label: 'SoundCloud' }, spotify: { label: 'Spotify' }, itunes: { label: 'Apple Music preview' }, archive: { label: 'Internet Archive' }, netease: { label: 'NetEase' }, qq: { label: 'QQ Music' }, kugou: { label: 'Kugou' }, qishui: { label: 'Soda Music' } };
   return map[provider] || { label: provider };
 }
 function songSourceTagHtml(song, opts) {
   opts = opts || {};
   var rawKey = song && (song.resolvedPlaybackProvider || song.playbackProvider || song.audioProvider || song.providerResolved || '');
-  var key = /^(ytmusic|deezer|soundcloud|netease|qq|kugou|qishui|spotify|itunes|archive)$/.test(String(rawKey || '')) ? String(rawKey) : songProviderKey(song);
+  var key = /^(ytmusic|deezer|soundcloud|netease|qq|kugou|qishui|spotify|itunes|archive|local)$/.test(String(rawKey || '')) ? String(rawKey) : songProviderKey(song);
   var label = SONG_SOURCE_TAG_LABELS[key] || key.toUpperCase();
   if (opts.switcher) {
     return '<button type="button" class="tag-source ' + key + ' control-source-chip" title="Switch source" aria-haspopup="true" onclick="toggleControlSourceSwitcher(event)">' + label + '</button>';
@@ -1089,6 +1100,12 @@ function searchFullLengthLooksSameSong(key, title, artists, other) {
 // 'direct-url', and a provider that says nothing at all is believed.
 function searchSongIsFullLength(song) {
   if (!song || song.playbackMode === 'preview') return false;
+  // A file on this device is the whole recording whatever its length: the 45s
+  // floor below exists to catch a clip dressed up as a track, and a 30-second
+  // local file is not dressed up as anything — it is all there is. Without this
+  // a library of short tracks would sit behind the preview grace window waiting
+  // for a network source that is never going to answer.
+  if (isLocalLibrarySong(song)) return true;
   // Anything under 45s is a clip whatever it is labelled, and a preview row
   // that "upgrades" to another preview is the bug this exists to remove.
   var duration = Number(song.duration || 0);
@@ -1183,7 +1200,8 @@ function scoreSongSearchResult(song, q, sourceIndex) {
 // arrays still accepted for backward compatibility with persisted callers.
 // The keyless sources are merged first: on an equal relevance score the
 // earlier push wins, so the tracks that actually play here are the ones kept.
-function mergeSongSearchResults(ytmusicSongs, deezerSongs, soundcloudSongs, spotifySongs, itunesSongs, archiveSongs, legacyNetease, legacyQq, legacyKugou, legacyQishui, limit, q) {
+// Local goes in ahead of even those — see the push below.
+function mergeSongSearchResults(ytmusicSongs, deezerSongs, soundcloudSongs, spotifySongs, itunesSongs, archiveSongs, legacyNetease, legacyQq, legacyKugou, legacyQishui, limit, q, localSongs) {
   var out = [];
   var providerSeen = {};
   var canonicalSeen = {};
@@ -1196,12 +1214,27 @@ function mergeSongSearchResults(ytmusicSongs, deezerSongs, soundcloudSongs, spot
     var canonicalKey = searchCanonicalSongKey(song);
     if (canonicalKey && canonicalSeen[canonicalKey] != null) {
       var existingIndex = canonicalSeen[canonicalKey];
-      if ((song._searchScore || 0) > (out[existingIndex]._searchScore || 0)) out[existingIndex] = song;
+      var existing = out[existingIndex];
+      var incomingLocal = isLocalLibrarySong(song);
+      // Two rows that canonicalise together are the same recording, so this is
+      // not a relevance contest — it is a choice of where to play it from. A
+      // file on this device is already loaded and will play; the stream may not
+      // resolve at all, and on a network where the streaming hosts are blocked
+      // it never does. The local copy therefore wins outright rather than on
+      // score, and a stream that arrives later never displaces it.
+      if (incomingLocal !== isLocalLibrarySong(existing)) {
+        if (incomingLocal) out[existingIndex] = song;
+        return;
+      }
+      if ((song._searchScore || 0) > (existing._searchScore || 0)) out[existingIndex] = song;
       return;
     }
     if (canonicalKey) canonicalSeen[canonicalKey] = out.length;
     out.push(song);
   }
+  // Before every provider, so an equal relevance score below keeps the file
+  // that is already on this device.
+  (localSongs || []).forEach(function (song, i) { push(song, i); });
   // Full-length sources are merged before previews. Where two results are
   // equally relevant to what was typed, the earlier push wins — and iTunes can
   // only ever offer a 30-second preview, so on a network where every other
@@ -1263,10 +1296,28 @@ var SEARCH_PROVIDER_TIMEOUT_BY_PROVIDER = { archive: 60000 };
 // settles, so the fastest source paints first instead of waiting for the slowest.
 async function fetchMusicSearchResults(q, mode, previousPages, onProgress) {
   searchProviderNotice = '';
+  // Before the fan-out, not after it: this is the only source that cannot fail,
+  // it answers from a list the renderer already holds, and it takes 31 ms at 50k
+  // tracks. Computing it first is what lets a query show its own files in the
+  // same frame it was typed while the Archive is still seconds from its first
+  // metadata reply.
+  var localSongs = typeof localLibrarySearchCandidates === 'function'
+    ? localLibrarySearchCandidates(q, MUSIC_SEARCH_LOCAL_CANDIDATE_LIMIT)
+    : [];
   var providers = activeSearchProvidersForMode(mode);
   if (!providers.length) {
-    searchProviderNotice = searchProviderLoginNotice(mode);
-    return { songs: [], providerPages: {}, hasMore: false };
+    // No sign-inable source in this mode is not the same as nothing to show:
+    // the library on this device does not need one. The notice is only worth
+    // its pixels when there is no other answer to give.
+    if (!localSongs.length) searchProviderNotice = searchProviderLoginNotice(mode);
+    return {
+      songs: localSongs.length
+        ? mergeSongSearchResults(null, null, null, null, null, null, null, null, null, null,
+          MUSIC_SEARCH_MAX_RESULTS, q, localSongs)
+        : [],
+      providerPages: {},
+      hasMore: false
+    };
   }
   previousPages = previousPages && typeof previousPages === 'object' ? previousPages : null;
   var providerPages = {};
@@ -1324,13 +1375,21 @@ async function fetchMusicSearchResults(q, mode, previousPages, onProgress) {
         songsByProvider.archive,
         null, null, null, null,
         MUSIC_SEARCH_MAX_RESULTS,
-        q
+        q,
+        localSongs
       ),
       providerPages: providerPages,
       hasMore: searchProviderPagesHaveMore(providerPages)
     };
   }
 
+  // Paint the local half before any provider has answered. collect() merges
+  // whatever has settled, so with nothing settled yet this is the library on
+  // its own — and because a local row is a whole track, the preview grace
+  // window that holds a provisional list back does not hold this one.
+  if (localSongs.length && typeof onProgress === 'function') {
+    try { onProgress(collect()); } catch (err) { console.warn('search progress render failed:', err); }
+  }
   await Promise.all(fetchProviders.map(function (provider) {
     var previous = previousPages && previousPages[provider];
     var offset = previous ? Math.max(0, Number(previous.nextOffset) || 0) : 0;

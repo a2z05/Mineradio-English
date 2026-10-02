@@ -320,6 +320,42 @@ function libraryViewRows(viewId) {
 
 // ---------------------------------------------------------------- search
 
+// One lowercase string per track holding every field search looks at, joined
+// with newlines. The eight-field scan below costs a function call per field per
+// track — 400k calls across a 50k library, measured at 378 ms for a two
+// character query — where one scan of one string per track measures 31 ms.
+//
+// The blob is a superset of the fields, so it is only ever used to throw tracks
+// away: a term whose characters do not appear in order in the blob cannot
+// appear in order in any field of it either, which makes the filter free of
+// false negatives and leaves the scoring below — and therefore every result and
+// its order — exactly as it was.
+//
+// The cache hangs off the store and is keyed on the array it was built from, so
+// it invalidates itself the moment the track list is replaced and does not move
+// at all when a favourite or a rating changes. No caller has to remember to
+// clear it.
+function localLibrarySearchBlobs(tracks) {
+  var cache = localLibraryStore.searchBlobCache;
+  if (cache && cache.source === tracks) return cache.blobs;
+  var blobs = new Array(tracks.length);
+  for (var i = 0; i < tracks.length; i += 1) blobs[i] = localLibrarySearchBlob(tracks[i]);
+  localLibraryStore.searchBlobCache = { source: tracks, blobs: blobs };
+  return blobs;
+}
+
+function localLibrarySearchBlob(song) {
+  song = song || {};
+  return (String(song.name || '') + '\n' +
+    String(song.artist || '') + '\n' +
+    String(song.album || '') + '\n' +
+    String(song.albumArtist || '') + '\n' +
+    String(song.genre || '') + '\n' +
+    String(song.composer || '') + '\n' +
+    String(song.localPath || '') + '\n' +
+    String(song.year || '')).toLowerCase();
+}
+
 // A subsequence match ranked by how tightly the query hugs the text. "gt" finds
 // "Greatest Hits" but so does "great hit", and a consecutive run scores above a
 // scattered one — which is the difference between a useful top row and a list
@@ -344,43 +380,205 @@ function localLibraryScoreMatch(haystack, needle) {
   return score;
 }
 
-function librarySearchTracks(query) {
+// The most localLibraryScoreMatch can ever return for a query of n characters.
+// The two substring paths top out at 1000 (a prefix hit) and 699 (a hit further
+// in); the subsequence path adds 10 + 6·run per character, and run can never
+// exceed the character's own index, so the sum is 10n + 3n(n-1) with every gap
+// zero — any real gap only subtracts from it.
+//
+// This is what lets localLibraryMatchScore stop early. At 50k tracks the eight
+// field scores cost ~400 ms when a query is broad enough to reach the last
+// field, which is most two-character queries; once a field has hit the ceiling
+// no remaining field can beat it, so the other six calls are provably wasted.
+// For every query under about seventeen characters the ceiling is 1000 — an
+// exact prefix — which is the common case by a wide margin.
+function localLibraryScoreCeiling(termLength) {
+  var n = Number(termLength) > 0 ? Number(termLength) : 0;
+  var seq = 10 * n + 3 * n * (n - 1);
+  return seq > 1000 ? seq : 1000;
+}
+
+// What a query *is*, in one place: whitespace-separated, lowercased terms.
+// Every entry point splits this way so the library page and the global panel
+// cannot disagree about how many words were typed.
+function localLibraryQueryTerms(query) {
+  var trimmed = String(query || '').trim().toLowerCase();
+  return trimmed ? trimmed.split(/\s+/).filter(Boolean) : [];
+}
+
+// The single decision about whether a track matches: every term has to hit at
+// least one field, and the track's score is the sum of that term's best field.
+//
+// Deliberately shared. It used to be inlined twice, and the second copy was
+// written against the memoised blob — whose subsequence walk can step over a
+// newline into the next field. "northern aurora" therefore matched a track
+// whose fields held "Northern" and "Borealis", and the global panel offered a
+// row the library page would reject. Two matchers on one query is two answers.
+//
+// The fields are scored inline rather than collected into an array first:
+// building the array costs ~148 ms of the 378 ms scan at 50k tracks, and
+// nothing here needs to iterate them any other way.
+function localLibraryMatchScore(song, terms) {
+  if (!song || !terms.length) return 0;
+  var year = String(song.year || '');
+  var total = 0;
+  for (var t = 0; t < terms.length; t += 1) {
+    var term = terms[t];
+    var ceiling = localLibraryScoreCeiling(term.length);
+    // Stop only at the ceiling — never at "good enough" — so the result is
+    // bit-for-bit what a full walk over all eight fields would have found.
+    // For any query shorter than about seventeen characters the ceiling is a
+    // plain prefix hit, which is what most two-character queries become on the
+    // artist or title field: six of the eight calls then never happen.
+    var termScore = localLibraryScoreMatch(song.name, term);
+    var scored;
+    if (termScore < ceiling) {
+      scored = localLibraryScoreMatch(song.artist, term);
+      if (scored > termScore) termScore = scored;
+    }
+    if (termScore < ceiling) {
+      scored = localLibraryScoreMatch(song.album, term);
+      if (scored > termScore) termScore = scored;
+    }
+    if (termScore < ceiling) {
+      scored = localLibraryScoreMatch(song.albumArtist, term);
+      if (scored > termScore) termScore = scored;
+    }
+    if (termScore < ceiling) {
+      scored = localLibraryScoreMatch(song.genre, term);
+      if (scored > termScore) termScore = scored;
+    }
+    if (termScore < ceiling) {
+      scored = localLibraryScoreMatch(song.composer, term);
+      if (scored > termScore) termScore = scored;
+    }
+    if (termScore < ceiling) {
+      scored = localLibraryScoreMatch(song.localPath, term);
+      if (scored > termScore) termScore = scored;
+    }
+    if (termScore < ceiling) {
+      scored = localLibraryScoreMatch(year, term);
+      if (scored > termScore) termScore = scored;
+    }
+    if (!termScore) return 0;
+    total += termScore;
+  }
+  return total;
+}
+
+// The blob is a superset of the fields, so it is only ever used to throw tracks
+// away: a term whose characters do not appear in order in the blob cannot
+// appear in order in any field of it either, which makes the filter free of
+// false negatives.
+//
+// It is not a *decision*. A subsequence found in the joined string may have
+// stepped across a newline into a different field, so this says yes to a few
+// tracks localLibraryMatchScore then rejects — one wasted score per track,
+// where the other direction would silently drop a real hit.
+function localLibraryBlobCouldMatch(blob, terms) {
+  for (var t = 0; t < terms.length; t += 1) {
+    if (!localLibraryScoreMatch(blob, terms[t])) return false;
+  }
+  return true;
+}
+
+// Order two search hits the same way everywhere: score first, then title, so
+// tracks that tie always come back in the same order whichever surface asked.
+function localLibraryHitBetter(a, b) {
+  if (a.score !== b.score) return a.score > b.score;
+  return String(a.song.name || '').localeCompare(String(b.song.name || '')) < 0;
+}
+
+// The same order, as a sort comparator, so the two callers below can never
+// drift into disagreeing about which of two tied tracks comes first.
+function localLibraryCompareHits(a, b) {
+  if (localLibraryHitBetter(a, b)) return -1;
+  if (localLibraryHitBetter(b, a)) return 1;
+  return 0;
+}
+
+// The one scan. Every track is blob-prefiltered, scored by
+// localLibraryMatchScore, and ordered by localLibraryCompareHits; `limit` then
+// cuts the tail, 0 meaning "keep everything".
+//
+// Both surfaces call this — the library page unbounded, the global panel to
+// forty — which is the whole reason it exists as a function rather than as a
+// loop in each. Two copies of a matcher diverge, and the first divergence this
+// had was a track whose blob matched across a field boundary that its fields
+// did not: the panel offered a row the page would reject.
+//
+// The prefilter is one call per track before the eight: on a 50k library it
+// costs 31 ms where the full scan costs 378 ms, and a query that matches
+// nothing — which is most of what is typed — never reaches the inner loop.
+function localLibrarySearchSongs(tracks, query, limit) {
   var trimmed = String(query || '').trim();
-  if (!trimmed) return localLibrarySortedCopy(localLibraryStore.tracks);
-  var terms = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
-  var tracks = localLibraryStore.tracks;
+  if (!trimmed) return localLibrarySortedCopy(tracks);
+  if (!tracks.length) return [];
+  var terms = localLibraryQueryTerms(trimmed);
+  var blobs = localLibrarySearchBlobs(tracks);
+  var cap = Number(limit) > 0 ? Number(limit) : 0;
   var hits = [];
   for (var i = 0; i < tracks.length; i += 1) {
+    if (!localLibraryBlobCouldMatch(blobs[i], terms)) continue;
     var song = tracks[i];
-    var best = 0;
-    var fields = [
-      song.name,
-      song.artist,
-      song.album,
-      song.albumArtist,
-      song.genre,
-      song.composer,
-      song.localPath,
-      String(song.year || '')
-    ];
-    var total = 0;
-    for (var t = 0; t < terms.length; t += 1) {
-      var termScore = 0;
-      for (var f = 0; f < fields.length; f += 1) {
-        termScore = Math.max(termScore, localLibraryScoreMatch(fields[f], terms[t]));
-      }
-      if (!termScore) { total = 0; break; }
-      total += termScore;
+    var score = localLibraryMatchScore(song, terms);
+    if (!score) continue;
+    if (!cap) { hits.push({ song: song, score: score }); continue; }
+
+    // Bounded: keep only the best `cap` while walking, instead of collecting
+    // every hit and sorting it. "rock" matches all fifty thousand tracks, and
+    // sorting that list costs ~100 ms in tie-breaking alone — ties go to
+    // localeCompare, of all things, because two tracks that score the same have
+    // to come back in the same order on both surfaces.
+    var last = hits.length >= cap ? hits[hits.length - 1] : null;
+    if (last && score < last.score) continue;
+    if (last && score === last.score &&
+      String(song.name || '').localeCompare(String(last.song.name || '')) >= 0) continue;
+    var hit = { song: song, score: score };
+    // Binary insertion into an already-ordered list. It asks "is this strictly
+    // better than what is at p", which is exactly what sort-then-slice does, so
+    // the answer is the same rows in the same order — ties included.
+    var at = 0;
+    var hi = hits.length;
+    while (at < hi) {
+      var mid = (at + hi) >> 1;
+      if (localLibraryHitBetter(hit, hits[mid])) hi = mid;
+      else at = mid + 1;
     }
-    if (!total) continue;
-    best = total;
-    hits.push({ song: song, score: best });
+    hits.splice(at, 0, hit);
+    if (hits.length > cap) hits.length = cap;
   }
-  hits.sort(function (a, b) {
-    if (b.score !== a.score) return b.score - a.score;
-    return String(a.song.name || '').localeCompare(String(b.song.name || ''));
-  });
+  if (!cap) hits.sort(localLibraryCompareHits);
   return hits.map(function (hit) { return hit.song; });
+}
+
+function librarySearchTracks(query) {
+  return localLibrarySearchSongs(localLibraryStore.tracks, query, 0);
+}
+
+// What the global search box has to offer from this device: the same tracks
+// librarySearchTracks would return, cut to a bounded candidate list.
+//
+// The panel shows 180 rows across every source it has, and a library of fifty
+// thousand tracks answers a query like "the" with tens of thousands of rows —
+// handing those to mergeSongSearchResults would crowd every online source out
+// of the list, so only the top `limit` survive.
+//
+// Empty is not the same answer here as on the library page. The page shows the
+// whole library with nothing typed; the panel has nothing to add to the online
+// results it is already showing, and offering all fifty thousand tracks would
+// be worse than offering none.
+//
+// The store is what the Library page hydrates at startup; the restore copy is
+// the fallback for the window before that finishes, so a search typed in the
+// first second of the session still finds something.
+function localLibrarySearchCandidates(query, limit) {
+  if (!String(query || '').trim()) return [];
+  var tracks = (localLibraryStore && localLibraryStore.tracks.length)
+    ? localLibraryStore.tracks
+    : (typeof localLibraryTracksNow === 'function' ? localLibraryTracksNow() : []);
+  if (!tracks.length) return [];
+  return localLibrarySearchSongs(tracks, query, limit);
 }
 
 function libraryGroupTracks(query) {

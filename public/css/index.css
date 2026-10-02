@@ -2212,6 +2212,18 @@ body.empty-home-active.diy-mode #search-area:not(.has-results) #search-mode-tabs
   background: rgba(30, 215, 96, .085)
 }
 
+/* EN-FORK local badge. A file on this device is the row that always plays, so
+   it needs to be tellable apart from a stream at a glance in the result list. */
+.tag-source.local {
+  color: #d6f5ff;
+  border-color: rgba(0, 209, 255, .34);
+  background: rgba(0, 209, 255, .085)
+}
+
+.search-result.local-source:hover {
+  background: rgba(0, 209, 255, .052)
+}
+
 /* EN-FORK global provider badges */
 .tag-source.ytmusic {
   color: #ffd9df;
