@@ -48,6 +48,18 @@ const COVER_MIME_BY_EXTENSION = new Map([
   ['.gif', 'image/gif'],
   ['.bmp', 'image/bmp'],
 ]);
+// Artwork a folder carries when its files have no picture tag of their own —
+// the rung between "in the file" and "cached from a previous scan". Read in
+// this order, so a folder that has both a cover.jpg and a folder.jpg shows the
+// one taggers write first.
+const FOLDER_ARTWORK_BASENAMES = ['cover', 'front', 'albumart', 'albumartsmall', 'folder', 'album', 'frontcover'];
+const FOLDER_ARTWORK_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp']);
+// A folder cover is copied once per folder rather than once per track, so its
+// name says which folder it came from instead of which track first needed it —
+// twelve tracks sharing one folder.jpg cost one file, not twelve. Nothing else
+// on disk starts with this prefix: track covers are named from a 24-character
+// hex id, and "folder" is not hex.
+const FOLDER_COVER_PREFIX = 'folder-';
 
 let musicMetadataModulePromise = null;
 
@@ -120,6 +132,24 @@ function isPathInside(root, candidate) {
 function safeUnlink(filePath) {
   if (!filePath) return;
   try { fs.unlinkSync(filePath); } catch (_) {}
+}
+
+function isSharedCoverPath(coverPath) {
+  return path.basename(String(coverPath || '')).startsWith(FOLDER_COVER_PREFIX);
+}
+
+// A cover copied out of a folder belongs to every track in it, so it is only
+// deleted once nothing points at it any more — retagging one song must not
+// blank the album's art for the other eleven. Covers taken from a file itself
+// belong to that file alone and go as soon as it stops using them.
+function sharedCoversStillInUse(records) {
+  const inUse = new Set();
+  for (const record of records) {
+    if (record && record.coverPath && isSharedCoverPath(record.coverPath)) {
+      inUse.add(path.resolve(record.coverPath));
+    }
+  }
+  return inUse;
 }
 
 function embeddedImageDimensions(data, mime) {
@@ -289,21 +319,93 @@ async function defaultParseMetadata(filePath) {
   return module.parseFile(filePath, { duration: true, skipCovers: false });
 }
 
-async function buildLrcSidecarIndex(entries) {
+async function readSidecarLyric(lyricPath) {
+  if (!lyricPath) return '';
+  try {
+    const stat = await fs.promises.stat(lyricPath);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_LYRIC_BYTES) return '';
+    return decodeLyricBuffer(await fs.promises.readFile(lyricPath)).slice(0, MAX_LYRIC_BYTES);
+  } catch (_) {
+    return '';
+  }
+}
+
+// A .txt sitting beside a track is a note just as often as it is a lyric — a
+// tracklist, "see booklet", a URL. Only take one when its shape says the words
+// were meant to be sung, so a stray text file cannot take the panel over from
+// the online lookup that would have found the real thing.
+function looksLikeLyricText(text) {
+  const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return false;
+  // Timed, even a single line: that is an .lrc in all but name.
+  if (lines.some((line) => /\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]/.test(line))) return true;
+  const body = lines.filter((line) => !/^\[[a-z][a-z0-9-]{0,15}:[^\]]*\]$/i.test(line));
+  return body.length >= 3 && body.filter((line) => line.length >= 2).length >= 3;
+}
+
+// Read the folder image once per import, not once per track: a rescan of an
+// album asks twelve times and gets the same answer from one readFile.
+async function loadFolderArtwork(artworkPath, cache) {
+  if (!artworkPath) return null;
+  const identity = normalizedPathIdentity(artworkPath);
+  if (cache.has(identity)) return cache.get(identity);
+  const pending = (async () => {
+    try {
+      const stat = await fs.promises.stat(artworkPath);
+      if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_COVER_BYTES) return null;
+      const data = await fs.promises.readFile(artworkPath);
+      return {
+        format: COVER_MIME_BY_EXTENSION.get(path.extname(artworkPath).toLowerCase()) || '',
+        data,
+      };
+    } catch (_) {
+      return null;
+    }
+  })();
+  cache.set(identity, pending);
+  return pending;
+}
+
+// One readdir per folder feeds everything that sits beside the track: lyrics in
+// an .lrc, lyrics in a .txt, and the album art the folder itself carries.
+// Rescan walks every folder the library already came from, so a cover or a
+// lyric file dropped in afterwards is picked up without importing by hand.
+async function buildSidecarIndex(entries) {
   const directories = Array.from(new Set(entries.map((entry) => path.dirname(entry.path))));
-  const maps = new Map();
+  const lyrics = new Map();
+  const artwork = new Map();
   await mapWithConcurrency(directories, METADATA_CONCURRENCY, async (directory) => {
     const lookup = new Map();
+    const candidates = new Map();
     try {
       const names = await fs.promises.readdir(directory);
       for (const name of names) {
-        if (path.extname(name).toLowerCase() !== '.lrc') continue;
-        lookup.set(path.basename(name, path.extname(name)).toLowerCase(), path.join(directory, name));
+        const extension = path.extname(name).toLowerCase();
+        const base = path.basename(name, path.extname(name)).toLowerCase();
+        if (extension === '.lrc' || extension === '.txt') {
+          const sidecar = lookup.get(base) || { lrc: '', txt: '' };
+          // An .lrc wins a name it shares with a .txt: timestamps beat none,
+          // and only one of the two is ever read.
+          if (extension === '.lrc') sidecar.lrc = path.join(directory, name);
+          else if (!sidecar.lrc) sidecar.txt = path.join(directory, name);
+          lookup.set(base, sidecar);
+          continue;
+        }
+        if (FOLDER_ARTWORK_EXTENSIONS.has(extension) && FOLDER_ARTWORK_BASENAMES.indexOf(base) >= 0 && !candidates.has(base)) {
+          candidates.set(base, path.join(directory, name));
+        }
       }
     } catch (_) {}
-    maps.set(normalizedPathIdentity(directory), lookup);
+    const identity = normalizedPathIdentity(directory);
+    lyrics.set(identity, lookup);
+    let cover = '';
+    for (const base of FOLDER_ARTWORK_BASENAMES) {
+      const hit = candidates.get(base);
+      if (hit) { cover = hit; break; }
+    }
+    artwork.set(identity, cover);
   });
-  return maps;
+  return { lyrics, artwork, artworkBytes: new Map() };
 }
 
 class LocalMusicLibrary {
@@ -733,7 +835,32 @@ class LocalMusicLibrary {
     return { path: target, mime, stagedPath: temporary };
   }
 
-  async parseEntry(entry, sidecarDirectories) {
+  // A cover that came from beside the track rather than out of it. It is
+  // addressed by folder and by content, so every track in the album resolves to
+  // the same file and re-importing the album does not copy it again. Returns
+  // null when the image cannot be carried — over budget, unreadable, no mime we
+  // serve — which simply drops back to whatever is already cached: a folder
+  // without usable art is normal, not a warning worth repeating per track.
+  async stageFolderCover(directoryIdentity, picture) {
+    if (!picture) return null;
+    const mime = cleanText(picture && picture.format, '', 100).toLowerCase();
+    const extension = COVER_EXTENSION_BY_MIME.get(mime);
+    const data = picture && picture.data ? Buffer.from(picture.data) : null;
+    if (!extension || !coverWithinBudget(data, mime)) return null;
+    await fs.promises.mkdir(this.coverDirectory, { recursive: true });
+    const digest = crypto.createHash('sha256').update(data).digest('hex').slice(0, 16);
+    const folder = crypto.createHash('sha256').update(String(directoryIdentity || '')).digest('hex').slice(0, 16);
+    const target = path.join(this.coverDirectory, `${FOLDER_COVER_PREFIX}${folder}-${digest}${extension}`);
+    if (fs.existsSync(target)) return { path: target, mime };
+    // Random suffix, not just pid and millisecond: several tracks of the same
+    // album are parsed concurrently and all compute this same temporary name.
+    const temporary = path.join(this.coverDirectory,
+      `.${FOLDER_COVER_PREFIX}${folder}-${digest}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.stage`);
+    await fs.promises.writeFile(temporary, data);
+    return { path: target, mime, stagedPath: temporary };
+  }
+
+  async parseEntry(entry, sidecars) {
     const stat = await fs.promises.stat(entry.path);
     if (!stat.isFile()) {
       const error = new Error('LOCAL_AUDIO_NOT_FILE');
@@ -753,29 +880,51 @@ class LocalMusicLibrary {
     const format = metadata.format || {};
     const fallbackTitle = path.basename(entry.path, path.extname(entry.path));
     const artists = Array.isArray(common.artists) ? common.artists.filter(Boolean).join(' / ') : '';
+    const directoryIdentity = normalizedPathIdentity(path.dirname(entry.path));
     const picture = Array.isArray(common.picture) && common.picture.length ? common.picture[0] : null;
-    const cover = metadataError
-      ? {
+    // Artwork, in the order it is asked for: what the file itself carries, then
+    // what sits beside it in the folder, then whatever an earlier scan already
+    // cached. That last rung is the one that keeps an album's cover alive when
+    // the tag reader is having a bad day, and when the folder image has since
+    // been edited away.
+    let cover;
+    if (metadataError) {
+      cover = {
         path: previous && previous.coverPath || '',
         mime: previous && previous.coverMime || '',
-      }
-      : await this.stageCover(id, picture, previous);
-    const directoryLookup = sidecarDirectories.get(normalizedPathIdentity(path.dirname(entry.path)));
-    const sidecarPath = directoryLookup && directoryLookup.get(fallbackTitle.toLowerCase());
+      };
+    } else if (picture) {
+      cover = await this.stageCover(id, picture, previous);
+    } else {
+      const folderPicture = await loadFolderArtwork(sidecars.artwork.get(directoryIdentity), sidecars.artworkBytes);
+      const shared = folderPicture ? await this.stageFolderCover(directoryIdentity, folderPicture) : null;
+      cover = shared || {
+        path: previous && previous.coverPath || '',
+        mime: previous && previous.coverMime || '',
+      };
+    }
+    const sidecarDirectory = sidecars.lyrics.get(directoryIdentity);
+    const sidecar = sidecarDirectory && sidecarDirectory.get(fallbackTitle.toLowerCase());
     let lyric = '';
     let lyricSource = '';
-    if (sidecarPath) {
-      try {
-        const lyricStat = await fs.promises.stat(sidecarPath);
-        if (lyricStat.isFile() && lyricStat.size > 0 && lyricStat.size <= MAX_LYRIC_BYTES) {
-          lyric = decodeLyricBuffer(await fs.promises.readFile(sidecarPath)).slice(0, MAX_LYRIC_BYTES);
-          if (lyric) lyricSource = 'sidecar';
-        }
-      } catch (_) {}
+    // A synchronized file placed beside the track is the user saying "use this"
+    // and beats whatever the tag carries. A plain-text file does not carry that
+    // authority — half of them are notes — so it is asked for last, and only
+    // when it reads like lyrics. What the tag carries sits between the two.
+    if (sidecar && sidecar.lrc) {
+      lyric = await readSidecarLyric(sidecar.lrc);
+      if (lyric) lyricSource = 'sidecar';
     }
     if (!lyric) {
       lyric = embeddedLyricText(common);
       if (lyric) lyricSource = 'embedded';
+    }
+    if (!lyric && sidecar && sidecar.txt) {
+      const plain = await readSidecarLyric(sidecar.txt);
+      if (plain && looksLikeLyricText(plain)) {
+        lyric = plain;
+        lyricSource = 'sidecar';
+      }
     }
     if (!lyric && metadataError && previous && previous.lyric) {
       lyric = previous.lyric;
@@ -835,10 +984,10 @@ class LocalMusicLibrary {
     const replace = options.replace === true;
     const operation = async () => {
       if (!entries.length) return { ok: false, count: 0, tracks: [], failures: [], error: 'NO_SUPPORTED_LOCAL_AUDIO' };
-      const sidecarDirectories = await buildLrcSidecarIndex(entries);
+      const sidecars = await buildSidecarIndex(entries);
       const parsed = await mapWithConcurrency(entries, METADATA_CONCURRENCY, async (entry) => {
         try {
-          return await this.parseEntry(entry, sidecarDirectories);
+          return await this.parseEntry(entry, sidecars);
         } catch (error) {
           return {
             failure: {
@@ -907,7 +1056,11 @@ class LocalMusicLibrary {
       }
       this.records = nextRecords;
       this.order = nextOrder;
-      for (const oldCoverPath of cleanupAfterCommit) safeUnlink(oldCoverPath);
+      const sharedCoversInUse = sharedCoversStillInUse(nextRecords.values());
+      for (const oldCoverPath of cleanupAfterCommit) {
+        if (sharedCoversInUse.has(path.resolve(oldCoverPath))) continue;
+        safeUnlink(oldCoverPath);
+      }
       const snapshot = this.listTracksSync();
       return { ...snapshot, failures, metadataWarnings };
     };
@@ -934,8 +1087,15 @@ class LocalMusicLibrary {
       this.records = nextRecords;
       this.order = nextOrder;
       // Only the cover copy cached under our own directory goes. record.audioPath
-      // is the user's file and is deliberately never unlinked here.
-      for (const record of removed) safeUnlink(record.coverPath);
+      // is the user's file and is deliberately never unlinked here. A cover
+      // shared with the rest of the folder stays until the last track that
+      // used it is gone with it.
+      const sharedCoversInUse = sharedCoversStillInUse(nextRecords.values());
+      for (const record of removed) {
+        if (!record.coverPath) continue;
+        if (sharedCoversInUse.has(path.resolve(record.coverPath))) continue;
+        safeUnlink(record.coverPath);
+      }
       return { ...this.listTracksSync(), removed: removed.length };
     };
     const pending = this.mutation.then(operation, operation);
@@ -1035,6 +1195,7 @@ class LocalMusicLibrary {
 
 module.exports = {
   AUDIO_MIME,
+  FOLDER_ARTWORK_BASENAMES,
   LOCAL_MUSIC_SCHEME,
   LocalMusicLibrary,
   coverWithinBudget,
@@ -1042,6 +1203,7 @@ module.exports = {
   embeddedImageDimensions,
   embeddedLyricText,
   localFileId,
+  looksLikeLyricText,
   parseByteRange,
   registerLocalMusicScheme,
 };
