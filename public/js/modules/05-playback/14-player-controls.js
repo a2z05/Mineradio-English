@@ -614,7 +614,19 @@ function reorderQueueForShufflePlaybackOrder(startIdx, opts) {
     for (var i = 0; i < playQueue.length; i++) {
       if (i !== startIdx) upcoming.push(playQueue[i]);
     }
-    shuffleArrayInPlace(upcoming);
+    // Fresh tracks first. Without this the tail is a plain shuffle, so the
+    // track that just finished is as likely to be next as one never heard —
+    // which is the "it picked the same song again" complaint. Heard tracks are
+    // kept, shuffled, at the back, so the pass can still end.
+    var heardKeys = {};
+    for (var h = 0; h < playbackHistory.length; h += 1) heardKeys[playbackHistory[h]] = true;
+    var fresh = [], heard = [];
+    for (var u = 0; u < upcoming.length; u += 1) {
+      (heardKeys[queueItemKey(upcoming[u])] ? heard : fresh).push(upcoming[u]);
+    }
+    shuffleArrayInPlace(fresh);
+    shuffleArrayInPlace(heard);
+    upcoming = fresh.concat(heard);
     playQueue.length = 0;
     playQueue.push(currentSong);
     for (var j = 0; j < upcoming.length; j++) playQueue.push(upcoming[j]);
@@ -625,10 +637,58 @@ function reorderQueueForShufflePlaybackOrder(startIdx, opts) {
   if (opts.persistSnapshot !== false && typeof saveLastPlaybackSnapshot === 'function') saveLastPlaybackSnapshot(true, opts.reason || 'shuffle-playback-order');
   return currentIdx;
 }
+function playbackHistoryPush(song, previousSong) {
+  if (!previousSong) return;
+  var leaving = queueItemKey(previousSong);
+  var staying = queueItemKey(song);
+  if (!leaving || leaving === staying) return; // repeat-one and quality switches
+  if (playbackHistory[playbackHistory.length - 1] === leaving) return;
+  playbackHistory.push(leaving);
+  if (playbackHistory.length > PLAYBACK_HISTORY_LIMIT) playbackHistory.shift();
+}
+
+// Returns the queue index to go back to, or -1 when there is nothing behind
+// the current track. The key is looked up rather than trusted as an index,
+// because entering shuffle reorders the array under the history.
+function playbackHistoryPop() {
+  while (playbackHistory.length) {
+    var key = playbackHistory.pop();
+    for (var i = 0; i < playQueue.length; i += 1) {
+      if (queueItemKey(playQueue[i]) === key) return i;
+    }
+  }
+  return -1;
+}
+
+function clearPlaybackHistory() {
+  playbackHistory = [];
+}
+
+// "Play once" reaching its end: pause and show the stopped state, rather than
+// leaving the transport lit up over a finished track.
+function stopAtQueueEnd(reason) {
+  try {
+    if (audio && typeof audio.pause === 'function') audio.pause();
+  } catch (e) { }
+  playing = false;
+  playToggleBusy = false;
+  setPlayIcon(false);
+  forcePlaybackControlsInteractive();
+  if (typeof resetCuefieldAutoMix === 'function') resetCuefieldAutoMix(reason || 'queue-end');
+}
+
 function nextTrack(userInitiated) {
   if (!playQueue.length) return;
   playToggleBusy = false;
   forcePlaybackControlsInteractive();
+  // "Play once" means the list ends when the last track does — whether the
+  // end arrived by the track finishing or by someone pressing Next. Wrapping
+  // to the top here would silently turn the mode back into Repeat all.
+  if (playMode === 'off' && currentIdx >= playQueue.length - 1) {
+    stopAtQueueEnd('play-once-end');
+    if (userInitiated) showToast('End of queue');
+    return;
+  }
   if (currentIdx >= playQueue.length - 1 && queueHydrationState && queueHydrationState.queueRef === playQueue && (queueHydrationState.active || queueHydrationState.loading) && !queueHydrationState.error) {
     var previousTail = currentIdx;
     Promise.resolve(hydratePlaylistQueueNextPage('queue-tail')).then(function () {
@@ -653,8 +713,16 @@ function prevTrack(userInitiated) {
   if (!playQueue.length) return;
   playToggleBusy = false;
   forcePlaybackControlsInteractive();
-  currentIdx = (currentIdx - 1 + playQueue.length) % playQueue.length;
+  var target = playbackHistoryPop();
+  if (target < 0) {
+    // Nothing remembered yet — this is the first track of the session, so
+    // restart it rather than jumping to an arbitrary index.
+    if (currentIdx <= 0) { playQueueAt(currentIdx, { manual: true, suppressPlayFailureNotice: true }); return; }
+    target = (currentIdx - 1 + playQueue.length) % playQueue.length;
+  }
+  currentIdx = target;
   var opts = userInitiated ? { manual: true, suppressPlayFailureNotice: true } : { suppressPlayFailureNotice: true };
+  opts.historyBack = true;
   if (playMode === 'shuffle') opts.skipShuffleOrder = true;
   Promise.resolve(playQueueAt(currentIdx, opts)).finally(forcePlaybackControlsInteractive);
 }
@@ -664,6 +732,7 @@ function shuffleQueue() {
 }
 function clearQueue() {
   if (typeof cancelPlaylistQueueHydration === 'function') cancelPlaylistQueueHydration('clear-queue');
+  clearPlaybackHistory();
   playQueue = []; currentIdx = -1;
   currentLocalSong = null;
   startupRestoreHomePending = false;
@@ -687,7 +756,7 @@ function removeFromQueue(idx) {
   updateEmptyHomeVisibility({ forceLoad: false });
 }
 function playModeLabel(mode) {
-  return { loop: 'Repeat all', shuffle: 'Shuffle', single: 'Repeat one' }[mode] || 'Repeat all';
+  return { loop: 'Repeat all', shuffle: 'Shuffle', single: 'Repeat one', off: 'Play once' }[mode] || 'Repeat all';
 }
 
 function playModeIconMarkup(mode) {
@@ -696,6 +765,11 @@ function playModeIconMarkup(mode) {
   }
   if (mode === 'single') {
     return '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><path d="M12 9v6"/><path d="M10.5 10.5 12 9l1.5 1.5"/>';
+  }
+  if (mode === 'off') {
+    // The repeat loop, struck through: the same arrow family, with the cycle
+    // removed, so the four states read as one control and not four widgets.
+    return '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><path d="M4 4l16 16"/>';
   }
   return '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>';
 }
@@ -734,14 +808,20 @@ function updatePlayModeButton(animate) {
 }
 
 function cyclePlayMode() {
-  var modes = ['loop', 'shuffle', 'single'];
+  var modes = ['loop', 'shuffle', 'single', 'off'];
   var idx = modes.indexOf(playMode);
   var prevMode = playMode;
-  playMode = modes[(idx + 1) % modes.length];
+  playMode = idx < 0 ? modes[0] : modes[(idx + 1) % modes.length];
   if (playMode === 'shuffle' && prevMode !== 'shuffle') {
+    // Only when the mode is entered: reshuffling on every later play would
+    // scramble the queue out from under Previous. The history is kept — it is
+    // keys, not indexes, so it survives the reorder and tells the reshuffle
+    // which tracks have already been heard.
     reorderQueueForShufflePlaybackOrder(currentIdx, { reason: 'play-mode-shuffle' });
   }
   updatePlayModeButton(true);
+  // The Now playing panel shows the mode too, in the same words.
+  if (typeof paintNowPlayingTransport === 'function') paintNowPlayingTransport();
   showToast('Play mode: ' + playModeLabel(playMode));
 }
 updatePlayModeButton(false);

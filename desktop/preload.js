@@ -57,6 +57,77 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   // sent — rescan() only walks directories its own index points at — so this
   // cannot be aimed anywhere else.
   rescanLocalMusicLibrary: () => ipcRenderer.invoke('mineradio-local-library-rescan'),
+  // EN-FORK: folders are the library's roots. Adding one is the same request a
+  // file import makes — an absolute, user-chosen directory — and removing one
+  // only drops the rows it supplied; the files stay on disk.
+  listLocalMusicFolders: () => ipcRenderer.invoke('mineradio-local-library-folders'),
+  addLocalMusicFolder: (root) => ipcRenderer.invoke('mineradio-local-library-folder-add', String(root || '')),
+  removeLocalMusicFolder: (root) => ipcRenderer.invoke('mineradio-local-library-folder-remove', String(root || '')),
+  chooseLocalMusicFolder: () => ipcRenderer.invoke('mineradio-remote-pick-folder', 'library'),
+  scanLocalMusicLibrary: () => ipcRenderer.invoke('mineradio-local-library-scan'),
+  onLocalMusicScanProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('mineradio-local-library-scan-progress', listener);
+    return () => ipcRenderer.removeListener('mineradio-local-library-scan-progress', listener);
+  },
+  // EN-FORK: the folder tree, and the real directory behind a node. Ids only —
+  // the renderer never holds or sends a path, exactly like reveal and M3U.
+  getLocalMusicTree: () => ipcRenderer.invoke('mineradio-local-library-tree'),
+  browseLocalMusicFolder: (nodeId) => ipcRenderer.invoke('mineradio-local-library-folder-browse', String(nodeId || '')),
+  revealLocalMusicFolder: (nodeId) => ipcRenderer.invoke('mineradio-local-library-reveal-folder', String(nodeId || '')),
+  rescanLocalMusicFolder: (localFileIds) => ipcRenderer.invoke(
+    'mineradio-local-library-folder-rescan',
+    (Array.isArray(localFileIds) ? localFileIds : [localFileIds]).map((id) => String(id || '')).filter(Boolean)
+  ),
+  // EN-FORK: background sync. status() reports what is being watched; now=true
+  // forces a scan instead of waiting for the debounce window to close.
+  syncLocalMusicLibrary: (now) => ipcRenderer.invoke('mineradio-local-library-sync', { now: now === true }),
+  onLocalLibraryChanged: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('mineradio-local-library-changed', listener);
+    return () => ipcRenderer.removeListener('mineradio-local-library-changed', listener);
+  },
+  // EN-FORK: OS integration. The renderer reports what is playing; the main
+  // process answers media keys, the taskbar thumbnail and the tray menu. The
+  // return value is an unsubscribe so binding it once stays bound once.
+  publishMediaState: (payload) => ipcRenderer.invoke('mineradio-media-publish', payload || {}),
+  mediaKeys: (request) => ipcRenderer.invoke('mineradio-media-keys', request || {}),
+  mediaKeysStatus: () => ipcRenderer.invoke('mineradio-media-keys-status'),
+  notifyNowPlaying: (payload) => ipcRenderer.invoke('mineradio-now-playing-notify', payload || {}),
+  onMediaCommand: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('mineradio-media-command', listener);
+    return () => ipcRenderer.removeListener('mineradio-media-command', listener);
+  },
+  // EN-FORK: favourites, ratings, play counters and playlists live in the main
+  // process so they survive a restart and cannot be lost to a renderer reload.
+  getLocalLibraryUserData: () => ipcRenderer.invoke('mineradio-local-library-user-data'),
+  setLocalLibraryUser: (request) => ipcRenderer.invoke('mineradio-local-library-user-set', request || {}),
+  getLocalPlaylists: () => ipcRenderer.invoke('mineradio-local-library-playlists'),
+  localPlaylistOp: (request) => ipcRenderer.invoke('mineradio-local-library-playlist-op', request || {}),
+  backupLocalLibraryUserData: () => ipcRenderer.invoke('mineradio-local-library-backup'),
+  restoreLocalLibraryUserData: (payload, replace) => ipcRenderer.invoke('mineradio-local-library-restore', {
+    payload: payload || null,
+    replace: replace === true,
+  }),
+  // Absolute paths never cross the bridge: the main process builds the playlist
+  // from ids, and resolves an imported one back to files on this disk.
+  exportLocalLibraryM3u: (ids) => ipcRenderer.invoke('mineradio-local-library-export-m3u', {
+    ids: Array.isArray(ids) ? ids.map((id) => String(id || '')).filter(Boolean) : [],
+  }),
+  importLocalLibraryM3u: () => ipcRenderer.invoke('mineradio-local-library-import-m3u'),
+  revealLocalMusicTrack: (localFileId) => ipcRenderer.invoke('mineradio-local-library-reveal', String(localFileId || '')),
+  // EN-FORK: the caller must pass optIn:true, and only after showing the user
+  // exactly which fields are about to change. There is no code path that edits
+  // a tag without it — that flag is the whole consent mechanism.
+  writeLocalMusicTags: (id, fields, optIn) => ipcRenderer.invoke('mineradio-local-library-write-tags', {
+    id: String(id || ''),
+    fields: fields || {},
+    optIn: optIn === true,
+  }),
   importLocalMusicFiles: async (files) => {
     const entries = [];
     for (const file of Array.from(files || [])) {
@@ -132,6 +203,8 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   exportJsonFile: (payload) => ipcRenderer.invoke('mineradio-export-json-file', payload || {}),
   exportLoginCookie: (provider) => ipcRenderer.invoke('mineradio-export-login-cookie', provider || ''),
   importJsonFile: () => ipcRenderer.invoke('mineradio-import-json-file'),
+  exportTextFile: (payload) => ipcRenderer.invoke('mineradio-export-text-file', payload || {}),
+  importTextFile: (payload) => ipcRenderer.invoke('mineradio-import-text-file', payload || {}),
   readCurrentFxAutosaveSync: () => ipcRenderer.sendSync('mineradio-current-fx-autosave-read-sync'),
   saveCurrentFxAutosaveSync: (payload) => ipcRenderer.sendSync('mineradio-current-fx-autosave-save-sync', payload || {}),
   saveCurrentFxAutosave: (payload) => ipcRenderer.invoke('mineradio-current-fx-autosave-save', payload || {}),

@@ -22,6 +22,12 @@ function syncPlaybackStateFromAudioEvent(reason) {
     switchPlaybackVisualToEmily();
     if (typeof markStageLyricsPlaybackResume === 'function') markStageLyricsPlaybackResume(reason);
   }
+  // EN-FORK: every transport state change is reported here rather than at each
+  // call site — one function that already reconciles `playing` with the audio
+  // element is the only place that cannot be missed.
+  if (typeof publishMediaState === 'function') publishMediaState(reason);
+  if (typeof paintMiniPlayer === 'function') paintMiniPlayer();
+  if (typeof paintNowPlaying === 'function') paintNowPlaying();
   forcePlaybackControlsInteractive();
 }
 

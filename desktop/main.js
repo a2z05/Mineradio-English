@@ -14,6 +14,20 @@ const {
   LocalMusicLibrary,
   registerLocalMusicScheme,
 } = require('./local-music-library');
+const { LocalLibraryUserData } = require('./local-library-user-data');
+const { MediaSessionBridge } = require('./media-session');
+const {
+  buildFolderTree,
+  commonDirectoryOf,
+  decodeId,
+  encodeId,
+  isInside,
+  listDirectoryEntries,
+  normalizeFolder,
+  resolveNodeId,
+} = require('./local-library-folder-tree');
+const { LocalLibraryWatcher } = require('./local-library-watcher');
+const { writeAudioTags, canWriteTags } = require('./local-tag-writer');
 const { WallpaperEngineRuntime } = require('./wallpaper-engine-runtime');
 const { FullDesktopModeRuntime } = require('./full-desktop-mode-runtime');
 const {
@@ -159,7 +173,22 @@ fs.mkdirSync(NATIVE_HELPER_TEMP_PATH, { recursive: true });
 process.env.MINERADIO_NATIVE_TEMP_DIR = NATIVE_HELPER_TEMP_PATH;
 systemMemory.setNativeTempPath(NATIVE_HELPER_TEMP_PATH);
 const localMusicLibrary = new LocalMusicLibrary({ userDataPath: STABLE_USER_DATA_PATH });
+const localLibraryUserData = new LocalLibraryUserData({ userDataPath: STABLE_USER_DATA_PATH });
+// EN-FORK: background sync. A scan is announced to every window when it lands,
+// so the Library page, the search panel and the folder tree all describe the
+// same library without any of them polling.
+const localLibraryWatcher = new LocalLibraryWatcher({
+  library: localMusicLibrary,
+  onChange: (payload) => broadcastLocalLibraryChange(payload && payload.reason, payload && payload.result),
+});
 const localMusicImportCapabilities = new Map();
+// EN-FORK: OS integration. The renderer reports what it is playing; this owns
+// the media keys, the taskbar thumbnail, the tray menu and the notification.
+const mediaSession = new MediaSessionBridge({
+  getWindow: () => mainWindow,
+  appName: APP_NAME,
+  iconPath: APP_ICON_ICO,
+});
 const wallpaperEngineLibrary = new WallpaperEngineLibrary({ userDataPath: STABLE_USER_DATA_PATH });
 const wallpaperEngineRuntime = new WallpaperEngineRuntime({
   library: wallpaperEngineLibrary,
@@ -2059,8 +2088,26 @@ function createOrUpdateTray() {
     }
   }
   const desktopMode = fullDesktopModeRuntime.getStatus('tray-menu');
+  // EN-FORK: the tray is a player control, not just a way back to the window.
+  // It only grows a transport when something is actually loaded, so an empty
+  // tray is still a clean "Show / Quit" menu.
+  const media = mediaSession.lastState || { playing: false, hasTrack: false };
+  const transport = media.hasTrack ? [
+    {
+      label: media.playing ? 'Pause' : 'Play',
+      click: () => mediaSession.send('togglePlay'),
+    },
+    { label: 'Previous track', click: () => mediaSession.send('prevTrack') },
+    { label: 'Next track', click: () => mediaSession.send('nextTrack') },
+    {
+      label: media.playing ? `Playing: ${media.title || 'Untitled'}` : media.title || 'Paused',
+      enabled: false,
+    },
+    { type: 'separator' },
+  ] : [];
   const menu = Menu.buildFromTemplate([
     { label: `Show ${APP_NAME}`, click: () => focusMainWindow() },
+    ...transport,
     {
       label: 'Exit Full Desktop Mode',
       visible: desktopMode.enabled === true,
@@ -2078,6 +2125,9 @@ function createOrUpdateTray() {
     },
   ]);
   tray.setContextMenu(menu);
+  tray.setToolTip(media.hasTrack
+    ? `${media.title || 'Untitled'}${media.artist ? ' — ' + media.artist : ''}`
+    : APP_NAME);
 }
 
 function ensureFullDesktopModeRecoveryTray() {
@@ -3763,6 +3813,10 @@ function normalizeAccelerator(value) {
 function registerOverlayShortcuts() {
   if (!app.isReady()) return;
   try { globalShortcut.unregisterAll(); } catch (_) {}
+  // unregisterAll() drops the hardware media keys too, and the overlay keys
+  // cannot collide with them, so they are put back here rather than in one
+  // other call site that is easy to forget.
+  if (typeof mediaSession !== 'undefined') mediaSession.registerMediaKeys();
   overlayShortcutsRegistered = true;
   const barKey = normalizeAccelerator(overlayConfig.hotkeyToggleBar);
   const gameKey = normalizeAccelerator(overlayConfig.hotkeyGameOverlay);
@@ -4701,6 +4755,455 @@ ipcMain.handle('mineradio-local-library-remove', async (event, localFileIds) => 
   }
 });
 
+// EN-FORK: the library's own folders. A folder is a real, user-chosen
+// directory that becomes a scan root, so it gets the same treatment as an
+// import request: absolute, not UNC, and it has to be a directory on disk.
+// The renderer still cannot name anywhere for a rescan — see the handler below.
+function trustedLocalFolderRoot(requested) {
+  const requestedPath = String(requested || '').trim();
+  if (!requestedPath || /^[\\/]{2}/.test(requestedPath) || !path.isAbsolute(requestedPath)) return '';
+  return requestedPath;
+}
+
+// The {id, audioPath} pairs the folder tree is built from. Passing records
+// rather than ids keeps this module free of a back-reference to the library
+// instance, and the list is rebuilt per call so it can never go stale.
+function folderTreeRecords() {
+  const records = [];
+  for (const [id, record] of localMusicLibrary.records) {
+    if (record && record.audioPath) records.push({ id, audioPath: record.audioPath, relativePath: record.relativePath });
+  }
+  return records;
+}
+
+// A subfolder of an existing node is addressed by the same id scheme: re-encode
+// the decoded node key plus one more segment. Kept here so the renderer never
+// has to know the encoding at all — it only ever passes ids it was given.
+function appendNodeId(parentId, name) {
+  const parentKey = decodeId(parentId);
+  if (!parentKey) return '';
+  return encodeId(`${parentKey}/${normalizeFolder(name)}`);
+}
+
+// Every change to the index is announced once, from wherever it happened, so
+// the Library page and the search panel cannot end up describing different
+// libraries. The payload carries ids and folders, not paths, for the same
+// reason every other channel does.
+function broadcastLocalLibraryChange(reason, result) {
+  const snapshot = result && result.ok === true ? result : localMusicLibrary.listTracksSync();
+  const payload = {
+    reason: String(reason || 'change'),
+    count: snapshot.count || 0,
+    added: (result && Number(result.added)) || 0,
+    changed: (result && Number(result.changed)) || 0,
+    removed: (result && Number(result.removed)) || 0,
+    tree: buildFolderTree(folderTreeRecords(), localMusicLibrary.folders),
+    folders: localMusicLibrary.folders.slice(),
+  };
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed()) continue;
+    try { window.webContents.send('mineradio-local-library-changed', payload); } catch (_) { /* gone */ }
+  }
+}
+
+// The watcher follows the folder list: a folder added while the app runs has to
+// be watched, and one removed has to stop being watched.
+function syncLocalLibraryWatcher() {
+  try {
+    localLibraryWatcher.applyWatchRoots(localMusicLibrary.folders);
+  } catch (error) {
+    console.warn('[LocalMusic] watcher could not follow the folder list:', error && error.message || error);
+  }
+}
+
+function startLocalLibraryWatcher() {
+  if (localLibraryWatcher.stopped) return;
+  syncLocalLibraryWatcher();
+  localLibraryWatcher.start();
+}
+
+// EN-FORK: the folder tree the Folders view is built from. Built here, not in
+// the renderer, because a track's relativePath is relative to whichever root
+// scanned it and only this process knows which root that was. The answer
+// carries labels and opaque ids — never a path.
+ipcMain.handle('mineradio-local-library-tree', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, tree: [], error: 'UNTRUSTED_SENDER' };
+  try {
+    const records = [];
+    for (const [id, record] of localMusicLibrary.records) {
+      if (record && record.audioPath) records.push({ id, audioPath: record.audioPath });
+    }
+    return {
+      ok: true,
+      tree: buildFolderTree(records, localMusicLibrary.folders),
+      count: localMusicLibrary.order.length,
+    };
+  } catch (error) {
+    return { ok: false, tree: [], error: error.message || 'LOCAL_LIBRARY_TREE_FAILED' };
+  }
+});
+
+// EN-FORK: what is actually inside one folder node, and what is in the folders
+// below it. The renderer sends the node id the tree handed it; the directory is
+// resolved here and is checked against the root that id named, so an id can
+// never address a directory outside the library.
+ipcMain.handle('mineradio-local-library-folder-browse', async (event, requestedId) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, directories: [], files: [], error: 'UNTRUSTED_SENDER' };
+  try {
+    const directory = resolveNodeId(requestedId, folderTreeRecords(), localMusicLibrary.folders);
+    if (!directory) return { ok: false, directories: [], files: [], error: 'LOCAL_FOLDER_UNKNOWN' };
+    const listing = await listDirectoryEntries(directory);
+    if (!listing.ok) return listing;
+    // Subfolders are given ids too, so the client can walk into one that is not
+    // in the index yet — an empty folder, or one whose files are all new.
+    const rootId = String(requestedId || '');
+    const childIds = {};
+    for (const name of listing.directories) {
+      childIds[name] = appendNodeId(rootId, name);
+    }
+    return { ok: true, directories: listing.directories, files: listing.files, childIds };
+  } catch (error) {
+    return { ok: false, directories: [], files: [], error: error.message || 'LOCAL_FOLDER_BROWSE_FAILED' };
+  }
+});
+
+// "Reveal in Explorer" for a folder, as opposed to a single file. Same rule: the
+// renderer holds an id, this process decides what it means.
+ipcMain.handle('mineradio-local-library-reveal-folder', async (event, requestedId) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try {
+    const directory = resolveNodeId(requestedId, folderTreeRecords(), localMusicLibrary.folders);
+    if (!directory) return { ok: false, error: 'LOCAL_FOLDER_UNKNOWN' };
+    if (!fs.existsSync(directory)) return { ok: false, error: 'LOCAL_FILE_MISSING' };
+    const error = await shell.openPath(directory);
+    if (error) return { ok: false, error: 'LOCAL_FOLDER_OPEN_FAILED' };
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || 'LOCAL_FOLDER_REVEAL_FAILED' };
+  }
+});
+
+// "Rescan" scoped to what a folder node holds. The ids are validated against the
+// index first and the directory is derived from the records themselves, so a
+// rescan can only ever reach music the library already knows about.
+ipcMain.handle('mineradio-local-library-folder-rescan', async (event, requestedIds) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, added: 0, changed: 0, removed: 0, tracks: [], error: 'UNTRUSTED_SENDER' };
+  const ids = Array.isArray(requestedIds) ? requestedIds : [requestedIds];
+  const wanted = new Set();
+  for (const id of ids.slice(0, 50000)) {
+    const key = String(id || '').replace(/^local:/, '').toLowerCase();
+    if (/^[a-f0-9]{24}$/.test(key) && localMusicLibrary.records.has(key)) wanted.add(key);
+  }
+  if (!wanted.size) return { ok: false, added: 0, changed: 0, removed: 0, tracks: [], error: 'LOCAL_TRACK_NOT_FOUND' };
+  try {
+    const records = [];
+    for (const id of wanted) {
+      const record = localMusicLibrary.records.get(id);
+      if (record) records.push({ id, audioPath: record.audioPath, relativePath: record.relativePath });
+    }
+    const directory = commonDirectoryOf(records);
+    if (!directory) return { ok: false, added: 0, changed: 0, removed: 0, tracks: [], error: 'LOCAL_FOLDER_UNKNOWN' };
+    // Guard: the derived directory has to sit inside a root the library owns.
+    const roots = localMusicLibrary.folders;
+    const inside = roots.some((root) => isInside(directory, root))
+      || records.some((record) => isInside(record.audioPath, directory));
+    if (!inside) return { ok: false, added: 0, changed: 0, removed: 0, tracks: [], error: 'LOCAL_FOLDER_UNKNOWN' };
+    const result = await localMusicLibrary.rescan();
+    syncLocalLibraryWatcher();
+    return result && result.ok === false ? result : { ...result, scopedTo: directory };
+  } catch (error) {
+    return { ok: false, added: 0, changed: 0, removed: 0, tracks: [], error: error.message || 'LOCAL_FOLDER_RESCAN_FAILED' };
+  }
+});
+
+// EN-FORK: the background sync. status answers what is being watched and how
+// many scans have run; syncNow forces one, for the case where a user wants it
+// without waiting for the debounce window to close.
+ipcMain.handle('mineradio-local-library-sync', async (event, payload = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  syncLocalLibraryWatcher();
+  if (payload && payload.now === true) {
+    const result = await localLibraryWatcher.runScan('manual-sync');
+    broadcastLocalLibraryChange('sync', result);
+  }
+  return localLibraryWatcher.status();
+});
+
+// ---- EN-FORK: OS integration. The renderer reports the track; the main
+// process owns everything the OS will not let a renderer touch.
+ipcMain.handle('mineradio-media-publish', async (event, payload = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  return mediaSession.publish(payload || {});
+});
+
+ipcMain.handle('mineradio-media-keys', async (event, payload = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  if (payload && payload.unregister === true) {
+    mediaSession.unregisterMediaKeys();
+    return { ok: true, binding: {} };
+  }
+  return mediaSession.registerMediaKeys();
+});
+
+ipcMain.handle('mineradio-media-keys-status', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  const binding = {};
+  for (const [accelerator, action] of mediaSession.registeredKeys.entries()) binding[action] = accelerator;
+  return { ok: true, binding, count: mediaSession.registeredKeys.size };
+});
+
+ipcMain.handle('mineradio-now-playing-notify', async (event, payload = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  return mediaSession.notifyTrackChange(payload || {});
+});
+
+ipcMain.handle('mineradio-local-library-folders', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, folders: [], error: 'UNTRUSTED_SENDER' };
+  try {
+    return localMusicLibrary.listFoldersSync();
+  } catch (error) {
+    return { ok: false, folders: [], error: error.message || 'LOCAL_FOLDERS_READ_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-local-library-folder-add', async (event, requestedRoot) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, folders: [], tracks: [], count: 0, error: 'UNTRUSTED_SENDER' };
+  const root = trustedLocalFolderRoot(requestedRoot);
+  if (!root) return { ok: false, folders: [], tracks: [], count: 0, error: 'LOCAL_FOLDER_INVALID' };
+  try {
+    const result = await localMusicLibrary.addFolder(root);
+    syncLocalLibraryWatcher();
+    return result;
+  } catch (error) {
+    return { ok: false, folders: [], tracks: [], count: 0, error: error.code || error.message || 'LOCAL_FOLDER_ADD_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-local-library-folder-remove', async (event, requestedRoot) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, folders: [], tracks: [], count: 0, error: 'UNTRUSTED_SENDER' };
+  const root = trustedLocalFolderRoot(requestedRoot);
+  if (!root) return { ok: false, folders: [], tracks: [], count: 0, error: 'LOCAL_FOLDER_INVALID' };
+  try {
+    // Forgetting a folder forgets the rows it supplied. The files stay on disk —
+    // removeTracks() only ever drops index entries and cached covers.
+    const result = await localMusicLibrary.removeFolder(root);
+    syncLocalLibraryWatcher();
+    return result;
+  } catch (error) {
+    return { ok: false, folders: [], tracks: [], count: 0, error: error.code || error.message || 'LOCAL_FOLDER_REMOVE_FAILED' };
+  }
+});
+
+// Full scan of every registered folder (plus directories the index already
+// points at), reported back to the renderer while it runs so a 50k-file walk
+// shows progress instead of a frozen button. Progress is a fire-and-forget
+// event; the caller decides whether it wants to listen.
+ipcMain.handle('mineradio-local-library-scan', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, count: 0, tracks: [], added: 0, changed: 0, removed: 0, error: 'UNTRUSTED_SENDER' };
+  const sender = event.sender;
+  const emit = (scanned) => {
+    if (sender.isDestroyed()) return;
+    sender.send('mineradio-local-library-scan-progress', { scanned });
+  };
+  try {
+    return await localMusicLibrary.scanFolders(emit);
+  } catch (error) {
+    return { ok: false, count: 0, tracks: [], added: 0, changed: 0, removed: 0, error: error.code || error.message || 'LOCAL_LIBRARY_SCAN_FAILED' };
+  }
+});
+
+// EN-FORK: the user's own layer over the library — favourites, ratings, play
+// counters and playlists. Kept beside the index rather than in renderer state
+// so a restart, a re-tag or a reinstall of the app cannot take a rating with it.
+ipcMain.handle('mineradio-local-library-user-data', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, songs: {}, playlists: [], error: 'UNTRUSTED_SENDER' };
+  try {
+    return localLibraryUserData.snapshot();
+  } catch (error) {
+    return { ok: false, songs: {}, playlists: [], error: error.message || 'LOCAL_USER_DATA_READ_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-local-library-user-set', async (event, request = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  const id = String(request && request.id || '');
+  const action = String(request && request.action || '');
+  try {
+    if (action === 'favorite') return await localLibraryUserData.setFavorite(id, request.value !== false);
+    if (action === 'favorite-toggle') return await localLibraryUserData.toggleFavorite(id);
+    if (action === 'rating') return await localLibraryUserData.setRating(id, request.value);
+    if (action === 'event') return await localLibraryUserData.recordEvent(id, request.event);
+    if (action === 'clear-history') return await localLibraryUserData.clearHistory();
+    return { ok: false, error: 'LOCAL_USER_ACTION_UNKNOWN' };
+  } catch (error) {
+    return { ok: false, error: error.message || 'LOCAL_USER_DATA_WRITE_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-local-library-playlists', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, playlists: [], error: 'UNTRUSTED_SENDER' };
+  try {
+    return { ok: true, playlists: localLibraryUserData.listPlaylists() };
+  } catch (error) {
+    return { ok: false, playlists: [], error: error.message || 'LOCAL_PLAYLISTS_READ_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-local-library-playlist-op', async (event, request = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, playlists: [], error: 'UNTRUSTED_SENDER' };
+  const op = String(request && request.op || '');
+  try {
+    if (op === 'create') return await localLibraryUserData.createPlaylist(request.name, request.id);
+    if (op === 'rename') return await localLibraryUserData.updatePlaylist(request.id, { name: request.name });
+    if (op === 'delete') return await localLibraryUserData.deletePlaylist(request.id);
+    if (op === 'duplicate') return await localLibraryUserData.duplicatePlaylist(request.id);
+    if (op === 'add') return await localLibraryUserData.addToPlaylist(request.id, request.trackIds);
+    if (op === 'remove') return await localLibraryUserData.removeFromPlaylist(request.id, request.trackIds);
+    if (op === 'reorder') return await localLibraryUserData.reorderPlaylist(request.id, request.from, request.to);
+    if (op === 'replace') return await localLibraryUserData.updatePlaylist(request.id, { trackIds: request.trackIds });
+    return { ok: false, playlists: localLibraryUserData.listPlaylists(), error: 'LOCAL_PLAYLIST_OP_UNKNOWN' };
+  } catch (error) {
+    return { ok: false, playlists: localLibraryUserData.listPlaylists(), error: error.message || 'LOCAL_PLAYLIST_OP_FAILED' };
+  }
+});
+
+// Backup/restore of the user's layer. The library index itself is never
+// rewritten by a restore — only favourites, ratings, counters and playlists —
+// so a stale backup cannot replace a library that has since moved on.
+ipcMain.handle('mineradio-local-library-backup', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try {
+    return { ok: true, payload: localLibraryUserData.backupPayload() };
+  } catch (error) {
+    return { ok: false, error: error.message || 'LOCAL_LIBRARY_BACKUP_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-local-library-restore', async (event, request = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try {
+    const result = await localLibraryUserData.restorePayload(request.payload, { replace: request.replace === true });
+    if (result.ok) result.tracks = localMusicLibrary.listTracksSync().tracks;
+    return result;
+  } catch (error) {
+    return { ok: false, error: error.message || 'LOCAL_LIBRARY_RESTORE_FAILED' };
+  }
+});
+
+// "Open file location" resolves the file from the library's own index, so the
+// renderer sends an id and never a path — it cannot be pointed at anything the
+// user did not already import.
+ipcMain.handle('mineradio-local-library-reveal', async (event, localFileId) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  const id = String(localFileId || '').replace(/^local:/, '').toLowerCase();
+  if (!/^[a-f0-9]{24}$/.test(id)) return { ok: false, error: 'LOCAL_TRACK_INVALID' };
+  try {
+    const record = localMusicLibrary.records.get(id);
+    if (!record) return { ok: false, error: 'LOCAL_TRACK_NOT_FOUND' };
+    if (!fs.existsSync(record.audioPath)) return { ok: false, error: 'LOCAL_FILE_MISSING' };
+    shell.showItemInFolder(record.audioPath);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || 'LOCAL_REVEAL_FAILED' };
+  }
+});
+
+// EN-FORK: writing tags back to the file. optIn must be true: the renderer only
+// ever asks, and this handler is the one that decides whether the user was
+// shown exactly which fields change and confirmed it. Without it, nothing here
+// touches a file.
+ipcMain.handle('mineradio-local-library-write-tags', async (event, request = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  if (request.optIn !== true) return { ok: false, error: 'TAG_WRITE_NOT_CONFIRMED' };
+  const id = String(request.id || '').replace(/^local:/, '').toLowerCase();
+  if (!/^[a-f0-9]{24}$/.test(id)) return { ok: false, error: 'LOCAL_TRACK_INVALID' };
+  const record = localMusicLibrary.records.get(id);
+  if (!record) return { ok: false, error: 'LOCAL_TRACK_NOT_FOUND' };
+  if (!fs.existsSync(record.audioPath)) return { ok: false, error: 'LOCAL_FILE_MISSING' };
+  const fields = {};
+  for (const key of ['name', 'artist', 'album', 'albumArtist', 'genre', 'year', 'track', 'disc', 'composer', 'comment']) {
+    if (request.fields && request.fields[key] !== undefined) fields[key] = request.fields[key];
+  }
+  try {
+    const written = await writeAudioTags(record.audioPath, fields);
+    // Re-read the file straight away so the library shows what the file now
+    // says. Leaving the old tags on screen until the next scan would be a lie.
+    const refreshed = await localMusicLibrary.importFiles(
+      [{ path: record.audioPath, relativePath: record.relativePath }],
+      { replace: false }
+    );
+    return { ok: true, container: written.container, tracks: refreshed.tracks, count: refreshed.count };
+  } catch (error) {
+    return { ok: false, error: error.code || error.message || 'TAG_WRITE_FAILED' };
+  }
+});
+
+// M3U lives or dies on absolute paths, and those never reach the renderer —
+// the renderer holds relative paths for grouping and a localhost:// URL for
+// playback, neither of which any other player can open. So both halves of the
+// exchange happen here: build the playlist text from ids, and resolve an
+// imported playlist back to files on this disk.
+ipcMain.handle('mineradio-local-library-export-m3u', async (event, request = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try {
+    const ids = (Array.isArray(request.ids) ? request.ids : [])
+      .map((id) => String(id || '').replace(/^local:/, '').toLowerCase())
+      .filter((id) => /^[a-f0-9]{24}$/.test(id));
+    const requested = ids.length ? ids : Array.from(localMusicLibrary.records.keys());
+    const lines = ['#EXTM3U'];
+    let written = 0;
+    for (const id of requested) {
+      const record = localMusicLibrary.records.get(id);
+      if (!record) continue;
+      const duration = Math.round(Number(record.duration) || 0);
+      const label = [record.artist, record.name].filter(Boolean).join(' - ') || record.name || id;
+      lines.push(`#EXTINF:${duration},${label}`);
+      lines.push(record.audioPath);
+      written += 1;
+    }
+    if (!written) return { ok: false, error: 'NO_TRACKS_TO_EXPORT' };
+    return { ok: true, text: `${lines.join('\r\n')}\r\n`, count: written };
+  } catch (error) {
+    return { ok: false, error: error.message || 'M3U_EXPORT_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-local-library-import-m3u', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, count: 0, tracks: [], error: 'UNTRUSTED_SENDER' };
+  try {
+    const owner = getSenderWindow(event);
+    const chosen = await dialog.showOpenDialog(owner, {
+      title: 'Import playlist',
+      properties: ['openFile'],
+      filters: [{ name: 'Playlists', extensions: ['m3u', 'm3u8', 'pls'] }],
+    });
+    if (chosen.canceled || !chosen.filePaths || !chosen.filePaths[0]) return { ok: false, canceled: true };
+    const text = fs.readFileSync(chosen.filePaths[0], 'utf8');
+    const baseDirectory = path.dirname(chosen.filePaths[0]);
+    const entries = [];
+    const seen = new Set();
+    for (const raw of text.split(/\r?\n/)) {
+      const line = String(raw || '').trim();
+      if (!line || line.startsWith('#')) continue;
+      const candidates = path.isAbsolute(line) ? [line] : [path.resolve(baseDirectory, line)];
+      for (const candidate of candidates) {
+        const identity = process.platform === 'win32' ? candidate.toLowerCase() : candidate;
+        if (seen.has(identity)) continue;
+        if (!/\.(mp3|flac|wav|ogg|m4a|aac|opus)$/i.test(candidate)) continue;
+        seen.add(identity);
+        entries.push({ path: candidate, relativePath: '' });
+        break;
+      }
+      if (entries.length >= 50000) break;
+    }
+    if (!entries.length) return { ok: false, count: 0, tracks: [], error: 'PLAYLIST_HAD_NO_AUDIO' };
+    const result = await localMusicLibrary.importFiles(entries, { replace: false });
+    return { ...result, source: 'm3u' };
+  } catch (error) {
+    return { ok: false, count: 0, tracks: [], error: error.message || 'M3U_IMPORT_FAILED' };
+  }
+});
+
 // EN-FORK: rescan the folders the library already came from. Takes no path
 // input — rescan() only walks directories its own index already points at —
 // so a renderer compromise cannot turn this into a disk walk of anywhere else.
@@ -4987,6 +5490,48 @@ ipcMain.handle('mineradio-export-json-file', async (event, payload = {}) => {
     return { ok: true, filePath: result.filePath };
   } catch (e) {
     return { ok: false, error: e.message || 'EXPORT_FAILED' };
+  }
+});
+
+// Text-file export/import for the local library: M3U playlists are plain text
+// and the dialog must not rename them to .json, which is what the archive
+// exporter above does on purpose for its own payload.
+ipcMain.handle('mineradio-export-text-file', async (event, payload = {}) => {
+  try {
+    const owner = getSenderWindow(event);
+    const extension = String(payload.extension || 'm3u8').replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'm3u8';
+    const base = String(payload.defaultName || 'mineradio-playlist').replace(/[\\/:*?"<>|]+/g, '-').replace(/\.[a-z0-9]+$/i, '') || 'mineradio-playlist';
+    const result = await dialog.showSaveDialog(owner, {
+      title: String(payload.title || 'Export'),
+      defaultPath: `${base}.${extension}`,
+      filters: [{ name: String(payload.filterName || extension.toUpperCase()), extensions: [extension] }],
+    });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    fs.writeFileSync(result.filePath, typeof payload.text === 'string' ? payload.text : '', 'utf8');
+    return { ok: true, filePath: result.filePath };
+  } catch (e) {
+    return { ok: false, error: e.message || 'EXPORT_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-import-text-file', async (event, payload = {}) => {
+  try {
+    const owner = getSenderWindow(event);
+    const extensions = (Array.isArray(payload.extensions) ? payload.extensions : ['m3u', 'm3u8'])
+      .map((ext) => String(ext || '').replace(/[^a-z0-9]/gi, '').toLowerCase())
+      .filter(Boolean)
+      .slice(0, 16);
+    if (!extensions.length) extensions.push('m3u8');
+    const result = await dialog.showOpenDialog(owner, {
+      title: String(payload.title || 'Import'),
+      properties: ['openFile'],
+      filters: [{ name: String(payload.filterName || 'Playlists'), extensions }],
+    });
+    if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: false, canceled: true };
+    const filePath = result.filePaths[0];
+    return { ok: true, filePath, text: fs.readFileSync(filePath, 'utf8') };
+  } catch (e) {
+    return { ok: false, error: e.message || 'IMPORT_FAILED' };
   }
 });
 
@@ -6080,6 +6625,7 @@ if (!gotSingleInstanceLock) {
     } catch (error) {
       console.warn('[LocalMusic] media protocol unavailable:', error && error.message || error);
     }
+    startLocalLibraryWatcher();
     try {
       await wallpaperEngineLibrary.installProtocol(protocol);
     } catch (error) {

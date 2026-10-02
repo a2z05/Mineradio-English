@@ -16,6 +16,12 @@ const MAX_COVER_DIMENSION = 4096;
 const MAX_COVER_PIXELS = 12 * 1024 * 1024;
 const MAX_IMPORT_FILES = 50000;
 const METADATA_CONCURRENCY = 3;
+const MAX_MUSIC_FOLDERS = 64;
+// A library root can sit anywhere the user points it, but a scan must not walk
+// the whole drive by accident: 200k files is a full index on its own.
+const MAX_SCAN_FILES = 200000;
+const MAX_SCAN_DEPTH = 24;
+const SCAN_EMIT_EVERY = 250;
 
 const AUDIO_MIME = new Map([
   ['.mp3', 'audio/mpeg'],
@@ -68,6 +74,15 @@ function normalizedPathIdentity(value) {
   const resolved = normalizedAbsoluteFilePath(value);
   if (!resolved) return '';
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+// Relative paths are stored with forward slashes whatever the OS produced.
+// They are grouping keys, not paths to open — the OS path lives in audioPath —
+// so "Album/One.flac" has to mean the same thing on every machine, and a
+// Windows backslash must not turn into an unknown folder on import.
+function toRelativePath(value) {
+  const text = String(value || '').trim().replace(/\\/g, '/').replace(/^\.\/+/, '');
+  return text.replace(/\/{2,}/g, '/');
 }
 
 function supportedAudioPath(value) {
@@ -248,7 +263,7 @@ function normalizeImportEntries(input) {
     seen.add(identity);
     entries.push({
       path: filePath,
-      relativePath: cleanText(item && item.relativePath, path.basename(filePath), 2000),
+      relativePath: toRelativePath(cleanText(item && item.relativePath, path.basename(filePath), 2000)) || path.basename(filePath),
     });
   }
   return entries;
@@ -300,9 +315,11 @@ class LocalMusicLibrary {
     this.parseMetadata = typeof options.parseMetadata === 'function' ? options.parseMetadata : defaultParseMetadata;
     this.records = new Map();
     this.order = [];
+    this.folders = [];
     this.mediaToken = crypto.randomBytes(24).toString('hex');
     this.protocolInstalled = false;
     this.mutation = Promise.resolve();
+    this.scanInFlight = null;
     this.loadIndex();
   }
 
@@ -324,10 +341,23 @@ class LocalMusicLibrary {
         const record = {
           id,
           audioPath,
-          relativePath: cleanText(source.relativePath, path.basename(audioPath), 2000),
+          relativePath: toRelativePath(cleanText(source.relativePath, path.basename(audioPath), 2000)) || path.basename(audioPath),
           name: cleanText(source.name, path.basename(audioPath, path.extname(audioPath)), 1000),
           artist: cleanText(source.artist, 'Local file', 1000),
           album: cleanText(source.album, '', 1000),
+          // The tag fields a real library sorts and groups by. Older indexes do
+          // not carry them, so every one falls back to '' and the views that
+          // group on them simply bucket the tracks under "Unknown".
+          albumArtist: cleanText(source.albumArtist, '', 1000),
+          genre: cleanText(source.genre, '', 400),
+          year: Math.max(0, Math.min(9999, Number(source.year) || 0)),
+          track: Math.max(0, Number(source.track) || 0),
+          disc: Math.max(0, Number(source.disc) || 0),
+          composer: cleanText(source.composer, '', 400),
+          comment: cleanText(source.comment, '', 2000),
+          bitrate: Math.max(0, Number(source.bitrate) || 0),
+          sampleRate: Math.max(0, Number(source.sampleRate) || 0),
+          codec: cleanText(source.codec, '', 100),
           duration: Math.max(0, Number(source.duration) || 0),
           size: Math.max(0, Number(source.size) || 0),
           mtimeMs: Math.max(0, Number(source.mtimeMs) || 0),
@@ -337,13 +367,248 @@ class LocalMusicLibrary {
           lyric: cleanText(source.lyric, '', MAX_LYRIC_BYTES),
           lyricSource: source.lyricSource === 'sidecar' ? 'sidecar' : (source.lyricSource === 'embedded' ? 'embedded' : ''),
           importedAt: Math.max(0, Number(source.importedAt) || 0),
+          addedAt: Math.max(0, Number(source.addedAt) || Number(source.importedAt) || 0),
         };
         nextRecords.set(id, record);
         nextOrder.push(id);
       }
       this.records = nextRecords;
       this.order = nextOrder;
+      // Folders are an optional field: an index written before folder tracking
+      // existed still loads, it just has no folders to re-scan.
+      this.folders = Array.isArray(parsed.folders)
+        ? parsed.folders.map((folder) => cleanText(folder, '', 2000)).filter(Boolean).slice(0, MAX_MUSIC_FOLDERS)
+        : [];
     } catch (_) {}
+  }
+
+  // Walk one root and yield every supported audio file beneath it, one path at
+  // a time. It never recurses through junctions or symlinks itself — it would
+  // otherwise happily loop a 10GB folder onto itself — and it stays well
+  // outside MAX_SCAN_FILES by stopping early rather than piling up memory.
+  async *scanFolderPaths(root, onProgress) {
+    const startRoot = normalizedAbsoluteFilePath(root);
+    if (!startRoot) return { scanned: 0, stopped: 'INVALID_ROOT' };
+    const seenRealPaths = new Set();
+    const stack = [{ dir: startRoot, depth: 0 }];
+    let scanned = 0;
+    try {
+      seenRealPaths.add(normalizedPathIdentity(await fs.promises.realpath(startRoot)));
+    } catch (_) {
+      return { scanned: 0, stopped: 'UNREADABLE_ROOT' };
+    }
+    while (stack.length) {
+      const { dir, depth } = stack.pop();
+      let names = [];
+      try {
+        names = await fs.promises.readdir(dir);
+      } catch (_) {
+        continue;
+      }
+      for (const name of names) {
+        const candidate = path.join(dir, name);
+        let stat = null;
+        try {
+          stat = await fs.promises.lstat(candidate);
+        } catch (_) {
+          continue;
+        }
+        if (stat.isSymbolicLink()) continue;
+        if (stat.isDirectory()) {
+          if (depth >= MAX_SCAN_DEPTH) continue;
+          try {
+            const real = normalizedPathIdentity(await fs.promises.realpath(candidate));
+            if (!real || seenRealPaths.has(real)) continue;
+            seenRealPaths.add(real);
+          } catch (_) {
+            continue;
+          }
+          stack.push({ dir: candidate, depth: depth + 1 });
+          continue;
+        }
+        if (!stat.isFile()) continue;
+        scanned += 1;
+        if (scanned > MAX_SCAN_FILES) return { scanned, stopped: 'LIMIT_REACHED' };
+        if (AUDIO_MIME.has(path.extname(name).toLowerCase())) {
+          yield candidate;
+          if (onProgress && scanned % SCAN_EMIT_EVERY === 0) onProgress(scanned);
+        }
+      }
+    }
+    return { scanned, stopped: '' };
+  }
+
+  // The folders the library owns. Stored as absolute resolved paths so a scan
+  // always lands in the same place regardless of how the user picked it.
+  listFoldersSync() {
+    return { ok: true, folders: this.folders.slice() };
+  }
+
+  async addFolder(root) {
+    const resolved = normalizedAbsoluteFilePath(root);
+    if (!resolved || !AUDIO_MIME.size) return { ok: false, folders: this.folders.slice(), error: 'LOCAL_FOLDER_INVALID' };
+    let stat = null;
+    try {
+      stat = await fs.promises.stat(resolved);
+    } catch (_) {
+      return { ...this.listFoldersSync(), ok: false, error: 'LOCAL_FOLDER_UNREADABLE' };
+    }
+    if (!stat.isDirectory()) return { ...this.listFoldersSync(), ok: false, error: 'LOCAL_FOLDER_INVALID' };
+    const operation = async () => {
+      const already = this.folders.some((folder) => normalizedPathIdentity(folder) === normalizedPathIdentity(resolved));
+      const nextFolders = already ? this.folders.slice() : this.folders.concat([resolved]).slice(0, MAX_MUSIC_FOLDERS);
+      this.folders = nextFolders;
+      await this.persistSnapshot(this.order, this.records);
+      return { ...this.listTracksSync(), folders: nextFolders.slice() };
+    };
+    const pending = this.mutation.then(operation, operation);
+    this.mutation = pending.catch(() => {});
+    return pending;
+  }
+
+  async removeFolder(root) {
+    const identity = normalizedPathIdentity(root);
+    // Rows that came from this root go with it, or the folder list and the
+    // track list drift apart forever: the next rescan would re-add everything
+    // because the orphan-directory fallback still points at those files.
+    // removeTracks() runs first because it serializes on this.mutation — calling
+    // it from inside the operation below would deadlock against it.
+    const doomed = [];
+    for (const [id, record] of this.records) {
+      const directory = normalizedPathIdentity(path.dirname(record.audioPath));
+      if (directory && (directory === identity || directory.startsWith(`${identity}${path.sep}`))) {
+        doomed.push(id);
+      }
+    }
+    if (doomed.length) await this.removeTracks(doomed);
+    const operation = async () => {
+      const nextFolders = this.folders.filter((folder) => normalizedPathIdentity(folder) !== identity);
+      this.folders = nextFolders;
+      await this.persistSnapshot(this.order, this.records);
+      return { ...this.listTracksSync(), folders: nextFolders.slice() };
+    };
+    const pending = this.mutation.then(operation, operation);
+    this.mutation = pending.catch(() => {});
+    return pending;
+  }
+
+  // Scan every folder the library owns and absorb whatever is found. Works in
+  // the importFiles stream, so a 20k-file scan parses tags in small batches
+  // instead of holding the whole thing in memory at once.
+  //
+  // Roots are the registered folders PLUS any directory the index already
+  // points at that sits outside them — tracks imported by file picker must not
+  // vanish from a rescan just because the user never registered a folder.
+  async scanFolders(onProgress) {
+    // One walk at a time. Two overlapping scans would both read the same
+    // stale index and the second would re-add whatever the first just removed.
+    if (this.scanInFlight) return this.scanInFlight;
+    this.scanInFlight = this.runFolderScan(onProgress).finally(() => {
+      this.scanInFlight = null;
+    });
+    return this.scanInFlight;
+  }
+
+  async runFolderScan(onProgress) {
+    const orderSnapshot = this.order.slice();
+    const recordsSnapshot = new Map(this.records);
+    const roots = this.folders.slice();
+    const seenRoots = new Set(roots.map((root) => normalizedPathIdentity(root)));
+    // Orphan roots carry the relative prefix their existing records already
+    // use, so a file dropped in beside them lands as "Album/Two.flac" and not
+    // a bare "Two.flac" — the relative path is the only grouping the index has.
+    const orphanRoots = [];
+    for (const id of orderSnapshot) {
+      const record = recordsSnapshot.get(id);
+      if (!record) continue;
+      const directory = path.dirname(record.audioPath);
+      const identity = normalizedPathIdentity(directory);
+      if (!identity || seenRoots.has(identity)) continue;
+      const inside = roots.some((root) => {
+        const rootIdentity = normalizedPathIdentity(root);
+        return !!rootIdentity && (identity === rootIdentity
+          || identity.startsWith(`${rootIdentity}${path.sep}`));
+      });
+      if (inside) continue;
+      if (orphanRoots.some((known) => normalizedPathIdentity(known.root) === identity)) continue;
+      const relativeDirectory = toRelativePath(path.dirname(toRelativePath(record.relativePath || '')));
+      orphanRoots.push({
+        root: directory,
+        prefix: relativeDirectory && relativeDirectory !== '.' ? `${relativeDirectory}/` : '',
+      });
+      seenRoots.add(identity);
+    }
+    const entries = [];
+    const found = new Set();
+    const unreadable = new Set();
+    let scanned = 0;
+    const walk = async (root, prefix) => {
+      let generator;
+      try {
+        generator = this.scanFolderPaths(root, onProgress);
+      } catch (_) {
+        unreadable.add(normalizedPathIdentity(root));
+        return;
+      }
+      let sawFile = false;
+      for await (const filePath of generator) {
+        sawFile = true;
+        const identity = normalizedPathIdentity(filePath);
+        if (!identity || found.has(identity)) continue;
+        found.add(identity);
+        let stat = null;
+        try {
+          const candidate = await fs.promises.stat(filePath);
+          if (candidate.isFile()) stat = candidate;
+        } catch (_) {
+          continue;
+        }
+        scanned += 1;
+        const previous = recordsSnapshot.get(localFileId(filePath));
+        if (previous
+          && Math.round(Number(previous.mtimeMs) || 0) === Math.round(Number(stat.mtimeMs) || 0)
+          && Number(previous.size) === Number(stat.size)) continue;
+        const relativePath = `${prefix}${toRelativePath(path.relative(root, filePath)) || path.basename(filePath)}`;
+        entries.push({ path: filePath, relativePath });
+      }
+      // A root that yielded nothing at all is indistinguishable from one that
+      // is simply empty, so only report it unreadable when readdir itself fails.
+      if (!sawFile) {
+        try {
+          await fs.promises.readdir(root);
+        } catch (_) {
+          unreadable.add(normalizedPathIdentity(root));
+        }
+      }
+    };
+    for (const root of roots) await walk(root, '');
+    for (const orphan of orphanRoots) await walk(orphan.root, orphan.prefix);
+    if (!roots.length && !orphanRoots.length) {
+      return { ...this.listTracksSync(), folders: [], added: 0, changed: 0, removed: 0, scanned: 0 };
+    }
+    const gone = orderSnapshot.filter((id) => {
+      const record = recordsSnapshot.get(id);
+      if (!record) return false;
+      if (unreadable.has(normalizedPathIdentity(path.dirname(record.audioPath)))) return false;
+      return !found.has(normalizedPathIdentity(record.audioPath));
+    });
+    let snapshot;
+    let removed = 0;
+    if (gone.length) {
+      snapshot = await this.removeTracks(gone);
+      removed = snapshot.removed || 0;
+    }
+    let added = 0;
+    let changed = 0;
+    if (entries.length) {
+      const before = recordsSnapshot.size;
+      snapshot = await this.importFiles(entries, { replace: false });
+      const after = snapshot.count - removed;
+      added = Math.max(0, after - before);
+      changed = Math.max(0, entries.length - added);
+    }
+    if (!snapshot) snapshot = this.listTracksSync();
+    return { ...snapshot, folders: this.folders.slice(), added, changed, removed, scanned };
   }
 
   serializeRecord(record) {
@@ -362,6 +627,17 @@ class LocalMusicLibrary {
       title: record.name,
       artist: record.artist || 'Local file',
       album: record.album || '',
+      albumArtist: record.albumArtist || '',
+      genre: record.genre || '',
+      year: Math.max(0, Number(record.year) || 0),
+      track: Math.max(0, Number(record.track) || 0),
+      disc: Math.max(0, Number(record.disc) || 0),
+      composer: record.composer || '',
+      comment: record.comment || '',
+      bitrate: Math.max(0, Number(record.bitrate) || 0),
+      sampleRate: Math.max(0, Number(record.sampleRate) || 0),
+      codec: record.codec || '',
+      addedAt: Math.max(0, Number(record.addedAt) || 0),
       duration: Math.max(0, Number(record.duration) || 0),
       cover: coverAvailable ? localMediaUrl('cover', record.id, record.revision, this.mediaToken) : '',
       hasLyric: !!record.lyric,
@@ -407,6 +683,7 @@ class LocalMusicLibrary {
       version: LOCAL_LIBRARY_VERSION,
       updatedAt: Date.now(),
       mediaToken: this.mediaToken,
+      folders: this.folders.slice(0, MAX_MUSIC_FOLDERS),
       records: order.map((id) => records.get(id)).filter(Boolean),
     };
     const text = JSON.stringify(payload);
@@ -506,14 +783,33 @@ class LocalMusicLibrary {
     }
     const relativeDirectory = path.dirname(entry.relativePath || '');
     const fallbackAlbum = relativeDirectory && relativeDirectory !== '.' ? relativeDirectory.split(/[\\/]/).join(' / ') : '';
+    // music-metadata hands back several of these as arrays, and track/disc as a
+    // {no, of} pair. Normalising here keeps every view downstream from having
+    // to know that, and a failed parse falls back to whatever the record had.
+    const keep = (value, fallback) => (metadataError && previous ? value || fallback : value);
+    const firstText = (value) => Array.isArray(value) ? (value.filter(Boolean)[0] || '') : String(value || '');
+    const listText = (value) => Array.isArray(value)
+      ? value.filter(Boolean).map((entry) => String(entry).trim()).filter(Boolean).join(', ')
+      : firstText(value);
+    const numbered = (value) => Math.max(0, Number(value && typeof value === 'object' ? value.no : value) || 0);
     return {
       record: {
         id,
         audioPath: entry.path,
-        relativePath: entry.relativePath || path.basename(entry.path),
+        relativePath: toRelativePath(entry.relativePath) || path.basename(entry.path),
         name: cleanText(common.title, metadataError && previous ? previous.name : fallbackTitle, 1000),
         artist: cleanText(common.artist || artists, metadataError && previous ? previous.artist : 'Local file', 1000),
         album: cleanText(common.album, metadataError && previous ? previous.album : fallbackAlbum, 1000),
+        albumArtist: cleanText(keep(listText(common.albumartist), previous && previous.albumArtist), '', 1000),
+        genre: cleanText(keep(listText(common.genre), previous && previous.genre), '', 400),
+        year: Math.max(0, Math.min(9999, Number(keep(common.year, previous && previous.year)) || 0)),
+        track: numbered(keep(common.track, previous && previous.track)),
+        disc: numbered(keep(common.disk, previous && previous.disc)),
+        composer: cleanText(keep(listText(common.composer), previous && previous.composer), '', 400),
+        comment: cleanText(keep(listText(common.comment), previous && previous.comment), '', 2000),
+        bitrate: Math.max(0, Math.round(Number(keep(format.bitrate, previous && previous.bitrate)) || 0)),
+        sampleRate: Math.max(0, Math.round(Number(keep(format.sampleRate, previous && previous.sampleRate)) || 0)),
+        codec: cleanText(keep(format.codec || format.container, previous && previous.codec), '', 100),
         duration: Math.max(0, Number(format.duration) || (metadataError && previous ? Number(previous.duration) : 0) || 0),
         size: Math.max(0, Number(stat.size) || 0),
         mtimeMs: Math.max(0, Number(stat.mtimeMs) || 0),
@@ -523,6 +819,9 @@ class LocalMusicLibrary {
         lyric,
         lyricSource,
         importedAt: Date.now(),
+        // First-seen time, not last-parsed time: "Recently added" is about when
+        // the file arrived, and a re-tag on rescan must not bump it to today.
+        addedAt: previous && Number(previous.addedAt) > 0 ? Number(previous.addedAt) : Date.now(),
       },
       metadataError,
       coverWarning: cover.rejected ? 'LOCAL_COVER_REJECTED_BY_BUDGET' : '',
@@ -562,9 +861,10 @@ class LocalMusicLibrary {
         }
         const record = result.record;
         nextRecords.set(record.id, record);
-        const previousIndex = nextOrder.indexOf(record.id);
-        if (previousIndex >= 0) nextOrder.splice(previousIndex, 1);
-        nextOrder.push(record.id);
+        // A track already in the index keeps its place. Re-tagging a file or
+        // rescanning a folder must not shuffle the library so that everything
+        // you touched last week is now at the bottom.
+        if (!nextOrder.includes(record.id)) nextOrder.push(record.id);
         if (result.metadataError) metadataWarnings.push({ name: path.basename(record.audioPath), error: result.metadataError });
         if (result.coverWarning) metadataWarnings.push({ name: path.basename(record.audioPath), error: result.coverWarning });
         if (result.stagedCoverPath) {
@@ -647,94 +947,14 @@ class LocalMusicLibrary {
   // edited files get re-tagged, files that were deleted stop showing up as a
   // row that can never play. Only folders this library already imported are
   // scanned, so a rescan never reaches into a directory the user never chose.
-  async rescan() {
-    // Snapshotted synchronously, before the first await, so a concurrent
-    // import cannot change the set of folders under our feet.
-    const orderSnapshot = this.order.slice();
-    const recordsSnapshot = new Map(this.records);
-    const directories = [];
-    const seenDirectories = new Set();
-    const relativePrefixes = new Map();
-    for (const id of orderSnapshot) {
-      const record = recordsSnapshot.get(id);
-      if (!record) continue;
-      const directory = path.dirname(record.audioPath);
-      const identity = normalizedPathIdentity(directory);
-      if (!identity || seenDirectories.has(identity)) continue;
-      seenDirectories.add(identity);
-      directories.push(directory);
-      // A file dropped next to its siblings keeps the folder the siblings are
-      // filed under, instead of arriving as a bare filename.
-      const relativeDirectory = path.dirname(record.relativePath || '');
-      relativePrefixes.set(identity, relativeDirectory && relativeDirectory !== '.' ? `${relativeDirectory}/` : '');
-    }
-
-    const entries = [];
-    const found = new Set();
-    const unreadable = new Set();
-    await mapWithConcurrency(directories, METADATA_CONCURRENCY, async (directory) => {
-      let names = [];
-      try {
-        names = await fs.promises.readdir(directory);
-      } catch (_) {
-        unreadable.add(normalizedPathIdentity(directory));
-        return;
-      }
-      const prefix = relativePrefixes.get(normalizedPathIdentity(directory)) || '';
-      for (const name of names) {
-        const filePath = supportedAudioPath(path.join(directory, name));
-        if (!filePath) continue;
-        const identity = normalizedPathIdentity(filePath);
-        if (!identity || found.has(identity)) continue;
-        found.add(identity);
-        const previous = recordsSnapshot.get(localFileId(filePath));
-        let stat = null;
-        try {
-          const candidate = await fs.promises.stat(filePath);
-          if (candidate.isFile()) stat = candidate;
-        } catch (_) {
-          continue;
-        }
-        // Unchanged files are skipped rather than re-parsed: a 500-track
-        // library would otherwise re-read every tag on each rescan. Both sides
-        // are rounded because record.mtimeMs is stored at whatever precision
-        // the OS handed out (and survives JSON untouched), while audioRevision()
-        // fingerprints with Math.round — comparing one rounded side against one
-        // raw side would report every track as newly edited forever.
-        if (previous
-          && Math.round(Number(previous.mtimeMs) || 0) === Math.round(Number(stat.mtimeMs) || 0)
-          && Number(previous.size) === Number(stat.size)) continue;
-        entries.push({ path: filePath, relativePath: `${prefix}${name}` });
-      }
-    });
-
-    // A record whose file is gone is a row that can never play. Directories
-    // that could not be read are left alone — a locked folder must not empty
-    // half the library.
-    const gone = orderSnapshot.filter((id) => {
-      const record = recordsSnapshot.get(id);
-      if (!record) return false;
-      if (unreadable.has(normalizedPathIdentity(path.dirname(record.audioPath)))) return false;
-      return !found.has(normalizedPathIdentity(record.audioPath));
-    });
-
-    let snapshot;
-    let removed = 0;
-    if (gone.length) {
-      snapshot = await this.removeTracks(gone);
-      removed = snapshot.removed || 0;
-    }
-    let added = 0;
-    let changed = 0;
-    if (entries.length) {
-      const before = recordsSnapshot.size;
-      snapshot = await this.importFiles(entries, { replace: false });
-      const after = snapshot.count - removed;
-      added = Math.max(0, after - before);
-      changed = Math.max(0, entries.length - added);
-    }
-    if (!snapshot) snapshot = this.listTracksSync();
-    return { ...snapshot, added, changed, removed };
+  rescan(onProgress) {
+    // Unchanged files are skipped rather than re-parsed: a 500-track library
+    // would otherwise re-read every tag on each rescan. Both sides are rounded
+    // because record.mtimeMs is stored at whatever precision the OS handed out
+    // (and survives JSON untouched), while audioRevision() fingerprints with
+    // Math.round — comparing one rounded side against one raw side would
+    // report every track as newly edited forever.
+    return this.scanFolders(onProgress);
   }
 
   recordForRequest(requestUrl) {

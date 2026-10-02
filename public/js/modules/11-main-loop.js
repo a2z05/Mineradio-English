@@ -666,6 +666,11 @@ function animate() {
   var stageLyricsStepDt = consumeFrameGate(mainFrameGates.stageLyrics, now, dt, targetMainStageLyricsFps(now), false, 'stage-lyrics');
   if (stageLyricsStepDt > 0) updateStageLyrics3D(stageLyricsStepDt);
   if (perfProbe && perfProbe.markSince) perfProbe.markSince('visual.stage-lyrics', stageLyricsPerfStart);
+  // EN-FORK: the Now playing sheet draws its spectrum strip from the same
+  // beatFrequencyData the frame above just refilled — no analyser of its own.
+  // The function returns immediately when the sheet is shut, so this costs one
+  // typeof and one boolean on every frame the sheet is not on screen.
+  if (typeof paintNowPlayingSpectrum === 'function') paintNowPlayingSpectrum();
   var desktopOverlayPerfStart = performance.now();
   var desktopOverlayStepDt = consumeFrameGate(mainFrameGates.desktopOverlay, now, dt, targetMainDesktopOverlayFps(now), false, 'desktop-overlay');
   if (desktopOverlayStepDt > 0) syncDesktopOverlayState();

@@ -439,11 +439,18 @@ function closeTrackDetailModal() {
     detailCommentSong = null;
     detailCommentSubmitBusy = false;
   });
+  // EN-FORK: the details modal opened from the Now playing sheet. Closing one
+  // has to put the other back, or Escape leaves the player behind a blank
+  // screen. openTrackDetailModal() puts the sheet away for the same reason.
+  if (typeof closeNowPlayingAfterTrackDetail === 'function') closeNowPlayingAfterTrackDetail();
 }
 function openTrackDetailModal(type, songOverride) {
   var song = songOverride || currentCoverSong();
   if (!song) { showToast('Play or select a song first'); return; }
   if (immersiveMode) setImmersiveMode(false);
+  // EN-FORK: the details modal is a full mask, so the Now playing sheet behind
+  // it would be dead weight — and would come back over it on close.
+  if (typeof closeNowPlayingAfterTrackDetail === 'function') closeNowPlayingAfterTrackDetail();
   var heading = document.getElementById('track-detail-heading');
   var body = document.getElementById('track-detail-body');
   if (!heading || !body) return;
@@ -1287,6 +1294,10 @@ function updateLikeButtons(song) {
   }
   var collectBtn = document.getElementById('collect-btn');
   if (collectBtn) collectBtn.classList.toggle('busy', collectBusy);
+  // EN-FORK: the compact player shows its own like button, so it has to learn
+  // about the change here rather than keep a second copy of the flag.
+  if (typeof paintMiniPlayerHeart === 'function') paintMiniPlayerHeart();
+  if (typeof paintNowPlayingTransport === 'function') paintNowPlayingTransport();
 }
 function heartIconSvg() {
   return '<svg class="heart-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.45c-.32 0-.62-.12-.86-.34l-1.23-1.12C5.54 16.03 2.25 13.05 2.25 8.9 2.25 5.48 4.88 2.9 8.28 2.9c1.7 0 3.35.72 4.52 1.96C13.97 3.62 15.62 2.9 17.32 2.9c3.4 0 6.03 2.58 6.03 6 0 4.15-3.29 7.13-7.66 11.09l-1.23 1.12c-.24.22-.54.34-.86.34z"/></svg>';

@@ -4,7 +4,7 @@
   // EN-FORK perf: stable cache key — the server answers with ETag/304, so
   // unchanged modules come from disk cache instead of being re-read every
   // launch. Bump MODULE_SET_VERSION when shipping changed modules.
-  const moduleCacheBust = 'v3-en';
+  const moduleCacheBust = 'v8-en';
   const modulePaths = [
     'js/modules/00-state/00-core-stores.js',
     'js/modules/00-state/01-perf-render-state.js',
@@ -115,6 +115,17 @@
     'js/modules/12-remote/02-phone-qr-modal.js',
     'js/modules/12-remote/03-remote-folders-settings.js',
     'js/modules/12-remote/03-overlay-panel.js',
+    'js/modules/13-library/00-local-library-store.js',
+    'js/modules/13-library/01-library-page.js',
+    'js/modules/13-library/02-library-context-menu.js',
+    'js/modules/13-library/03-library-playlists.js',
+    'js/modules/13-library/04-metadata-editor.js',
+    'js/modules/13-library/05-library-transfer.js',
+    'js/modules/13-library/06-library-playback-guard.js',
+    'js/modules/13-library/07-library-folder-browser.js',
+    'js/modules/14-system/00-media-session.js',
+    'js/modules/14-system/01-mini-player.js',
+    'js/modules/14-system/02-now-playing.js',
     'js/modules/11-main-loop.js',
   ];
 

@@ -36,6 +36,11 @@ document.addEventListener('keydown', function (e) {
   else if (e.code === 'ArrowRight') nextTrack(true);
   else if (e.code === 'ArrowLeft') prevTrack(true);
   else if (e.code === 'Escape') {
+    if (typeof nowPlayingOpen !== 'undefined' && nowPlayingOpen) {
+      e.preventDefault();
+      closeNowPlaying();
+      return;
+    }
     if (immersiveMode) {
       e.preventDefault();
       setImmersiveMode(false);
@@ -75,6 +80,12 @@ document.addEventListener('keydown', function (e) {
     closeLoginModal(); closeUserModal(); toggleFxPanel(false); togglePlaylistPanel(false);
   }
   else if (e.code === 'KeyL') { if (!immersiveMode) toggleLyricsPanel(); }
+  else if (e.code === 'KeyN') {
+    // EN-FORK: Now playing. Free here because the only other KeyN is the net-ease
+    // cover picker's own field, which returns false from isTypingTarget().
+    e.preventDefault();
+    toggleNowPlaying();
+  }
   else if (e.code === 'KeyP') {
     if (!immersiveMode && diyPlayerMode) toggleFxPanel();
     else if (!immersiveMode) showToast('Enable DIY player mode to open the visual console');

@@ -22,5 +22,11 @@ test('local update installer and update-cache bridges are absent', () => {
   assert.doesNotMatch(bridgeText, /openUpdateInstaller/);
   assert.doesNotMatch(mainText, /getUpdateDownloadDir/);
   assert.doesNotMatch(mainText, /MINERADIO_UPDATE_DIR/);
-  assert.doesNotMatch(mainText, /shell\.openPath\(/);
+  // openPath itself is allowed — "Reveal in Explorer" needs it. What is banned
+  // is handing it a downloaded .exe, which is what the old bridge did with a
+  // fixed update directory.
+  for (const [, arg] of mainText.matchAll(/shell\.openPath\(([^;]*)\)/g)) {
+    assert.doesNotMatch(arg, /update|install|download|\.exe/i,
+      `shell.openPath must not open an installer: shell.openPath(${arg.trim()})`);
+  }
 });

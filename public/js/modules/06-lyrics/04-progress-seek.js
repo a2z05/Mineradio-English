@@ -153,6 +153,11 @@ function setProgressVisual(percent) {
   if (thumb) thumb.style.left = percent + '%';
 }
 function updatePlaybackProgressUi() {
+  // EN-FORK: the compact player reads the same clock, so it is updated from
+  // the same function rather than from a timer that could drift against it.
+  // Up here so a drag preview on the console does not freeze it.
+  if (typeof paintMiniPlayerProgress === 'function') paintMiniPlayerProgress();
+  if (typeof paintNowPlayingProgress === 'function') paintNowPlayingProgress();
   if (isProgressDragPreviewActive() && progressDragState.previewDuration > 0) {
     renderProgressPreview(getProgressPreviewClockSeconds(), progressDragState.previewDuration);
     return;

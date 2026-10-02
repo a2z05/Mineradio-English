@@ -230,6 +230,10 @@ function finalizeListenSession(completed) {
     : listenSnapshotDurationMs(session.song);
   listenSession = null;
   var effective = completed || session.listenMs >= 45000 || session.maxProgress >= 0.5 || (!audio || !audio.duration ? session.listenMs >= 30000 : false);
+  // Before the early return: a bail-out is a skip, and skips are exactly the
+  // thing this function used to throw away. The library's own counters —
+  // favourites, Most played, Recently played — are fed from here.
+  if (typeof libraryRecordListenEvent === 'function') libraryRecordListenEvent(session.key, completed, effective);
   if (!effective) return;
   var now = Date.now();
   var snap = session.song || {};

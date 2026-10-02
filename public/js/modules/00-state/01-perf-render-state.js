@@ -22,6 +22,10 @@ function installStartupLongTaskObserver() {
 }
 installStartupLongTaskObserver();
 var queueViewTab = readPlaylistPanelTabPreference(), playMode = 'loop', miniQueueOpen = false;
+// Keys of the tracks actually played, in order. Previous walks this instead of
+// the index: in shuffle mode the queue array is physically reordered, so
+// "index minus one" is frequently a track the listener has never heard.
+var playbackHistory = [], PLAYBACK_HISTORY_LIMIT = 120;
 var miniQueueRenderSeq = 0, queueRenderSeq = 0, playlistRenderSeq = 0;
 var queuePanelDirty = false;
 var PLAYLIST_LAZY_BATCH_SIZE = 48;

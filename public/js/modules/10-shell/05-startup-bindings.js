@@ -32,6 +32,19 @@ var persistedLocalLibraryRestorePromise = Promise.resolve(restorePersistedLocalL
   if (typeof updateLocalLibraryChoiceLabel === 'function') updateLocalLibraryChoiceLabel(localLibraryTracksNow().length);
   return restored;
 }, function () { return false; });
+// The Library page reads its own cache rather than the search panel's copy, so
+// warm it here: the first open is then instant instead of waiting on three IPC
+// round-trips while the modal is already on screen.
+if (typeof hydrateLocalLibraryStore === 'function') {
+  persistedLocalLibraryRestorePromise.then(function () {
+    return hydrateLocalLibraryStore();
+  }, function () { return null; }).then(function () {
+    if (typeof libraryPaintPlaylistPane === 'function') libraryPaintPlaylistPane();
+    // Subscribed after the first restore so a scan that lands during startup is
+    // not answered by a refresh that has not finished yet.
+    if (typeof libraryWatchLibraryChanges === 'function') libraryWatchLibraryChanges();
+  }, function () { /* a cold library must never block startup */ });
+}
 applyStartupStarfieldPreset();
 switchPlaylistTab(queueViewTab, { save: false, animate: false, refresh: false });
 applyPlaylistPanelPinState(false);

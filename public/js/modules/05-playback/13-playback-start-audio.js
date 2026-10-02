@@ -1083,6 +1083,10 @@ async function playQueueAt(idx, opts) {
     markPlayPhase('track-setup');
     var song = safePlaybackStep('hydrate-song', function () { return hydrateCustomCover(playQueue[idx]); }) || playQueue[idx];
     playQueue[idx] = song;
+    // Remember where we came from before anything reorders the queue. Previous
+    // walks this list of keys, so a shuffle pass and a jump from a search
+    // result both unwind correctly. A history-driven step does not push.
+    if (!opts.historyBack) playbackHistoryPush(song, previousSongForTransition);
     var sameAlbumCoverSwitch = albumGaplessSameAlbumCover(previousSongForTransition, song);
     var earlyLyricFetchStarted = false;
     function startTrackLyricFetch() {
@@ -1135,6 +1139,11 @@ async function playQueueAt(idx, opts) {
       document.getElementById('thumb-artist').textContent = song.artist;
       updateControlTrackInfo(song);
       document.getElementById('thumb-wrap').classList.add('visible');
+      // EN-FORK: the OS needs the new track before the cover swap below
+      // finishes, or the taskbar and the lock screen lag the window.
+      if (typeof publishMediaState === 'function') publishMediaState('track');
+      if (typeof paintMiniPlayer === 'function') paintMiniPlayer();
+      if (typeof paintNowPlaying === 'function') paintNowPlaying();
     });
     markPlayPhase('lyric-prep');
     safePlaybackStep('lyric-prep', function () {

@@ -1,0 +1,214 @@
+/* ============================================================
+   Mini player — the compact transport.
+
+   Same glass language as the bottom bar (a warm hairline, one accent, no new
+   palette), at a size that leaves the stage visible. It lives inside the main
+   window rather than in a second BrowserWindow: a second window would want its
+   own WebGL context on the same GPU and would fight the 3D stage for it.
+   ============================================================ */
+
+#mini-player {
+  position: fixed;
+  z-index: 1100;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%) translateY(120%);
+  width: min(430px, calc(100vw - 40px));
+  padding: 0 12px 10px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(18, 18, 22, .82), rgba(8, 8, 11, .88));
+  border: 1px solid rgba(244, 210, 138, .18);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .09);
+  backdrop-filter: blur(26px) saturate(1.4);
+  -webkit-backdrop-filter: blur(26px) saturate(1.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .34s cubic-bezier(.16, 1, .3, 1), opacity .28s ease;
+}
+
+#mini-player[hidden] {
+  display: none;
+}
+
+#mini-player.open {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The console is hidden, not removed: the transport is still the same DOM, so
+   the buttons in it keep their state and coming back costs one class. */
+body.mini-player-mode #bottom-bar,
+body.mini-player-mode #bottom-handle {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden;
+}
+
+/* The compact transport owns the bottom of the screen; the console must not
+   slide back over it when something calls revealBottomControls() underneath. */
+body.mini-player-mode #bottom-bar.soft-hidden {
+  transform: translateX(-50%) translateY(96px) scale(.972) !important;
+}
+
+/* ---- progress ---- */
+
+#mini-player-progress {
+  position: relative;
+  height: 12px;
+  margin: 0 -12px 4px;
+  display: flex;
+  align-items: flex-end;
+  cursor: pointer;
+  outline: 0;
+}
+
+#mini-player-progress-fill {
+  height: 3px;
+  width: 0;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(90deg, rgba(244, 210, 138, .75), #f4d28a);
+  transition: height .14s ease;
+}
+
+#mini-player-progress:hover #mini-player-progress-fill,
+#mini-player-progress.dragging #mini-player-progress-fill,
+#mini-player-progress:focus-visible #mini-player-progress-fill {
+  height: 6px;
+}
+
+#mini-player-progress:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(244, 210, 138, .5);
+}
+
+/* ---- row ---- */
+
+.mini-player-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mini-player-cover {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  background-color: rgba(255, 255, 255, .05);
+  cursor: pointer;
+}
+
+.mini-player-cover.cover-empty {
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .02));
+}
+
+.mini-player-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-right: 4px;
+}
+
+.mini-player-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, .93);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini-player-artist {
+  margin-top: 1px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, .42);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The clock is its own line rather than more text in the title block: the
+   title ellipsises, and a running clock that vanishes mid-track is useless. */
+.mini-player-time {
+  flex: 0 0 auto;
+  min-width: 74px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .4);
+  text-align: right;
+}
+
+.mini-player-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, .28);
+  color: rgba(255, 255, 255, .74);
+  cursor: pointer;
+  transition: color .14s ease, border-color .14s ease, background-color .14s ease;
+}
+
+.mini-player-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.mini-player-btn:hover {
+  color: #f4d28a;
+  border-color: rgba(244, 210, 138, .42);
+}
+
+.mini-player-btn.primary {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  color: #0d0c0e;
+  background: linear-gradient(160deg, #f8dc9f, #e0b364);
+  border-color: rgba(255, 255, 255, .28);
+}
+
+.mini-player-btn.primary svg {
+  width: 18px;
+  height: 18px;
+}
+
+.mini-player-btn.primary:hover {
+  color: #0d0c0e;
+  background: linear-gradient(160deg, #ffe6b4, #eec07a);
+}
+
+#mini-player-heart.liked {
+  color: #f4d28a;
+  border-color: rgba(244, 210, 138, .5);
+}
+
+.mini-player-btn.exit {
+  width: 22px;
+  border-color: rgba(255, 255, 255, .06);
+  background: none;
+  color: rgba(255, 255, 255, .34);
+}
+
+.mini-player-btn.exit svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 520px) {
+  .mini-player-meta {
+    padding-right: 0;
+  }
+
+  #mini-player-heart,
+  #mini-player-toggle {
+    display: none;
+  }
+}

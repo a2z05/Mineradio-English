@@ -1,0 +1,392 @@
+/* ============================================================
+   Now Playing.
+
+   Not a Spotify clone and not a second stage: a right-hand sheet in the same
+   glass as the playlist panel, showing what is playing in more detail than the
+   console has room for, with a spectrum strip drawn from the analyser the 3D
+   stage is already sampling — so it costs no extra audio graph.
+
+   It sits at z-index 40, under the modal mask (50). That is deliberate: while
+   it is open the search box, the lyrics panel and the queue must stay usable,
+   and a Now Playing panel that covers them is a panel you have to close to do
+   anything.
+   ============================================================ */
+
+#now-playing-panel {
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 88vw);
+  padding: 18px 16px calc(22px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(16, 16, 20, .78), rgba(7, 7, 10, .86));
+  border-left: 1px solid rgba(244, 210, 138, .14);
+  box-shadow: -22px 0 60px rgba(0, 0, 0, .46);
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  opacity: 0;
+  transform: translateX(28px);
+  pointer-events: none;
+  transition: transform .32s cubic-bezier(.16, 1, .3, 1), opacity .26s ease;
+}
+
+#now-playing-panel[hidden] {
+  display: none;
+}
+
+#now-playing-panel.open {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.now-playing-glass {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 2px 4px;
+}
+
+/* ---- close ---- */
+
+.now-playing-close {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+  color: rgba(255, 255, 255, .46);
+  background: rgba(0, 0, 0, .3);
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: color .14s ease, border-color .14s ease;
+}
+
+.now-playing-close:hover {
+  color: #f4d28a;
+  border-color: rgba(244, 210, 138, .42);
+}
+
+/* ---- art + spectrum ---- */
+
+.now-playing-art {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  margin: 26px 0 14px;
+}
+
+/* The strip reads bottom-up out of the live FFT. Sized by CSS so a wide
+   window gets a wider strip without the canvas being re-created. */
+#now-playing-spectrum {
+  width: 100%;
+  height: 30px;
+  display: block;
+  opacity: .82;
+}
+
+.now-playing-cover {
+  width: 208px;
+  height: 208px;
+  max-width: 62vw;
+  max-height: 62vw;
+  border-radius: 18px;
+  background-size: cover;
+  background-position: center;
+  background-color: rgba(255, 255, 255, .05);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .48), inset 0 1px 0 rgba(255, 255, 255, .1);
+  cursor: pointer;
+}
+
+.now-playing-cover.cover-empty {
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .02));
+}
+
+/* ---- text ---- */
+
+.now-playing-title {
+  max-width: 100%;
+  margin-top: 4px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: rgba(255, 255, 255, .95);
+  text-align: center;
+  line-height: 1.28;
+}
+
+.now-playing-artist {
+  max-width: 100%;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, .58);
+  text-align: center;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+
+.now-playing-artist:hover {
+  color: #f4d28a;
+}
+
+.now-playing-album,
+.now-playing-source {
+  max-width: 100%;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, .34);
+  text-align: center;
+}
+
+.now-playing-source:not(:empty) {
+  margin-bottom: 12px;
+}
+
+/* ---- progress ---- */
+
+.now-playing-progress {
+  position: relative;
+  width: 100%;
+  height: 14px;
+  margin-top: 14px;
+  display: flex;
+  align-items: flex-end;
+  cursor: pointer;
+  outline: 0;
+}
+
+#now-playing-progress-fill {
+  height: 3px;
+  width: 0;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(90deg, rgba(244, 210, 138, .72), #f4d28a);
+  transition: height .14s ease;
+}
+
+.now-playing-progress:hover #now-playing-progress-fill,
+.now-playing-progress.dragging #now-playing-progress-fill,
+.now-playing-progress:focus-visible #now-playing-progress-fill {
+  height: 6px;
+}
+
+.now-playing-progress:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(244, 210, 138, .5);
+}
+
+.now-playing-times {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: rgba(255, 255, 255, .38);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- transport ---- */
+
+.now-playing-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 16px 0 12px;
+}
+
+.now-playing-btn {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, .3);
+  color: rgba(255, 255, 255, .72);
+  cursor: pointer;
+  transition: color .14s ease, border-color .14s ease, background-color .14s ease;
+}
+
+.now-playing-btn svg {
+  width: 19px;
+  height: 19px;
+  fill: currentColor;
+}
+
+.now-playing-btn:hover {
+  color: #f4d28a;
+  border-color: rgba(244, 210, 138, .42);
+}
+
+.now-playing-btn.primary {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  color: #0d0c0e;
+  background: linear-gradient(160deg, #f8dc9f, #e0b364);
+  border-color: rgba(255, 255, 255, .28);
+}
+
+.now-playing-btn.primary svg {
+  width: 24px;
+  height: 24px;
+}
+
+.now-playing-btn.primary:hover {
+  color: #0d0c0e;
+  background: linear-gradient(160deg, #ffe6b4, #eec07a);
+}
+
+.now-playing-btn.active,
+#now-playing-like.liked {
+  color: #f4d28a;
+  border-color: rgba(244, 210, 138, .5);
+}
+
+#now-playing-mode svg {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---- row actions ---- */
+
+.now-playing-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.now-playing-chip {
+  padding: 6px 11px;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, .6);
+  background: rgba(255, 255, 255, .05);
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: color .14s ease, border-color .14s ease;
+}
+
+.now-playing-chip:hover {
+  color: #f4d28a;
+  border-color: rgba(244, 210, 138, .4);
+}
+
+.now-playing-chip.active {
+  color: #f4d28a;
+  border-color: rgba(244, 210, 138, .45);
+  background: rgba(244, 210, 138, .09);
+}
+
+.now-playing-hint {
+  margin-top: 14px;
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  color: rgba(255, 255, 255, .2);
+  text-align: center;
+}
+
+/* The compact transport and the console are both centred with translateX(-50%),
+   so the only way to move them clear of the sheet is to shrink what they are
+   centred on — hence the right offset rather than a left one. */
+body.now-playing-open #mini-player,
+body.now-playing-open #bottom-bar {
+  right: min(360px, 88vw);
+  width: min(430px, calc(100vw - 40px - min(360px, 88vw)));
+}
+
+body.now-playing-open #bottom-bar {
+  width: min(1080px, calc(100vw - 56px - min(360px, 88vw)));
+}
+
+body.now-playing-open #bottom-handle {
+  right: min(360px, 88vw);
+}
+
+/* The slide-in transition has to carry the new centre, or the transport jumps
+   across the screen while the sheet is opening over it. */
+#mini-player,
+#bottom-bar {
+  transition-property: transform, opacity, right, width;
+}
+
+#mini-player {
+  transition-duration: .34s, .28s, .3s, .3s;
+}
+
+/* The handle is a centred pill too. Unlike the two above it has no transition
+   of its own, so `right` is enough. */
+#bottom-handle {
+  transition-property: right;
+  transition-duration: .3s;
+}
+
+@media (max-width: 620px) {
+  #now-playing-panel {
+    width: 100vw;
+    top: auto;
+    height: 74vh;
+    border-left: 0;
+    border-top: 1px solid rgba(244, 210, 138, .16);
+    border-radius: 18px 18px 0 0;
+    transform: translateY(28px);
+  }
+
+  #now-playing-panel.open {
+    transform: translateY(0);
+  }
+
+  body.now-playing-open #mini-player,
+  body.now-playing-open #bottom-bar,
+  body.now-playing-open #bottom-handle {
+    right: 0;
+  }
+
+  body.now-playing-open #mini-player,
+  body.now-playing-open #bottom-bar {
+    width: min(430px, calc(100vw - 40px));
+  }
+
+  body.now-playing-open #bottom-bar {
+    width: min(1080px, calc(100vw - 56px));
+  }
+}
+
+@media (max-width: 620px) {
+  #now-playing-panel {
+    width: 100vw;
+    top: auto;
+    height: 74vh;
+    border-left: 0;
+    border-top: 1px solid rgba(244, 210, 138, .16);
+    border-radius: 18px 18px 0 0;
+    transform: translateY(28px);
+  }
+
+  #now-playing-panel.open {
+    transform: translateY(0);
+  }
+
+  body.now-playing-open #mini-player,
+  body.now-playing-open #bottom-bar,
+  body.now-playing-open #bottom-handle {
+    right: 0;
+  }
+}

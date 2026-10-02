@@ -14,6 +14,10 @@
   <script src="vendor/gsap.min.js"></script>
   <script src="js/preload-mode.js"></script>
   <link rel="stylesheet" href="css/index.css?v=20260716-we-continuity-vsync">
+  <link rel="stylesheet" href="css/library-page.css?v=20261001-library-page">
+  <link rel="stylesheet" href="css/library-folders.css?v=20261002-library-folders">
+  <link rel="stylesheet" href="css/mini-player.css?v=20261002-mini-player">
+  <link rel="stylesheet" href="css/now-playing.css?v=20261002-now-playing">
 </head>
 
 <body>
@@ -189,6 +193,13 @@
               <circle cx="6" cy="18" r="3" />
               <circle cx="18" cy="16" r="3" />
             </svg><span><strong>My library</strong><small id="local-library-choice-sub">Browse tracks saved on this device</small></span></button>
+          <button class="upload-choice" type="button" id="local-library-page-choice" onclick="openLibraryPage()"><svg viewBox="0 0 24 24"
+              fill="none" stroke-width="2">
+              <rect x="3" y="4" width="7" height="7" rx="1.5" />
+              <rect x="14" y="4" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            </svg><span><strong>Library browser</strong><small>Songs, albums, artists, folders and playlists</small></span></button>
         </div>
         <div id="upload-tip" role="status" aria-live="polite">
           <button class="upload-tip-close" onclick="closeUploadTip(true)" aria-label="Dismiss tip">×</button>
@@ -1292,7 +1303,127 @@
         </filter>
       </defs>
     </svg>
+    <!-- EN-FORK: the compact player. It follows the window instead of being its
+         own floating window, because a second BrowserWindow would need its own
+         WebGL context on the same GPU and would fight the stage for it. -->
+    <div id="mini-player" hidden aria-label="Mini player">
+      <div id="mini-player-progress" role="slider" aria-label="Seek" tabindex="0">
+        <div id="mini-player-progress-fill"></div>
+      </div>
+      <div class="mini-player-row">
+        <div id="mini-player-cover" class="mini-player-cover cover-empty" role="button" tabindex="0"
+          title="Album details" aria-label="Album details"
+          onclick="openTrackDetailModal('album')"
+          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTrackDetailModal('album')}"></div>
+        <div class="mini-player-meta">
+          <div id="mini-player-title" class="mini-player-title"></div>
+          <div id="mini-player-artist" class="mini-player-artist"></div>
+        </div>
+        <div id="mini-player-time" class="mini-player-time"></div>
+        <button id="mini-player-heart" class="mini-player-btn" type="button" onclick="toggleLikeCurrent()"
+          title="Like this song" aria-label="Like this song">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 21.45c-.32 0-.62-.12-.86-.34l-1.23-1.12C5.54 16.03 2.25 13.05 2.25 8.9 2.25 5.48 4.88 2.9 8.28 2.9c1.7 0 3.35.72 4.52 1.96C13.97 3.62 15.62 2.9 17.32 2.9c3.4 0 6.03 2.58 6.03 6 0 4.15-3.29 7.13-7.66 11.09l-1.23 1.12c-.24.22-.54.34-.86.34z" />
+          </svg>
+        </button>
+        <button id="mini-player-prev" class="mini-player-btn" type="button" onclick="prevTrack(true)" title="Previous track"
+          aria-label="Previous track">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+          </svg>
+        </button>
+        <button id="mini-player-play" class="mini-player-btn primary" type="button" onclick="togglePlay()"
+          title="Play / pause" aria-label="Play or pause">
+          <svg id="mini-player-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </button>
+        <button id="mini-player-next" class="mini-player-btn" type="button" onclick="nextTrack(true)" title="Next track"
+          aria-label="Next track">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+          </svg>
+        </button>
+        <button id="mini-player-exit" class="mini-player-btn exit" type="button" onclick="exitMiniPlayer()"
+          title="Leave the mini player" aria-label="Leave the mini player">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M5 12h14" />
+          </svg>
+        </button>
+      </div>
+    </div>
     <button id="bottom-handle" type="button" aria-label="Open the player console" title="Player console"><span></span></button>
+    <!-- EN-FORK: Now Playing. A panel, not a second stage — it lives inside the
+         main window for the same reason the mini player does, and it sits below
+         the modal mask so the search box, the lyrics panel and the queue are
+         still reachable while it is open. -->
+    <div id="now-playing-panel" hidden aria-label="Now playing" role="dialog" aria-modal="false">
+      <div class="now-playing-glass">
+        <button id="now-playing-close" class="now-playing-close" type="button" onclick="closeNowPlaying()"
+          aria-label="Close Now playing" title="Close">&times;</button>
+        <div class="now-playing-art">
+          <canvas id="now-playing-spectrum" width="180" height="30" aria-hidden="true"></canvas>
+          <div id="now-playing-cover" class="now-playing-cover cover-empty" role="button" tabindex="0"
+            title="Album details" aria-label="Album details" onclick="openTrackDetailModal('album')"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTrackDetailModal('album')}"></div>
+        </div>
+        <div id="now-playing-title" class="now-playing-title"></div>
+        <div id="now-playing-artist" class="now-playing-artist" role="button" tabindex="0" title="Artist details"
+          onclick="openTrackDetailModal('artist')"
+          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTrackDetailModal('artist')}"></div>
+        <div id="now-playing-album" class="now-playing-album"></div>
+        <div id="now-playing-source" class="now-playing-source"></div>
+
+        <div id="now-playing-progress" class="now-playing-progress" role="slider" aria-label="Seek" tabindex="0">
+          <div id="now-playing-progress-fill"></div>
+        </div>
+        <div class="now-playing-times">
+          <span id="now-playing-elapsed">0:00</span>
+          <span id="now-playing-remaining">-0:00</span>
+        </div>
+
+        <div class="now-playing-controls">
+          <button id="now-playing-mode" class="now-playing-btn" type="button" onclick="cyclePlayMode()"
+            title="Play mode" aria-label="Play mode">
+            <svg id="now-playing-mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+          </button>
+          <button id="now-playing-prev" class="now-playing-btn" type="button" onclick="prevTrack(true)"
+            title="Previous track" aria-label="Previous track">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+            </svg>
+          </button>
+          <button id="now-playing-play" class="now-playing-btn primary" type="button" onclick="togglePlay()"
+            title="Play / pause" aria-label="Play or pause">
+            <svg id="now-playing-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
+          <button id="now-playing-next" class="now-playing-btn" type="button" onclick="nextTrack(true)"
+            title="Next track" aria-label="Next track">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+            </svg>
+          </button>
+          <button id="now-playing-like" class="now-playing-btn" type="button" onclick="toggleLikeCurrent()"
+            title="Like this song" aria-label="Like this song">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 21.45c-.32 0-.62-.12-.86-.34l-1.23-1.12C5.54 16.03 2.25 13.05 2.25 8.9 2.25 5.48 4.88 2.9 8.28 2.9c1.7 0 3.35.72 4.52 1.96C13.97 3.62 15.62 2.9 17.32 2.9c3.4 0 6.03 2.58 6.03 6 0 4.15-3.29 7.13-7.66 11.09l-1.23 1.12c-.24.22-.54.34-.86.34z" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="now-playing-row">
+          <button id="now-playing-lyrics" class="now-playing-chip" type="button" onclick="toggleLyricsPanel()">Lyrics</button>
+          <button id="now-playing-queue" class="now-playing-chip" type="button" onclick="toggleMiniQueue()">Queue</button>
+          <button id="now-playing-shuffle" class="now-playing-chip" type="button" onclick="shuffleQueue()">Shuffle queue</button>
+        </div>
+        <div id="now-playing-hint" class="now-playing-hint">Esc closes · Space plays</div>
+      </div>
+    </div>
     <div id="bottom-bar">
       <div id="mini-queue-popover" class="mini-queue-popover" onclick="event.stopPropagation()">
         <div class="mini-queue-head">
@@ -1435,6 +1566,28 @@
               <path d="M20 15v4a1 1 0 0 1-1 1h-4" />
               <path d="M9 20H5a1 1 0 0 1-1-1v-4" />
               <circle cx="12" cy="12" r="2.2" />
+            </svg></button>
+          <!-- EN-FORK: the compact transport. The state behind it is the same
+               bottom bar, so entering the mini player is a layout change and
+               not a second copy of the player that can drift out of sync. -->
+          <button id="mini-player-btn" class="ctrl-btn" onclick="enterMiniPlayer()" title="Mini player"
+            aria-label="Enter the mini player" aria-pressed="false"><svg width="18" height="18" fill="none" stroke="currentColor"
+              stroke-width="1.9" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 14V6a2 2 0 0 1 2-2h4" />
+              <path d="M14 4h4a2 2 0 0 1 2 2v2" />
+              <path d="M20 10v8a2 2 0 0 1-2 2h-4" />
+              <path d="M10 20H6a2 2 0 0 1-2-2v-2" />
+              <path d="M9 13h6" />
+            </svg></button>
+          <!-- EN-FORK: Now Playing. A side sheet over the same state the console
+               already reads, with a live spectrum strip taken from the stage's
+               own analyser — not a second stage, and not a Spotify clone. -->
+          <button id="now-playing-btn" class="ctrl-btn" onclick="toggleNowPlaying()" title="Now playing"
+            aria-label="Toggle the Now playing panel" aria-pressed="false"><svg width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="12" cy="12" r="2.4" />
+              <path d="M12 3v6.6" />
             </svg></button>
           <button class="ctrl-btn fullscreen-toggle-btn" onclick="toggleFullscreen()" title="Fullscreen (F)"><svg width="18"
               height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1921,6 +2074,15 @@
   </div>
 
   <script src="js/index-loader.js"></script>
+  <script>
+    // EN-FORK: whichever installer defines it wins. The modules are concatenated
+    // into one script, so a later file can redeclare a function without error —
+    // that is what "last definition wins" means here — and putting this last
+    // makes the intent explicit instead of load-order luck.
+    if (typeof installMiniPlayer === 'function') installMiniPlayer();
+    if (typeof installMediaSession === 'function') installMediaSession();
+    if (typeof installNowPlaying === 'function') installNowPlaying();
+  </script>
 </body>
 
 </html>
