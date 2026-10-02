@@ -17,7 +17,12 @@ var localLibraryStore = {
   loaded: false,
   loading: false,
   index: null,
-  indexAt: 0
+  indexAt: 0,
+  // Why the last read came back with nothing, when it was not simply empty. The
+  // main process records this because loadIndex runs in the constructor and has
+  // no way to fail out loud; a zero count is all that reaches the page without
+  // it, and an unreadable index reads exactly like an empty library.
+  warning: ''
 };
 
 // Groupings are derived once and thrown away whenever the track list or the
@@ -88,6 +93,7 @@ async function hydrateLocalLibraryStore(options) {
 
     var listResult = results[0];
     if (listResult && listResult.ok !== false && Array.isArray(listResult.tracks)) {
+      localLibraryStore.warning = String(listResult.warning || '');
       localLibraryStore.tracks = localLibraryNormalizeTracks(listResult.tracks);
       // The startup restore keeps its own copy in sync so the search panel and
       // this page agree about what a local row is.
@@ -135,6 +141,11 @@ function rebuildLocalLibraryById() {
 // it already pruned what disappeared — so there is no merge to do here.
 function setLocalLibraryStoreTracks(tracks) {
   localLibraryStore.tracks = localLibraryNormalizeTracks(tracks);
+  // Every caller reaches this only after the main process answered with a list
+  // it had just read or written, which is an index it was willing to open — so
+  // whatever the boot reported about an older file no longer describes what is
+  // on disk. The read path is what sets it; this is what lets it go.
+  localLibraryStore.warning = '';
   rebuildLocalLibraryById();
   invalidateLocalLibraryIndex();
   if (typeof persistentLocalLibraryTracks !== 'undefined') {

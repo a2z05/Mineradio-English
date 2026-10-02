@@ -302,6 +302,76 @@ test('a library that will not open says so instead of showing nothing', (t) => {
   assert.equal(never.indexWarning, '', 'having no library yet is not a failure');
 });
 
+// The store and the empty state as the page runs them: the real declarations,
+// the real hydrate, and the desktop bridge stood in by whatever list the test
+// hands over.
+function rendererSandbox(snapshot) {
+  const start = storeSource.indexOf('var localLibraryStore');
+  const sandbox = {
+    console,
+    window: {
+      desktopWindow: {
+        listLocalMusicLibrary: async () => snapshot,
+        getLocalLibraryUserData: async () => ({ ok: false }),
+        listLocalMusicFolders: async () => ({ ok: false }),
+      },
+    },
+    hydrateCustomCover: (song) => song,
+    cloneSong: (song) => Object.assign({}, song),
+    escHtml: (value) => String(value),
+    libraryPage: { query: '' },
+  };
+  vm.runInNewContext(
+    storeSource.slice(start, storeSource.indexOf('};', start) + 2)
+      + '\n' + [
+        'invalidateLocalLibraryIndex', 'localFileIdOf', 'localLibrarySongKey',
+        'localLibraryNormalizeTracks', 'hydrateLocalLibraryStore',
+        'rebuildLocalLibraryById', 'setLocalLibraryStoreTracks',
+      ].map((n) => namedFunctionSource(storeSource, n)).join('\n')
+      + '\n' + namedFunctionSource(pageSource, 'libraryEmptyStateHtml'),
+    sandbox
+  );
+  return sandbox;
+}
+
+test('an index that will not open is told apart from an empty library', async (t) => {
+  const profile = profileRoot(t);
+  fs.mkdirSync(profile, { recursive: true });
+  fs.writeFileSync(path.join(profile, INDEX_NAME), '{"version":1,"records":[not json', 'utf8');
+  const library = new LocalMusicLibrary({ userDataPath: profile });
+  const snapshot = library.listTracksSync();
+  assert.equal(snapshot.count, 0, 'nothing was loaded');
+  assert.ok(snapshot.warning, 'but the reason travels with the count');
+
+  // The page reads through hydrateLocalLibraryStore, so that is the call that
+  // has to pick the reason up. A field nothing reads is worth no more than no
+  // field at all, which is how this shipped in the first place.
+  const sb = rendererSandbox(snapshot);
+  await sb.hydrateLocalLibraryStore({ force: true });
+  assert.equal(sb.localLibraryStore.warning, snapshot.warning,
+    'the store keeps what the main process reported');
+  const broken = sb.libraryEmptyStateHtml();
+  assert.match(broken, /could not be opened/);
+  assert.doesNotMatch(broken, /Your library is empty/,
+    'an unreadable index must not invite the user to start over as though they had none');
+
+  // A write that lands is proof the file on disk is one we made and checked the
+  // size of, so the complaint is withdrawn here rather than carried into every
+  // later session by a constructor that runs once.
+  const { records, order } = syntheticLibrary(4);
+  await library.persistSnapshot(order, records);
+  assert.equal(library.indexWarning, '', 'the write that replaced it clears it');
+  assert.equal(library.listTracksSync().warning, '');
+
+  // And on the page, a list the main process has just answered with retires a
+  // warning about some older file — so a library that is later emptied reads as
+  // empty rather than staying labelled broken for the rest of the session.
+  sb.setLocalLibraryStoreTracks([]);
+  assert.equal(sb.localLibraryStore.warning, '');
+  assert.match(sb.libraryEmptyStateHtml(), /Your library is empty/,
+    'empty again, not broken');
+});
+
 // ---------------------------------------------------------------- the window
 
 const OVERSCAN = Number(/var LIBRARY_OVERSCAN\s*=\s*(\d+)/.exec(pageSource)[1]);

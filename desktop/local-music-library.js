@@ -898,6 +898,12 @@ class LocalMusicLibrary {
       safeUnlink(temporary);
       throw error;
     }
+    // The file on disk is one this process just wrote and passed the size check
+    // for, so whatever kept the earlier one from opening no longer holds.
+    // indexWarning is set in the constructor and nowhere else, which without
+    // this would keep reporting a problem that the write which just succeeded
+    // has already cleared away.
+    this.indexWarning = '';
   }
 
   async stageCover(id, picture, previous) {

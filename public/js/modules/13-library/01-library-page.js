@@ -441,8 +441,17 @@ function libraryEmptyStateHtml() {
     return 'No matches for “' + escHtml(libraryPage.query) + '”.';
   }
   if (!localLibraryStore.tracks.length) {
-    return '<strong>Your library is empty</strong>' +
-      '<span>Add a music folder and Mineradio will index every track it finds.</span>' +
+    // An index that would not open and one that was never built both arrive
+    // here as zero tracks. Offering to start over when the reason is a file
+    // that could not be read sends the user off to re-add folders they still
+    // have, so the reason is what is said instead.
+    var unread = !!localLibraryStore.warning;
+    return '<strong>' + (unread
+      ? 'Your library index could not be opened'
+      : 'Your library is empty') + '</strong>' +
+      '<span>' + (unread
+        ? 'Mineradio could not read the file that lists your tracks, so there is nothing to show. Your music on disk was not touched — add a music folder and it will be indexed again.'
+        : 'Add a music folder and Mineradio will index every track it finds.') + '</span>' +
       '<div class="library-empty-actions">' +
       '<button class="fx-mini-btn ghost" type="button" onclick="libraryAddMusicFolder()">Add music folder</button>' +
       '<button class="fx-mini-btn ghost" type="button" onclick="triggerUploadInput(\'audio\')">Import files</button>' +
