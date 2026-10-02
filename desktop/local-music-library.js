@@ -8,7 +8,19 @@ const LOCAL_LIBRARY_VERSION = 1;
 const LOCAL_LIBRARY_FILE = 'local-music-library.json';
 const LOCAL_LIBRARY_DIRECTORY = 'local-music-library';
 const LOCAL_COVER_DIRECTORY = 'covers';
-const MAX_LIBRARY_INDEX_BYTES = 16 * 1024 * 1024;
+const LOCAL_LYRIC_DIRECTORY = 'lyrics';
+const LOCAL_LYRIC_EXTENSION = '.txt';
+// Sized against MAX_IMPORT_FILES rather than guessed. A real library on this
+// machine costs ~620 B of metadata per record, so 50k tracks is ~31 MB — and
+// lyric text used to ride along at another ~740 B on the 36% of tracks that
+// carry any, which is where 55% of the file came from. The old 16 MB figure
+// ran out at about 11k tracks: from there stageSnapshot threw
+// LOCAL_LIBRARY_INDEX_TOO_LARGE on every import and rescan, while loadIndex
+// skipped an oversized file outright, so the next launch opened an empty
+// library with nothing on screen to say why. Lyrics now live beside the track
+// and never touch this file, which is why 64 MB is twice what the metadata
+// alone has ever measured at the cap.
+const MAX_LIBRARY_INDEX_BYTES = 64 * 1024 * 1024;
 const MAX_LYRIC_BYTES = 512 * 1024;
 const MAX_COVER_BYTES = 6 * 1024 * 1024;
 const MAX_UNKNOWN_DIMENSION_COVER_BYTES = 1024 * 1024;
@@ -16,6 +28,11 @@ const MAX_COVER_DIMENSION = 4096;
 const MAX_COVER_PIXELS = 12 * 1024 * 1024;
 const MAX_IMPORT_FILES = 50000;
 const METADATA_CONCURRENCY = 3;
+// A first import of a 50k library moves ~18k lyric files out of the index.
+// Measured on this machine at that count: 17.4 s at three in flight, 14.7 s at
+// eight, and 13.9 / 13.4 / 14.8 at sixteen, thirty-two and sixty-four — so the
+// ceiling is the disk's, reached by eight, and wider only contends with it.
+const LYRIC_WRITE_CONCURRENCY = 8;
 const MAX_MUSIC_FOLDERS = 64;
 // A library root can sit anywhere the user points it, but a scan must not walk
 // the whole drive by accident: 200k files is a full index on its own.
@@ -150,6 +167,15 @@ function sharedCoversStillInUse(records) {
     }
   }
   return inUse;
+}
+
+// A track has a lyric when text is either in hand right now or parked in the
+// sidecar the index stopped carrying. Only the source tag survives a reload,
+// so it has to answer on its own — otherwise every library comes back from a
+// restart claiming no lyrics at all.
+function recordHasLyric(record) {
+  if (!record) return false;
+  return !!record.lyric || record.lyricSource === 'sidecar' || record.lyricSource === 'embedded';
 }
 
 function embeddedImageDimensions(data, mime) {
@@ -413,11 +439,16 @@ class LocalMusicLibrary {
     this.userDataPath = path.resolve(String(options.userDataPath || process.cwd()));
     this.libraryDirectory = path.join(this.userDataPath, LOCAL_LIBRARY_DIRECTORY);
     this.coverDirectory = path.join(this.libraryDirectory, LOCAL_COVER_DIRECTORY);
+    this.lyricDirectory = path.join(this.libraryDirectory, LOCAL_LYRIC_DIRECTORY);
     this.indexPath = path.join(this.userDataPath, LOCAL_LIBRARY_FILE);
     this.parseMetadata = typeof options.parseMetadata === 'function' ? options.parseMetadata : defaultParseMetadata;
     this.records = new Map();
     this.order = [];
     this.folders = [];
+    // Set when the index on disk is one we refuse to read. loadIndex has no
+    // way to report a failure — it runs in the constructor — so the reason is
+    // kept here for anything that asks afterwards rather than dropped.
+    this.indexWarning = '';
     this.mediaToken = crypto.randomBytes(24).toString('hex');
     this.protocolInstalled = false;
     this.mutation = Promise.resolve();
@@ -426,9 +457,19 @@ class LocalMusicLibrary {
   }
 
   loadIndex() {
+    let stat = null;
     try {
-      const stat = fs.statSync(this.indexPath);
-      if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_LIBRARY_INDEX_BYTES) return;
+      stat = fs.statSync(this.indexPath);
+    } catch (_) {
+      // Nothing imported yet — not a failure, so it is not recorded as one.
+      return;
+    }
+    try {
+      if (!stat.isFile() || stat.size <= 0) return;
+      if (stat.size > MAX_LIBRARY_INDEX_BYTES) {
+        this.indexWarning = 'LOCAL_LIBRARY_INDEX_TOO_LARGE';
+        return;
+      }
       const parsed = JSON.parse(fs.readFileSync(this.indexPath, 'utf8'));
       if (!parsed || parsed.version !== LOCAL_LIBRARY_VERSION || !Array.isArray(parsed.records)) return;
       if (/^[a-f0-9]{48}$/i.test(String(parsed.mediaToken || ''))) this.mediaToken = String(parsed.mediaToken).toLowerCase();
@@ -481,7 +522,12 @@ class LocalMusicLibrary {
       this.folders = Array.isArray(parsed.folders)
         ? parsed.folders.map((folder) => cleanText(folder, '', 2000)).filter(Boolean).slice(0, MAX_MUSIC_FOLDERS)
         : [];
-    } catch (_) {}
+    } catch (error) {
+      // A library that will not open has to say so somewhere. Without this the
+      // page simply shows nothing and the user's first thought is that their
+      // music was deleted.
+      this.indexWarning = String((error && error.code) || (error && error.message) || 'LOCAL_LIBRARY_INDEX_UNREADABLE').slice(0, 120);
+    }
   }
 
   // Walk one root and yield every supported audio file beneath it, one path at
@@ -742,7 +788,7 @@ class LocalMusicLibrary {
       addedAt: Math.max(0, Number(record.addedAt) || 0),
       duration: Math.max(0, Number(record.duration) || 0),
       cover: coverAvailable ? localMediaUrl('cover', record.id, record.revision, this.mediaToken) : '',
-      hasLyric: !!record.lyric,
+      hasLyric: recordHasLyric(record),
       lyricSource: record.lyricSource || '',
     };
   }
@@ -753,7 +799,15 @@ class LocalMusicLibrary {
       const record = this.records.get(id);
       if (record) tracks.push(this.serializeRecord(record));
     }
-    return { ok: true, version: LOCAL_LIBRARY_VERSION, count: tracks.length, tracks };
+    // An empty library and one that failed to open look identical on screen,
+    // so the reason rides along with the count.
+    return {
+      ok: true,
+      version: LOCAL_LIBRARY_VERSION,
+      count: tracks.length,
+      tracks,
+      warning: this.indexWarning || '',
+    };
   }
 
   async listTracks() {
@@ -763,7 +817,13 @@ class LocalMusicLibrary {
       if (record) tracks.push(this.serializeRecord(record));
       if (index > 0 && index % 400 === 0) await new Promise((resolve) => setImmediate(resolve));
     }
-    return { ok: true, version: LOCAL_LIBRARY_VERSION, count: tracks.length, tracks };
+    return {
+      ok: true,
+      version: LOCAL_LIBRARY_VERSION,
+      count: tracks.length,
+      tracks,
+      warning: this.indexWarning || '',
+    };
   }
 
   lyricForTrack(value) {
@@ -774,12 +834,38 @@ class LocalMusicLibrary {
     return {
       ok: true,
       localFileId: id,
-      lyric: record.lyric || '',
+      // Text still staged on the record from this session's parse, otherwise
+      // the copy beside the track. Reading one small file beats re-parsing a
+      // 60 MB index just to show one song's words.
+      lyric: record.lyric || this.readLyricFileSync(id),
       lyricSource: record.lyricSource || '',
     };
   }
 
   async stageSnapshot(order, records) {
+    // Lyric text leaves the index here, ahead of anything that reads its size.
+    // Only records that still carry text are touched — the ones parsed this
+    // session, and any an older build wrote — so a steady-state persist walks
+    // the list once and writes nothing. A record lets go of its text only once
+    // the copy beside the track is confirmed: if the write fails the index
+    // keeps the only copy, and the size check below then fails loudly instead
+    // of dropping lyrics to make room.
+    const withLyric = [];
+    for (const id of order) {
+      const record = records.get(id);
+      if (!record || !('lyric' in record)) continue;
+      if (record.lyric) withLyric.push(id);
+      else delete record.lyric;
+    }
+    if (withLyric.length) {
+      // Once, not once per track: eighteen thousand mkdir calls is a second of
+      // a rescan spent learning the same thing.
+      await fs.promises.mkdir(this.lyricDirectory, { recursive: true });
+      await mapWithConcurrency(withLyric, LYRIC_WRITE_CONCURRENCY, async (id) => {
+        const record = records.get(id);
+        if (record && record.lyric && await this.writeLyricFile(id, record.lyric)) delete record.lyric;
+      });
+    }
     await fs.promises.mkdir(path.dirname(this.indexPath), { recursive: true });
     const payload = {
       version: LOCAL_LIBRARY_VERSION,
@@ -858,6 +944,42 @@ class LocalMusicLibrary {
       `.${FOLDER_COVER_PREFIX}${folder}-${digest}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.stage`);
     await fs.promises.writeFile(temporary, data);
     return { path: target, mime, stagedPath: temporary };
+  }
+
+  // One text file per track, named by the same id that names its audio and its
+  // cover. Lyrics are read through exactly one call and never listed, grouped
+  // or searched, so keeping them out of the index is what lets a 50k library
+  // fit a file that is rewritten on every mutation.
+  lyricPathFor(id) {
+    return path.join(this.lyricDirectory, `${id}${LOCAL_LYRIC_EXTENSION}`);
+  }
+
+  async writeLyricFile(id, text) {
+    const lyric = String(text || '');
+    if (!lyric) return false;
+    try {
+      const target = this.lyricPathFor(id);
+      const temporary = `${target}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.stage`;
+      await fs.promises.writeFile(temporary, lyric, 'utf8');
+      await fs.promises.rename(temporary, target);
+      return true;
+    } catch (_) {
+      // Failure is not fatal and is not swallowed silently: the record keeps
+      // its text, so the index carries it until a later write lands.
+      return false;
+    }
+  }
+
+  readLyricFileSync(id) {
+    if (!/^[a-f0-9]{24}$/.test(String(id || ''))) return '';
+    try {
+      const lyricPath = this.lyricPathFor(id);
+      const stat = fs.statSync(lyricPath);
+      if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_LYRIC_BYTES) return '';
+      return decodeLyricBuffer(fs.readFileSync(lyricPath)).slice(0, MAX_LYRIC_BYTES);
+    } catch (_) {
+      return '';
+    }
   }
 
   async parseEntry(entry, sidecars) {
@@ -1033,7 +1155,13 @@ class LocalMusicLibrary {
       const removedRecords = replace
         ? this.order.filter((id) => !nextRecords.has(id)).map((id) => this.records.get(id)).filter(Boolean)
         : [];
-      for (const record of removedRecords) if (record.coverPath) cleanupAfterCommit.add(record.coverPath);
+      for (const record of removedRecords) {
+        // Unlike a folder cover, a lyric file belongs to one track alone, so
+        // it goes the moment that track does — after the commit, never before,
+        // or a failed import would have thrown away text the index still holds.
+        cleanupAfterCommit.add(this.lyricPathFor(record.id));
+        if (record.coverPath) cleanupAfterCommit.add(record.coverPath);
+      }
       let snapshotTemporary = '';
       const createdCoverTargets = [];
       try {
@@ -1092,6 +1220,7 @@ class LocalMusicLibrary {
       // used it is gone with it.
       const sharedCoversInUse = sharedCoversStillInUse(nextRecords.values());
       for (const record of removed) {
+        safeUnlink(this.lyricPathFor(record.id));
         if (!record.coverPath) continue;
         if (sharedCoversInUse.has(path.resolve(record.coverPath))) continue;
         safeUnlink(record.coverPath);
@@ -1196,7 +1325,9 @@ class LocalMusicLibrary {
 module.exports = {
   AUDIO_MIME,
   FOLDER_ARTWORK_BASENAMES,
+  LOCAL_LYRIC_DIRECTORY,
   LOCAL_MUSIC_SCHEME,
+  MAX_LIBRARY_INDEX_BYTES,
   LocalMusicLibrary,
   coverWithinBudget,
   decodeLyricBuffer,
