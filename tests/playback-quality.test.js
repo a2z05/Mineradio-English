@@ -17,6 +17,7 @@ const appRoot = path.resolve(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(appRoot, p), 'utf8');
 
 const quality = read('public/js/modules/05-playback/19-playback-quality.js');
+const apiQuality = read('public/js/modules/05-playback/00-api-quality-output.js');
 const graph = read('public/js/modules/05-playback/08-audio-graph-controls.js');
 const startAudio = read('public/js/modules/05-playback/13-playback-start-audio.js');
 const cuefield = read('public/js/modules/05-playback/18-cuefield-automix-integration.js');
@@ -24,6 +25,8 @@ const mainLoop = read('public/js/modules/11-main-loop.js');
 const coreStores = read('public/js/modules/00-state/00-core-stores.js');
 const loader = read('public/js/index-loader.js');
 const indexHtml = read('public/index.html');
+const indexCss = read('public/css/index.css');
+const ripples = read('public/js/modules/02-visual/15-ripples-cover-depth.js');
 
 function arrayLiteral(source, name) {
   const at = source.indexOf('var ' + name + ' = [');
@@ -505,4 +508,81 @@ test('the console keeps the toggles together instead of scattering them', () => 
   assert.ok(positions.every((p) => p >= 0), 'all seven must be registered');
   assert.deepEqual(positions, positions.slice().sort((a, b) => a - b),
     'registration order has to keep the three switches adjacent');
+});
+
+// ---- the chip must not pretend to work on a file that is already here -------
+
+test('the quality chip is not offered for a file that is already on disk', () => {
+  // songProviderKey already answers 'local' for one, but
+  // normalizePlaybackProvider falls through to the default provider, so the
+  // chip inherited ytmusic: a file on this device offered "YT Music Stream" as
+  // a choice, and picking it rewrote the YouTube Music preference. A local
+  // track has no bitrate to request and no URL to put a quality parameter on,
+  // so the control is taken off the console rather than left greyed out.
+  assert.match(apiQuality, /function playbackQualityAppliesToSong\(song\) \{/,
+    'the rule needs a name both the paint and the setter can call');
+  assert.match(apiQuality, /return !!song && songProviderKey\(song\) !== 'local';/,
+    'the rule is the provider key, not a field every caller has to remember');
+
+  const paint = apiQuality.slice(
+    apiQuality.indexOf('function updatePlaybackQualityUi()'),
+    apiQuality.indexOf('function setPlaybackQuality(')
+  );
+  assert.match(paint, /playbackQualityAppliesToSong\(currentSong\)/,
+    'updatePlaybackQualityUi must gate on it');
+  assert.match(paint, /classList\.add\('quality-local'\)/,
+    "the class the stylesheet hides is added here, so it can come back on the next stream");
+  assert.match(paint, /wrap\.classList\.remove\('open'\)/,
+    'an open popover must not be left hanging over a control that has just gone');
+  assert.match(paint, /if \(label\) label\.textContent = '';/,
+    'the hidden chip must not keep the last stream label inside it — the class ' +
+    'is what hides it, not a repaint, so stale text would be what showed next');
+  assert.match(paint, /if \(list\) list\.innerHTML = '';/,
+    'same for the option list');
+
+  const setter = apiQuality.slice(
+    apiQuality.indexOf('function setPlaybackQuality('),
+    apiQuality.indexOf('function canReloadCurrentTrackForQuality()')
+  );
+  assert.match(setter, /if \(!playbackQualityAppliesToSong\(currentSong\)\) return;/,
+    'the setter takes the same rule, for anything that calls it directly');
+
+  assert.match(indexCss, /\.quality-control\.quality-local \{\s*\n\s*display: none/,
+    'and the stylesheet must actually hide it — .quality-control alone sets ' +
+    'display:flex, so the hiding rule needs both classes to out-specify it');
+  assert.ok(indexHtml.includes('id="quality-control"'),
+    'the chip it hides must still exist for streaming playback');
+});
+
+test('the chip follows the track instead of staying on whatever booted', () => {
+  // The gate is only worth anything if it re-runs on every switch: the chip is
+  // painted once at startup, so a queue that starts local and later plays a
+  // stream would stay hidden forever, and the reverse would leave a stale
+  // provider on screen. updateControlTrackInfo is the per-track hook.
+  const paint = ripples.slice(
+    ripples.indexOf('function updateControlTrackInfo('),
+    ripples.indexOf('function applyCoverCanvas(')
+  );
+  assert.match(paint, /updatePlaybackQualityUi\(\);/,
+    'updateControlTrackInfo must repaint the chip');
+  assert.match(startAudio, /updateControlTrackInfo\(song\)/,
+    'playQueueAt must keep calling that hook for every switch');
+});
+
+test('the quality tooltip names the provider that owns the option list', () => {
+  // The old chain special-cased four providers and named everything else
+  // NetEase, so a YouTube Music stream was announced as "NetEase Cloud Music
+  // quality" — a control whose tooltip lies about which control it is.
+  const at = coreStores.indexOf('var PLAYBACK_QUALITY_PROVIDER_TITLES = {');
+  assert.ok(at >= 0, 'the prefixes live next to the option lists they describe');
+  const map = coreStores.slice(at, coreStores.indexOf('};', at));
+  for (const provider of ['netease', 'qq', 'kugou', 'qishui', 'spotify',
+    'ytmusic', 'deezer', 'soundcloud', 'itunes', 'archive']) {
+    assert.ok(map.includes(provider + ':'),
+      provider + ' must have its own prefix, or it inherits another provider name');
+  }
+  assert.ok(!/provider === 'spotify' \? 'Spotify Match Source: '/.test(apiQuality),
+    'the four-way ternary is gone — its else branch named every other provider NetEase');
+  assert.match(apiQuality, /PLAYBACK_QUALITY_PROVIDER_TITLES\[provider\]/,
+    'the paint reads the map');
 });

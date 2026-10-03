@@ -148,6 +148,22 @@ var PLAYBACK_QUALITY_OPTIONS = {
     { key: 'standard', title: 'SoundCloud Stream', sub: 'free progressive MP3 / direct' }
   ]
 };
+// EN-FORK: the tooltip prefix on the quality chip, one entry per provider that
+// can own an option list. The old chain special-cased four providers and named
+// everything else NetEase, so every keyless source was announced as
+// "NetEase Cloud Music quality".
+var PLAYBACK_QUALITY_PROVIDER_TITLES = {
+  netease: 'NetEase Cloud Music quality: ',
+  qq: 'QQ Music quality: ',
+  kugou: 'Kugou quality: ',
+  qishui: 'Soda Music quality: ',
+  spotify: 'Spotify Match Source: ',
+  ytmusic: 'YouTube Music quality: ',
+  deezer: 'Deezer quality: ',
+  soundcloud: 'SoundCloud quality: ',
+  itunes: 'iTunes quality: ',
+  archive: 'Archive quality: '
+};
 var UPLOAD_TIP_STORE_KEY = 'mineradio-upload-tip-seen';
 var DIY_MODE_STORE_KEY = 'mineradio-diy-player-mode-v1';
 var PLAYLIST_PANEL_PIN_STORE_KEY = 'mineradio-playlist-panel-pinned-v1';

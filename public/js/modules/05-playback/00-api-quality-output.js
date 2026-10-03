@@ -64,6 +64,14 @@ function playbackQualityOptions(provider) {
   provider = normalizePlaybackProvider(provider);
   return PLAYBACK_QUALITY_OPTIONS[provider] || PLAYBACK_QUALITY_OPTIONS.netease;
 }
+// One rule, shared by the paint and the setter: a track that lives on this
+// device is not a stream, so there is no bitrate to choose and no preference
+// to remember. songProviderKey already answers 'local' for one — the only
+// thing that ever blurred the two is normalizePlaybackProvider falling
+// through to the default provider, which is what the chip used to inherit.
+function playbackQualityAppliesToSong(song) {
+  return !!song && songProviderKey(song) !== 'local';
+}
 function currentPlaybackQualityProvider() {
   var song = Array.isArray(playQueue) && currentIdx >= 0 && currentIdx < playQueue.length ? playQueue[currentIdx] : null;
   return normalizePlaybackProvider(songProviderKey(song));
@@ -254,17 +262,42 @@ function savePlaybackQualityPreference() {
 function updatePlaybackQualityUi() {
   var provider = currentPlaybackQualityProvider();
   var currentSong = Array.isArray(playQueue) && currentIdx >= 0 && currentIdx < playQueue.length ? playQueue[currentIdx] : null;
+  var wrap = document.getElementById('quality-control');
+  var label = document.getElementById('quality-btn-label');
+  var btn = document.getElementById('quality-btn');
+  var list = document.getElementById('quality-option-list');
+  // The chip is a streaming control. A file already on disk has no bitrate to
+  // request and no URL to put a quality parameter on, but the provider
+  // fall-through tagged it ytmusic — so the console offered "YT Music Stream"
+  // as a choice for a track that is already the file, and picking from it
+  // rewrote the YouTube Music preference. A control that cannot act is worse
+  // than no control, so for local playback it is taken off the console rather
+  // than left there greyed out.
+  if (!playbackQualityAppliesToSong(currentSong)) {
+    if (wrap) {
+      wrap.classList.remove('open');
+      wrap.classList.add('quality-local');
+    }
+    // And no text of the last stream is left inside it. The class is what
+    // hides the chip, not a repaint, so a stale "YT Music Stream" would be the
+    // next thing anyone saw if anything else took the class off.
+    if (label) label.textContent = '';
+    if (btn) btn.title = 'Local file — no stream quality to choose';
+    if (list) list.innerHTML = '';
+    return;
+  }
+  if (wrap) wrap.classList.remove('quality-local');
   var currentQuality = getProviderPlaybackQuality(provider);
   var runtimeCapQuality = playbackQualityCapValue(currentSong, provider);
   var effectiveQuality = effectivePlaybackQualityForSong(currentSong, provider, currentQuality);
   playbackQuality = currentQuality;
-  var label = document.getElementById('quality-btn-label');
-  var btn = document.getElementById('quality-btn');
-  var list = document.getElementById('quality-option-list');
   var canUseSvip = provider === 'netease' && hasProviderSvip('netease', loginStatus);
   var displayQuality = provider === 'netease' && effectiveQuality === 'jymaster' && !canUseSvip ? 'hires' : effectiveQuality;
   if (label) label.textContent = playbackQualityShortLabel(displayQuality, provider);
-  var qualityProviderTitle = provider === 'spotify' ? 'Spotify Match Source: ' : (provider === 'qishui' ? 'Soda Music quality: ' : (provider === 'qq' ? 'QQ Music quality: ' : (provider === 'kugou' ? 'Kugou quality: ' : 'NetEase Cloud Music quality: ')));
+  // The tooltip names the provider that owns the option list. It used to fall
+  // through to NetEase for every provider the four special cases did not
+  // cover, announcing a YouTube Music stream as "NetEase Cloud Music quality".
+  var qualityProviderTitle = PLAYBACK_QUALITY_PROVIDER_TITLES[provider] || 'Playback source: ';
   if (btn) btn.title = qualityProviderTitle + playbackQualityLabel(displayQuality, provider) +
     (provider === 'netease' && currentQuality === 'jymaster' && !canUseSvip ? ' · Ultra Master requires NetEase SVIP' : '');
   if (btn && runtimeCapQuality) btn.title += ' | Track maximum: ' + playbackQualityLabel(runtimeCapQuality, provider);
@@ -295,6 +328,11 @@ function updatePlaybackQualityUi() {
 function setPlaybackQuality(value) {
   var provider = currentPlaybackQualityProvider();
   var currentSong = Array.isArray(playQueue) && currentIdx >= 0 && currentIdx < playQueue.length ? playQueue[currentIdx] : null;
+  // Same rule as the paint. The chip is off the console for a local file, so
+  // nothing here reaches it from the UI — this is for anything that calls the
+  // setter directly and would otherwise write the choice under whatever
+  // provider the fall-through named for a file on disk.
+  if (!playbackQualityAppliesToSong(currentSong)) return;
   var next = normalizePlaybackQualityForProvider(value, provider);
   var cap = playbackQualityCapValue(currentSong, provider);
   if (playbackQualityAboveCap(next, provider, cap)) {

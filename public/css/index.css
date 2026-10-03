@@ -5888,6 +5888,14 @@ body.home-controls-locked #bottom-bar {
   height: 118px
 }
 
+/* The chip only exists for a stream, and updatePlaybackQualityUi() adds this
+   class when the current track is a file on disk — which has no bitrate to
+   choose. Two classes out-specify the .quality-control display above, so the
+   markup leaves the console instead of sitting there greyed out. */
+.quality-control.quality-local {
+  display: none
+}
+
 .volume-control::before,
 .quality-control::before,
 .lyric-timing-control::before {
