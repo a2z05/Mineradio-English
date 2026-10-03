@@ -235,7 +235,12 @@ function libraryNavHtml() {
   for (var i = 0; i < LIBRARY_VIEWS.length; i += 1) {
     var view = LIBRARY_VIEWS[i];
     var active = libraryPage.view === view.id && !libraryPage.drill ? ' active' : '';
-    html += '<button class="library-nav-item' + active + '" type="button" data-library-view="' + view.id + '">' +
+    // The call is inline because every other control in this modal is: the nav
+    // was the one group with no handler on it at all, and a button that paints
+    // a label and a count but swallows the click looks identical to a working
+    // one until somebody presses it.
+    html += '<button class="library-nav-item' + active + '" type="button" data-library-view="' + view.id +
+      '" onclick="librarySetView(\'' + view.id + '\')">' +
       '<span>' + escHtml(view.label) + '</span>' +
       '<em>' + libraryViewCount(view.id) + '</em>' +
       '</button>';
@@ -247,12 +252,19 @@ function libraryViewCount(viewId) {
   switch (viewId) {
     case 'playlists':
       return String(libraryPlaylists().length);
+    case 'albums':
+    case 'artists':
+    case 'genres':
+    case 'folders':
     case 'favorites':
     case 'recent-played':
     case 'most-played':
     case 'top-rated':
       return String(libraryViewRows(viewId).length);
     default:
+      // Songs and recent-added are both "every track". Going through
+      // libraryViewRows for recent-added would re-sort the whole library on
+      // every nav repaint to arrive at a number this already knows.
       return String(localLibraryStore.tracks.length);
   }
 }
@@ -511,7 +523,11 @@ function librarySetView(viewId) {
 // The tree is a companion to the Folders view, not furniture for every view:
 // shown only where it answers something the rows cannot.
 function librarySyncFolderPane() {
-  var side = document.getElementById('library-side');
+  // The node's class is library-side but its id is library-folders-host — the
+  // id the folder browser installs into. Asking for the class name as an id
+  // returns null, and the early return meant nothing was ever hidden and the
+  // tree was never installed at all.
+  var side = document.getElementById('library-folders-host');
   if (!side) return;
   var wanted = libraryPage.view === 'folders' && !libraryPage.query;
   side.hidden = !wanted;

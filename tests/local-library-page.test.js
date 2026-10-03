@@ -196,6 +196,106 @@ test('every view the nav promises is backed by real rows', () => {
   assert.equal(sandbox.libraryViewMeta('nope').id, 'songs');
 });
 
+// The sidebar is the only way to reach nine of the eleven views, and it was the
+// one control in the modal with no handler on it: the buttons painted a label
+// and a count and then absorbed every click. That reads as working right up
+// until somebody clicks Albums and nothing happens, so the markup is the
+// contract — each button has to carry the call itself, like every other button
+// in this modal does.
+test('every view in the sidebar nav is wired to actually switch', () => {
+  // varBlock only parses array and object literals, and this key is a string.
+  const viewStorageKey = /^var LIBRARY_PAGE_STORAGE_KEY = '([^']+)';?$/m.exec(pageSource);
+  assert.ok(viewStorageKey, 'the library no longer remembers which view it was on');
+
+  const sandbox = seed([makeSong('a')], undefined, {
+    escHtml: (value) => String(value),
+    libraryPaintNav() {},
+    libraryRebuildRows() {},
+    librarySyncFolderPane() {},
+    libraryPlaylists: () => [],
+    LIBRARY_PAGE_STORAGE_KEY: viewStorageKey[1],
+  });
+  sandbox.window.localStorage = { setItem() {} };
+  vm.runInNewContext(
+    ['libraryNavHtml', 'libraryViewCount', 'librarySetView']
+      .map((name) => namedFunctionSource(pageSource, name)).join('\n'),
+    sandbox
+  );
+
+  const navHtml = sandbox.libraryNavHtml();
+  const buttons = navHtml.match(/<button[^>]*>/g) || [];
+  assert.equal(buttons.length, sandbox.LIBRARY_VIEWS.length,
+    'the nav renders one button per view');
+
+  for (const view of sandbox.LIBRARY_VIEWS) {
+    const button = buttons.find((tag) => tag.includes(`data-library-view="${view.id}"`));
+    assert.ok(button, `no button rendered for ${view.id}`);
+    assert.ok(button.includes(`onclick="librarySetView('${view.id}')"`),
+      `${view.label} renders a button nobody listens to`);
+  }
+
+  // And the call they make has to be the one that moves the page.
+  sandbox.librarySetView('albums');
+  assert.equal(sandbox.libraryPage.view, 'albums');
+  assert.equal(sandbox.libraryPage.drill, null, 'switching views drops any drill-down');
+});
+
+// The badge beside each view label is the only number the sidebar states, and
+// it was echoing the track total for every grouped view: Albums read 984 on the
+// same screen whose crumb above the rows read 370 groups. A count that
+// contradicts the list directly under it is a number nobody can check, so a
+// grouped view has to report the length of the rows it is about to paint.
+test('a grouped view badge counts groups, not tracks', () => {
+  const sandbox = seed([
+    makeSong('a', { album: 'Album a' }),
+    makeSong('b', { album: 'Album a' }),
+    makeSong('c', { album: 'Album c' }),
+  ], undefined, { libraryPlaylists: () => [] });
+  vm.runInNewContext(namedFunctionSource(pageSource, 'libraryViewCount'), sandbox);
+
+  const grouped = sandbox.LIBRARY_VIEWS.filter((view) => view.kind === 'groups');
+  assert.ok(grouped.length >= 4, 'the grouped views are gone');
+  assert.notEqual(sandbox.libraryViewCount('albums'), String(3),
+    'seed check: Albums is two groups over three tracks, so a track total would be visible');
+
+  for (const view of grouped) {
+    const rows = sandbox.libraryViewRows(view.id).length;
+    assert.equal(sandbox.libraryViewCount(view.id), String(rows),
+      `${view.label} badge reports the track total beside a ${rows}-row list`);
+  }
+
+  // Songs and recent-added are both "every track", and reaching that number
+  // through libraryViewRows would sort the whole library on every nav repaint —
+  // which is the one place a 50k library would pay for a badge.
+  assert.equal(sandbox.libraryViewCount('songs'), '3');
+  assert.equal(sandbox.libraryViewCount('recent-added'), '3');
+});
+
+// The pane sync and the folder browser reach for the same node under two
+// different names. When the sync's name matches no element it returns before it
+// can hide anything, so the tree never gets installed and every other view
+// keeps a dead column the CSS was written to collapse.
+test('the folder pane sync looks up a node this page actually builds', () => {
+  const syncBody = namedFunctionSource(pageSource, 'librarySyncFolderPane');
+  const lookups = Array.from(syncBody.matchAll(/getElementById\('([^']+)'\)/g), (hit) => hit[1]);
+  assert.ok(lookups.length, 'librarySyncFolderPane stopped looking up its pane at all');
+
+  for (const id of lookups) {
+    assert.ok(pageSource.includes(`id="${id}"`),
+      `librarySyncFolderPane asks for #${id}, but the markup builds `
+      + `${(pageSource.match(/id="[^"]*folders[^"]*"/) || ['no folders id'])[0]}`);
+  }
+
+  // And it has to be the node the folder browser installs into, or hiding one
+  // element and filling another leaves an empty column beside the rows.
+  const host = /getElementById\('([^']+)'\)/.exec(
+    namedFunctionSource(read('public/js/modules/13-library/07-library-folder-browser.js'),
+      'libraryInstallFolderBrowser'));
+  assert.ok(host, 'the folder browser no longer names its host');
+  assert.ok(lookups.includes(host[1]),
+    `librarySyncFolderPane manages #${lookups.join(', #')} but the tree installs into #${host[1]}`);
+});
+
 test('search ranks a tight match above a scattered one', () => {
   const sandbox = seed([makeSong('a')]);
   const score = sandbox.localLibraryScoreMatch;

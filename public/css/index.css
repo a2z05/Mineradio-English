@@ -6,6 +6,17 @@
   box-sizing: border-box
 }
 
+/* The UA rule that honours the hidden attribute is [hidden]{display:none},
+   which is the same specificity as any class rule and loses to whichever
+   stylesheet loads last. Every element below this that sets display therefore
+   stayed on screen with the attribute set — the empty-state overlay sat on top
+   of a full song list, and the bulk and overflow bars never closed. This beats
+   class rules and still loses to the id rules that drive the mini player's
+   slide, so those keep the ordering they were written against. */
+html [hidden] {
+  display: none
+}
+
 /* Full desktop mode keeps the existing renderer and glass stack intact. */
 .desktop-mode-note {
   margin: 10px 0 4px;
