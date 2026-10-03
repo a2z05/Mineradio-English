@@ -542,10 +542,13 @@ function folderBrowserSandbox() {
     }
     return elements[id];
   };
-  const state = { tree: [], browseCalls: 0 };
+  const state = {
+    tree: [], browseCalls: 0, hydrateCalls: 0, announcements: [],
+    listeners: [],
+  };
   const sandbox = {
     Date, Promise, setTimeout, clearTimeout, console,
-    libraryPage: { open: true, view: 'folders', query: '' },
+    libraryPage: { open: true, view: 'folders', query: '', status: '', scanning: false },
     elements,
     state,
     escHtml: (value) => String(value == null ? '' : value)
@@ -553,12 +556,29 @@ function folderBrowserSandbox() {
     libraryFormatDuration: () => '0:00',
     localLibraryStore: { tracks: [] },
     localLibrarySongKey: (song) => song.id,
+    // The broadcast handler's collaborators all live in other modules, so the
+    // bundle never defines them here — they are called unguarded (except the
+    // playlist pane, which is feature-detected), and every one has to exist or
+    // the handler throws before it can be observed.
+    localLibrarySetFolders: (folders) => { state.folders = folders; },
+    hydrateLocalLibraryStore: async () => { state.hydrateCalls += 1; },
+    libraryPaintNav: () => {},
+    libraryPaintHeader: () => {},
+    libraryRebuildRows: () => {},
+    libraryPaintPlaylistPane: () => { state.playlistPainted = (state.playlistPainted || 0) + 1; },
     window: {
       desktopWindow: {
         getLocalMusicTree: async () => ({ ok: true, tree: JSON.parse(JSON.stringify(state.tree)) }),
         browseLocalMusicFolder: async () => {
           state.browseCalls += 1;
           return { ok: true, directories: [], files: ['One.mp3', 'Two.mp3', 'Three.mp3'], childIds: {} };
+        },
+        // Main announces every scan here. Capturing the callback is what lets a
+        // test deliver an announcement the way the app does — through the real
+        // subscription — instead of calling the handler's internals.
+        onLocalLibraryChanged: (fn) => {
+          state.listeners.push(fn);
+          return () => { state.listeners = state.listeners.filter((l) => l !== fn); };
         },
       },
     },
@@ -730,4 +750,73 @@ test('a folder is reached by clicking a row and left by the breadcrumb', async (
     'the root list is back, and it is the only thing in the pane');
   assert.doesNotMatch(scroll.innerHTML, /One\.mp3/,
     'the listing for the folder just left is not left underneath the roots');
+});
+
+// A change is announced whenever the folder set moves, which is not the same
+// moment as the counts moving: adding a folder that was already scanned
+// reports nothing added, and removing one reports nothing removed.
+const folderSetChanged = (before, after) =>
+  (Array.isArray(before) ? before : []).join('')
+  !== (Array.isArray(after) ? after : []).join('');
+
+test('a sweep that changed nothing does not throw the open folder away', async () => {
+  const sandbox = folderBrowserSandbox();
+  sandbox.state.tree = [
+    { id: 'leaf', label: 'ASHES & ECHOES', count: 3, childCount: 0, depth: 0, children: [] },
+  ];
+  await sandbox.libraryLoadFolderTree(true);
+  await sandbox.libraryFolderSelect('leaf');
+  assert.equal(paintedRows(sandbox), 3, 'the folder opens with its three files');
+
+  const before = sandbox.state.browseCalls;
+  const listing = sandbox.libraryFolderBrowser.browse;
+  sandbox.libraryWatchLibraryChanges();
+  assert.equal(sandbox.state.listeners.length, 1, 'the announce is subscribed once');
+
+  // The two-minute sweep: nothing added, nothing removed, nothing re-tagged.
+  sandbox.state.listeners[0]({
+    reason: 'interval', count: 984, added: 0, changed: 0, removed: 0, folders: [],
+  });
+  // Long enough for the tree reload and the re-fetch it would trigger to land.
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  // Throwing the listing away and reading it again also fights the user for the
+  // pane: every repaint rewrites the row list, so a long album list jumps back
+  // to the top twice a minute while it is being read.
+  assert.equal(sandbox.state.browseCalls, before,
+    'a sweep that found nothing does not re-read the folder the user has open');
+  assert.equal(sandbox.libraryFolderBrowser.browse, listing,
+    'and leaves the listing it is showing alone');
+  assert.equal(paintedRows(sandbox), 3, 'the folder still holds its three files');
+});
+
+test('an announce that only moved the folder set still rebuilds the tree', async () => {
+  // The counts are all zero here, and `count` is a total rather than a delta:
+  // a folder added that was already scanned, or one removed whose files went
+  // with it, both move the root list with nothing to add or remove. Guarding
+  // this on the counts alone leaves a root the index no longer has.
+  const sandbox = folderBrowserSandbox();
+  sandbox.state.tree = [
+    { id: 'leaf', label: 'ASHES & ECHOES', count: 3, childCount: 0, depth: 0, children: [] },
+  ];
+  await sandbox.libraryLoadFolderTree(true);
+  sandbox.libraryPaintFolderBrowser();
+  assert.equal(paintedRows(sandbox), 1, 'one root to start with');
+
+  // The folder set moved, so main's tree has a root it did not have before.
+  sandbox.state.tree = [
+    { id: 'leaf', label: 'ASHES & ECHOES', count: 3, childCount: 0, depth: 0, children: [] },
+    { id: 'added', label: 'Newly added', count: 0, childCount: 0, depth: 0, children: [] },
+  ];
+  sandbox.libraryWatchLibraryChanges();
+  sandbox.state.listeners[0]({
+    reason: 'sync', count: 984, added: 0, changed: 0, removed: 0,
+    folders: ['C:/Users/a2z/Music/Newly added'],
+  });
+
+  await until(() => paintedRows(sandbox) === 2, 800);
+  assert.equal(paintedRows(sandbox), 2, 'the rebuilt tree is painted');
+  assert.match(sandbox.elements['library-folder-scroll'].innerHTML, /Newly added/);
+  assert.deepEqual(sandbox.state.folders, ['C:/Users/a2z/Music/Newly added'],
+    'the new folder list reaches the store');
 });

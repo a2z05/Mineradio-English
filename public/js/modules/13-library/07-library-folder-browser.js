@@ -552,15 +552,27 @@ function libraryWatchLibraryChanges() {
   if (!window.desktopWindow || typeof window.desktopWindow.onLocalLibraryChanged !== 'function') return;
   librarySyncUnwatch = window.desktopWindow.onLocalLibraryChanged(function (payload) {
     if (!payload) return;
+    // Read before the store is updated: whether the folder set moved is the
+    // only way to tell "nothing happened" from "the roots changed with no
+    // tracks to add or remove", and `count` cannot — it is a total, so one file
+    // arriving while another is deleted leaves it identical.
+    var foldersBefore = localLibraryStore.folders || [];
     if (Array.isArray(payload.folders)) localLibrarySetFolders(payload.folders);
-    libraryInvalidateFolderTree();
     var changed = Number(payload.added) || 0;
     var removed = Number(payload.removed) || 0;
     var reTagged = Number(payload.changed) || 0;
-    if (!changed && !removed && !reTagged) {
-      if (libraryPage.open) libraryPaintFolderBrowser();
+    var foldersMoved = Array.isArray(payload.folders)
+      && (payload.folders || []).join('') !== (foldersBefore || []).join('');
+    if (!changed && !removed && !reTagged && !foldersMoved) {
+      // The two-minute sweep lands here whenever the disk has not moved. It
+      // used to invalidate the tree on the way in and repaint on the way out,
+      // which re-read the open folder and rewrote its row list twice a minute:
+      // every repaint replaces the scroll container's contents, so a long album
+      // list jumped back to the top on a timer, for a scan with nothing to
+      // report. Nothing about the index moved, so the tree on screen is right.
       return;
     }
+    libraryInvalidateFolderTree();
     var parts = [];
     if (changed) parts.push(changed + ' added');
     if (reTagged) parts.push(reTagged + ' updated');
