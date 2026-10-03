@@ -43,6 +43,10 @@ async function fetchLocalLibraryTracks() {
 function updateLocalLibraryChoiceLabel(count) {
   var sub = document.getElementById('local-library-choice-sub');
   if (!sub) return;
+  // The count stays, because it is the only thing on this button that tells the
+  // user whether anything was ever imported. What it counts is no longer the
+  // flat list the button used to open, it is the library the browser shows
+  // across its eleven views.
   if (count > 0) sub.textContent = count + ' track' + (count === 1 ? '' : 's') + ' saved on this device';
   else sub.textContent = 'Nothing saved yet — import a file or folder';
 }

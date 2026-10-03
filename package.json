@@ -105,7 +105,7 @@
     "win": {
       "executableName": "Mineradio",
       "icon": "build/icon.ico",
-      "signAndEditExecutable": false,
+      "signExecutable": false,
       "target": [
         {
           "target": "nsis",

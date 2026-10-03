@@ -23,11 +23,23 @@ const loaderSource = read('public/js/index-loader.js');
 const html = read('public/index.html');
 
 test('the import hub offers a way in to the saved library', () => {
-  assert.match(html, /id="local-library-choice"[^>]*onclick="openLocalLibraryResults\(\)"/);
+  // EN-FORK: the hub button used to open the flat results list. It now opens
+  // the full Library browser, which is the thing that grew eleven views and is
+  // the only way to reach albums, artists, genres, folders and playlists. The
+  // flat list is still reachable from the home library card, so it is not dead
+  // — it just stopped being what the main menu hands you first.
+  assert.match(html, /id="local-library-choice"[^>]*onclick="openLibraryPage\(\)"/);
+  assert.doesNotMatch(html, /id="local-library-choice"[^>]*openLocalLibraryResults/,
+    'the main-menu button must not still point at the flat list');
   assert.match(html, /id="local-library-choice-sub"/,
     'the entry states how many tracks are saved, so it needs its own slot');
   assert.match(loaderSource, /'js\/modules\/06-lyrics\/07-local-library\.js'/,
     'the module has to be registered or the onclick is a dead control');
+  // Whatever it opens has to be defined somewhere the renderer actually loads,
+  // or the button is a dead control with a better label.
+  const libraryPageSource = read('public/js/modules/13-library/01-library-page.js');
+  assert.match(libraryPageSource, /function openLibraryPage\(/);
+  assert.match(loaderSource, /'js\/modules\/13-library\/01-library-page\.js'/);
 });
 
 test('the library is rendered as normal result rows, so a row plays that track', () => {
