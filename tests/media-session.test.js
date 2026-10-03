@@ -224,3 +224,103 @@ test('a track notification is not fired while the user is looking at the player'
   // worse than no notification.
   assert.match(source, /silent: true/);
 });
+
+test('the media keys are handed to Electron as accelerators it accepts', () => {
+  // Measured against this Electron build with a throwaway main process:
+  //   playPause / next / previous / stop  -> all rejected, "conversion failure"
+  //   MediaPlayPause, MediaNextTrack, MediaStop -> registered
+  //   MediaPreviousTrack -> registered (MediaPrevTrack, which the docs name,
+  //   is rejected here — the previous key is the one that has to be checked)
+  // The table held the four action names instead, so register() threw for all
+  // of them, the binding map came back empty, and the hardware keys did
+  // nothing. The renderer then reported "Media keys unavailable" and moved on.
+  const expected = ['MediaPlayPause', 'MediaNextTrack', 'MediaPreviousTrack', 'MediaStop'];
+  const { MEDIA_KEY_ACTIONS, MediaSessionBridge } = require('../desktop/media-session');
+  assert.deepEqual(MEDIA_KEY_ACTIONS.map((entry) => entry[0]), expected);
+  assert.deepEqual(MEDIA_KEY_ACTIONS.map((entry) => entry[1]),
+    ['togglePlay', 'nextTrack', 'prevTrack', 'stopPlayback']);
+  // An accelerator that is also an action name is how the mix-up happened.
+  const actions = MEDIA_KEY_ACTIONS.map((entry) => entry[1]);
+  for (const [accelerator] of MEDIA_KEY_ACTIONS) {
+    assert.ok(!actions.includes(accelerator),
+      accelerator + ' is an action name, not a key on the keyboard');
+  }
+
+  // And the table really is what reaches register(), not a copy of it — and the
+  // callback Electron fires for a key press is the one that reaches the
+  // renderer, on the channel the preload listens to. The whole point of the
+  // registration is that one line.
+  const electronPath = require.resolve('electron');
+  const previous = require.cache[electronPath];
+  const handed = [];
+  require.cache[electronPath] = {
+    id: electronPath, filename: electronPath, path: path.dirname(electronPath),
+    loaded: true, children: [], paths: [],
+    exports: {
+      globalShortcut: {
+        register: (accelerator, callback) => { handed.push([accelerator, callback]); return true; },
+        unregister: () => { },
+      },
+    },
+  };
+  try {
+    const win = fakeWindow();
+    const bridge = new MediaSessionBridge({ getWindow: () => win, appName: 'Mineradio' });
+    const result = bridge.registerMediaKeys();
+    assert.deepEqual(handed.map((entry) => entry[0]), expected,
+      'the four keys are what the OS is asked for');
+    assert.deepEqual(Object.keys(result.binding).sort(),
+      ['nextTrack', 'prevTrack', 'stopPlayback', 'togglePlay'],
+      'each action reports the key that really registered');
+    assert.ok(result.results.every((item) => item.ok));
+
+    // Press each key in turn and read what the renderer would be told.
+    for (const [, callback] of handed) callback();
+    assert.deepEqual(win.record.sent, [
+      ['mineradio-media-command', { action: 'togglePlay' }],
+      ['mineradio-media-command', { action: 'nextTrack' }],
+      ['mineradio-media-command', { action: 'prevTrack' }],
+      ['mineradio-media-command', { action: 'stopPlayback' }],
+    ], 'a key press arrives as the action the preload forwards');
+    const preload = read('desktop/preload.js');
+    const onAt = preload.indexOf('onMediaCommand');
+    assert.ok(onAt >= 0, 'the renderer has a way to hear that channel');
+    assert.match(preload.slice(onAt, onAt + 260), /mineradio-media-command/);
+
+    bridge.unregisterMediaKeys();
+  } finally {
+    if (previous) require.cache[electronPath] = previous;
+    else delete require.cache[electronPath];
+  }
+});
+
+test('the artwork handed to the OS carries a MIME type that means something', () => {
+  const vm = require('node:vm');
+  const { namedFunctionSource } = require('./helpers/extract-function');
+  const source = namedFunctionSource(sessionSource, 'mediaArtworkSessionArt')
+    + '\n' + namedFunctionSource(sessionSource, 'mediaArtworkSource');
+  // A local cover is not a data URL: it is the app's own scheme, so the regex
+  // finds no type and the fallback was 'image/jpeg' — which then had 'image/'
+  // prepended again, producing "image/image/jpeg". The lock screen and the
+  // volume mixer drop an artwork entry whose type is not a real image MIME.
+  const build = (background, song) => {
+    const sandbox = {
+      document: { getElementById: () => ({ style: { backgroundImage: background ? 'url("' + background + '")' : '' } }) },
+    };
+    vm.runInNewContext(source + '\nresult = mediaArtworkSessionArt;', sandbox);
+    return sandbox.result(song || { name: 'In the End' });
+  };
+
+  const local = build('mineradio-local://cover/2a6c19a6952304c14ade7049');
+  assert.equal(local.length, 1, 'a cover that is there is offered');
+  assert.match(local[0].type, /^image\/(png|jpeg|webp|gif)$/,
+    'got ' + local[0].type);
+  assert.equal(local[0].type, 'image/jpeg');
+  assert.match(local[0].src, /^mineradio-local:/);
+
+  const png = build('data:image/png;base64,AAAA');
+  assert.equal(png[0].type, 'image/png', 'a real data URL keeps its own type');
+
+  assert.deepEqual(Array.from(build('', { name: 'x', coverUrl: '' })), [],
+    'no cover means no artwork entry at all');
+});

@@ -135,9 +135,13 @@ function publishMediaState(reason) {
 function mediaArtworkSessionArt(song) {
   var src = mediaArtworkSource(song);
   if (!src) return [];
+  // The type has to be a MIME type, not a fragment of one. A local cover is
+  // the app's own scheme and matches nothing here, so the fallback below used
+  // to be 'image/jpeg' — and then had 'image/' put in front of it, so every
+  // lock screen and volume mixer was told the art was "image/image/jpeg" and
+  // showed nothing. A bare 'jpeg' fallback keeps the whole type in one place.
   var type = /data:image\/(png|jpe?g|webp|gif)/i.exec(src);
-  var mime = type ? type[1].toLowerCase() : 'image/jpeg';
-  if (mime === 'jpeg') mime = 'jpeg';
+  var mime = type ? type[1].toLowerCase() : 'jpeg';
   if (mime === 'jpg') mime = 'jpeg';
   return [{ src: src, sizes: '512x512', type: 'image/' + mime }];
 }

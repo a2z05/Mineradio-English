@@ -13,11 +13,17 @@
 //  for anything but a title.
 // ============================================================
 
+// Accelerator, then the action to send. The left column is what Electron parses
+// and the OS binds, so these have to be keyboard key names — 'playPause' and
+// friends are action names, and Electron rejects them with a conversion failure,
+// which left all four keys unregistered and the binding map empty. Measured on
+// this build: MediaPrevTrack is not accepted either; the previous key is spelled
+// MediaPreviousTrack.
 const MEDIA_KEY_ACTIONS = [
-  ['playPause', 'togglePlay'],
-  ['next', 'nextTrack'],
-  ['previous', 'prevTrack'],
-  ['stop', 'stopPlayback'],
+  ['MediaPlayPause', 'togglePlay'],
+  ['MediaNextTrack', 'nextTrack'],
+  ['MediaPreviousTrack', 'prevTrack'],
+  ['MediaStop', 'stopPlayback'],
 ];
 
 function clipText(value, limit) {
