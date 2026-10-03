@@ -276,15 +276,44 @@ function withLyricFallbackForSong(song, lines) {
   var text = lyricFallbackTextForSong(song);
   return text ? [{ t: 0, text: text, duration: 9999, charCount: Math.max(1, text.length), fallback: true }] : [];
 }
+// A lyric with no timestamps is still a lyric. Embedded USLT frames and the
+// plain-text .txt beside a track are almost never timed, and parseLyricText
+// drops every line without a [mm:ss] tag — so the 68 embedded and 146 sidecar
+// lyrics in a real library that carry plain text fell all the way through to
+// the title placeholder, and then went out to the network for a song whose
+// words were sitting on disk the whole time. Untimed lines are spread evenly
+// across the track instead, which is what lets the stage advance through them
+// the same way it does a timed set.
+function parsePlainLyricLines(text, durationSeconds) {
+  var rows = String(text || '').split(/\r?\n/)
+    .map(function (row) { return String(row || '').replace(/[ \t]+$/g, '').trim(); })
+    .filter(function (row) { return row && !isNoLyricText(row); });
+  if (!rows.length) return [];
+  // A stage that has to build a mesh per line is not served by a 4000-line
+  // transcript; the tail is dropped rather than the whole file refused.
+  var capped = rows.slice(0, 400);
+  var total = Number(durationSeconds) > 0 ? Number(durationSeconds) : capped.length * 4.8;
+  var step = total / capped.length;
+  return finalizeLyricLineDurations(capped.map(function (row, index) {
+    return { t: Math.max(0, Math.round(step * index * 1000) / 1000), text: row, source: 'plain' };
+  }));
+}
+
 function parseLyricResponseToOriginalState(song, response) {
   response = response || {};
   var nativeLines = parseYrcText(response.yrc || '');
   var lrcLines = parseLyricText(response.lyric || '');
+  var untimedLines = [];
+  if (!nativeLines.length && !lrcLines.length) {
+    untimedLines = parsePlainLyricLines(response.lyric || '', playbackDurationFromSong(song));
+  }
   var translationPayload = buildLyricTranslationPayload(response);
   var translationLines = translationPayload.lines;
   var hasNativeKaraoke = nativeLines.some(function (line) { return line.words && line.words.length; });
-  var timingSource = hasNativeKaraoke ? 'yrc-word' : (nativeLines.length ? 'yrc-line' : (lrcLines.length ? 'lrc-line' : 'fallback'));
-  var primaryLines = nativeLines.length ? nativeLines : lrcLines;
+  var timingSource = hasNativeKaraoke ? 'yrc-word'
+    : (nativeLines.length ? 'yrc-line'
+      : (lrcLines.length ? 'lrc-line' : (untimedLines.length ? 'plain' : 'fallback')));
+  var primaryLines = nativeLines.length ? nativeLines : (lrcLines.length ? lrcLines : untimedLines);
   var lines = withLyricFallbackForSong(song, attachLyricTranslations(primaryLines, translationLines));
   if (lines.length && lines[0].fallback) timingSource = 'fallback';
   return {
