@@ -27,17 +27,34 @@ function normalizeText(value) {
 const resolveCache = new Map();
 const RESOLVE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const RESOLVE_CACHE_MAX = 600;
+// EN-FORK: a miss is worth remembering for a while too, but for much less time
+// than a hit. LRCLIB's catalogue is community-edited and Apple/NetEase/QQ come
+// and go, so a track nothing had an hour ago can have lyrics now — this is a
+// "stop asking for a while", not "never ask again". The same three calls for
+// one unknown title used to cost 7.9s, 7.7s and 7.2s because every one of them
+// walked all five providers before admitting defeat.
+const MISS_CACHE_TTL_MS = 60 * 60 * 1000;
+
+// Only so the expiry above can be reached in a test instead of slept through.
+let nowMs = () => Date.now();
+function setLyricsResolverClockForTests(fn) {
+  nowMs = typeof fn === 'function' ? fn : () => Date.now();
+}
 
 function cacheWrap(key, ttlMs, producer) {
   const hit = resolveCache.get(key);
-  const now = Date.now();
+  const now = nowMs();
   if (hit && hit.expiresAt > now) return Promise.resolve(hit.value);
   if (hit) resolveCache.delete(key);
   return Promise.resolve()
     .then(producer)
     .then((value) => {
-      if (value && value.source && value.source !== 'none') {
-        resolveCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+      if (value && value.source) {
+        const isMiss = value.source === 'none';
+        resolveCache.set(key, {
+          value,
+          expiresAt: nowMs() + (isMiss ? MISS_CACHE_TTL_MS : ttlMs),
+        });
         if (resolveCache.size > RESOLVE_CACHE_MAX) {
           const oldest = resolveCache.keys().next().value;
           if (oldest !== undefined) resolveCache.delete(oldest);
@@ -248,16 +265,18 @@ async function resolveGlobalLyrics(options) {
       } catch (_) { /* next */ }
     }
 
-    return null;
+    // EN-FORK: the miss is built INSIDE the cache wrapper, not after it. It
+    // used to be returned as null and answered just outside, which meant the
+    // wrapper saw nothing worth storing and the whole walk ran again on the
+    // next play of the same track.
+    return emptyPayload('none', `No lyrics found (tried ${steps.join(' → ') || 'no providers'}).`);
   });
-  if (cached) return cached;
-
-  const attempted = steps.join(' → ');
-  return emptyPayload('none', `No lyrics found (tried ${attempted || 'no providers'}).`);
+  return cached || emptyPayload('none', 'No lyrics found (tried no providers).');
 }
 
 function resetLyricsResolverRuntimeStateForTests() {
   resolveCache.clear();
+  nowMs = () => Date.now();
 }
 
 module.exports = {
@@ -268,4 +287,6 @@ module.exports = {
   setQqLyricLookup,
   resolveGlobalLyrics,
   resetLyricsResolverRuntimeStateForTests,
+  setLyricsResolverClockForTests,
+  MISS_CACHE_TTL_MS,
 };

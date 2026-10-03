@@ -392,6 +392,75 @@ async function loadFolderArtwork(artworkPath, cache) {
   return pending;
 }
 
+// Which image a directory offers as its cover, stat'd once for the fingerprint
+// below. The name taggers write first wins rather than whatever readdir
+// happened to return first, so a folder holding both cover.jpg and folder.jpg
+// shows cover.jpg whichever order the listing came back in.
+async function findFolderArtwork(directory, names) {
+  let best = null;
+  for (const name of Array.isArray(names) ? names : []) {
+    const rawExtension = path.extname(name);
+    if (!FOLDER_ARTWORK_EXTENSIONS.has(rawExtension.toLowerCase())) continue;
+    const rank = FOLDER_ARTWORK_BASENAMES.indexOf(path.basename(name, rawExtension).toLowerCase());
+    if (rank < 0 || (best && rank >= best.rank)) continue;
+    const candidate = path.join(directory, name);
+    let stat = null;
+    try {
+      stat = await fs.promises.lstat(candidate);
+    } catch (_) {
+      continue;
+    }
+    if (!stat.isFile()) continue;
+    best = { rank, path: candidate, stat };
+  }
+  return best;
+}
+
+// Artwork is addressed by the file that was copied, so a track whose picture
+// came out of its own tag records that instead: the folder was never asked,
+// and a later cover.jpg appearing beside it cannot change an answer the folder
+// did not give. Everything else records what the folder held at the time,
+// which is what tells the next scan whether the folder has moved since.
+const ARTWORK_FROM_TAG = 'tag';
+
+// A directory that could not be listed. It is not the same answer as "the
+// directory holds no image": recording the latter would make the next scan
+// agree with it, and the folder image that turns up a minute later would then
+// never be seen. This key compares equal to nothing, so an unreadable folder
+// simply re-arms the check every time until it can be read.
+const ARTWORK_UNREADABLE = '?';
+
+function artworkPathOf(entry) {
+  return entry && entry !== ARTWORK_UNREADABLE && entry.path ? entry.path : '';
+}
+
+function artworkKeyOf(entry) {
+  if (entry === ARTWORK_UNREADABLE) return ARTWORK_UNREADABLE;
+  if (!entry) return '';
+  const stat = entry.stat || {};
+  return `${path.basename(entry.path)}|${Math.round(Number(stat.mtimeMs)) || 0}|${Number(stat.size) || 0}`;
+}
+
+// Whether the artwork this record was built against is still what the folder
+// holds. Artwork belongs to the DIRECTORY while a scan skips per FILE, so
+// without this a cover dropped into an already-imported album moves nothing the
+// skip looks at and stays invisible to every later rescan.
+function artworkChangedSince(previous, liveEntry) {
+  const recorded = previous && previous.artworkKey;
+  if (recorded === ARTWORK_FROM_TAG) return false;
+  const live = artworkKeyOf(liveEntry);
+  if (live === ARTWORK_UNREADABLE) return false;
+  if (typeof recorded === 'string') return recorded !== live;
+  // Written before artwork was fingerprinted. Only the two states a folder can
+  // actually change for this record are worth a re-read: a record with no art
+  // at all — the hole — and one whose art came out of this folder. A record
+  // that brought its own picture keeps it whatever the folder does, and an
+  // unknown key with nothing to gain is left alone rather than re-read on every
+  // sweep for the life of a 50k library.
+  if (previous && previous.coverPath && !isSharedCoverPath(previous.coverPath)) return false;
+  return !!liveEntry;
+}
+
 // One readdir per folder feeds everything that sits beside the track: lyrics in
 // an .lrc, lyrics in a .txt, and the album art the folder itself carries.
 // Rescan walks every folder the library already came from, so a cover or a
@@ -402,9 +471,13 @@ async function buildSidecarIndex(entries) {
   const artwork = new Map();
   await mapWithConcurrency(directories, METADATA_CONCURRENCY, async (directory) => {
     const lookup = new Map();
-    const candidates = new Map();
+    let names = null;
     try {
-      const names = await fs.promises.readdir(directory);
+      names = await fs.promises.readdir(directory);
+    } catch (_) {
+      names = null;
+    }
+    if (Array.isArray(names)) {
       for (const name of names) {
         const extension = path.extname(name).toLowerCase();
         const base = path.basename(name, path.extname(name)).toLowerCase();
@@ -415,21 +488,14 @@ async function buildSidecarIndex(entries) {
           if (extension === '.lrc') sidecar.lrc = path.join(directory, name);
           else if (!sidecar.lrc) sidecar.txt = path.join(directory, name);
           lookup.set(base, sidecar);
-          continue;
-        }
-        if (FOLDER_ARTWORK_EXTENSIONS.has(extension) && FOLDER_ARTWORK_BASENAMES.indexOf(base) >= 0 && !candidates.has(base)) {
-          candidates.set(base, path.join(directory, name));
         }
       }
-    } catch (_) {}
+    }
     const identity = normalizedPathIdentity(directory);
     lyrics.set(identity, lookup);
-    let cover = '';
-    for (const base of FOLDER_ARTWORK_BASENAMES) {
-      const hit = candidates.get(base);
-      if (hit) { cover = hit; break; }
-    }
-    artwork.set(identity, cover);
+    // A directory that could not be listed says so rather than being recorded
+    // as one that holds nothing — see ARTWORK_UNREADABLE.
+    artwork.set(identity, Array.isArray(names) ? await findFolderArtwork(directory, names) : ARTWORK_UNREADABLE);
   });
   return { lyrics, artwork, artworkBytes: new Map() };
 }
@@ -507,6 +573,14 @@ class LocalMusicLibrary {
           revision: cleanText(source.revision, '', 100),
           coverPath,
           coverMime: cleanText(source.coverMime, '', 100),
+          // Absent in an index written before artwork was fingerprinted, and
+          // that is meaningful rather than an oversight: artworkChangedSince
+          // reads a missing key as "never checked" and looks at the folder one
+          // more time, while a stored key says the folder was already settled.
+          // It stays missing until a real parse writes it, so upgrading does
+          // not re-read every tag in a 50k library. JSON drops undefined, so
+          // the field stays missing in the index on disk too.
+          artworkKey: typeof source.artworkKey === 'string' ? source.artworkKey.slice(0, 400) : undefined,
           lyric: cleanText(source.lyric, '', MAX_LYRIC_BYTES),
           lyricSource: source.lyricSource === 'sidecar' ? 'sidecar' : (source.lyricSource === 'embedded' ? 'embedded' : ''),
           importedAt: Math.max(0, Number(source.importedAt) || 0),
@@ -544,7 +618,15 @@ class LocalMusicLibrary {
   // a time. It never recurses through junctions or symlinks itself — it would
   // otherwise happily loop a 10GB folder onto itself — and it stays well
   // outside MAX_SCAN_FILES by stopping early rather than piling up memory.
-  async *scanFolderPaths(root, onProgress) {
+  //
+  // Each directory's cover is noted into folderArt as the directory is entered,
+  // before any of its tracks are yielded: the caller decides per file whether
+  // to re-read it, and artwork belongs to the directory, so the answer has to
+  // be on the table by the time the first track arrives. It is filled for every
+  // directory the walk opens, whether or not that directory has anything to
+  // offer, so "no entry" is only ever a directory that was never walked.
+  async *scanFolderPaths(root, onProgress, folderArt) {
+    const art = folderArt instanceof Map ? folderArt : new Map();
     const startRoot = normalizedAbsoluteFilePath(root);
     if (!startRoot) return { scanned: 0, stopped: 'INVALID_ROOT' };
     const seenRealPaths = new Set();
@@ -561,8 +643,10 @@ class LocalMusicLibrary {
       try {
         names = await fs.promises.readdir(dir);
       } catch (_) {
+        art.set(normalizedPathIdentity(dir), ARTWORK_UNREADABLE);
         continue;
       }
+      art.set(normalizedPathIdentity(dir), await findFolderArtwork(dir, names));
       for (const name of names) {
         const candidate = path.join(dir, name);
         let stat = null;
@@ -724,6 +808,10 @@ class LocalMusicLibrary {
     const entries = [];
     const found = new Set();
     const unreadable = new Set();
+    // What each directory is offering as its cover, collected by the walk as it
+    // opens the directory. Shared across every root so a folder reached twice
+    // — a registered root that also sits inside an orphan — is asked once.
+    const folderArt = new Map();
     let scanned = 0;
     const walk = async (root, prefix, keepWhenMissing) => {
       // One rule for both places that can report a directory unreadable, so
@@ -748,7 +836,7 @@ class LocalMusicLibrary {
       };
       let generator;
       try {
-        generator = this.scanFolderPaths(root, onProgress);
+        generator = this.scanFolderPaths(root, onProgress, folderArt);
       } catch (error) {
         reportUnreadable(error);
         return;
@@ -777,10 +865,18 @@ class LocalMusicLibrary {
         // attempt (a locked handle, a moment of disk pressure, an interrupted
         // first scan). The flag is set by parseEntry, so a record that parsed
         // fine — even if the file simply carries no tags — is still skipped.
+        //
+        // The second half of the test is the folder, not the file. Artwork
+        // belongs to the DIRECTORY — one cover.jpg speaks for every track in
+        // it — so a cover dropped in beside an already-indexed album moves
+        // neither the size nor the mtime of anything the file check looks at,
+        // and without asking the folder too the art stays invisible however
+        // many times Rescan is pressed.
         if (previous
           && !previous.parseFailed
           && Math.round(Number(previous.mtimeMs) || 0) === Math.round(Number(stat.mtimeMs) || 0)
-          && Number(previous.size) === Number(stat.size)) continue;
+          && Number(previous.size) === Number(stat.size)
+          && !artworkChangedSince(previous, folderArt.get(normalizedPathIdentity(path.dirname(filePath))))) continue;
         const relativePath = `${prefix}${toRelativePath(path.relative(root, filePath)) || path.basename(filePath)}`;
         entries.push({ path: filePath, relativePath });
       }
@@ -1079,7 +1175,10 @@ class LocalMusicLibrary {
     // what sits beside it in the folder, then whatever an earlier scan already
     // cached. That last rung is the one that keeps an album's cover alive when
     // the tag reader is having a bad day, and when the folder image has since
-    // been edited away.
+    // been edited away. Which rung answered is recorded alongside, because a
+    // rescan has to be able to tell "this record is settled" from "the folder
+    // has moved since", and the file itself cannot say.
+    let artworkKey = '';
     let cover;
     if (metadataError) {
       cover = {
@@ -1087,14 +1186,19 @@ class LocalMusicLibrary {
         mime: previous && previous.coverMime || '',
       };
     } else if (picture) {
+      // The tag answered, so the folder was never a candidate for this record
+      // and a later cover.jpg appearing beside it is not this record's business.
+      artworkKey = ARTWORK_FROM_TAG;
       cover = await this.stageCover(id, picture, previous);
     } else {
-      const folderPicture = await loadFolderArtwork(sidecars.artwork.get(directoryIdentity), sidecars.artworkBytes);
+      const liveArtwork = sidecars.artwork.get(directoryIdentity);
+      const folderPicture = await loadFolderArtwork(artworkPathOf(liveArtwork), sidecars.artworkBytes);
       const shared = folderPicture ? await this.stageFolderCover(directoryIdentity, folderPicture) : null;
       cover = shared || {
         path: previous && previous.coverPath || '',
         mime: previous && previous.coverMime || '',
       };
+      artworkKey = artworkKeyOf(liveArtwork);
     }
     const sidecarDirectory = sidecars.lyrics.get(directoryIdentity);
     const sidecar = sidecarDirectory && sidecarDirectory.get(fallbackTitle.toLowerCase());
@@ -1162,6 +1266,10 @@ class LocalMusicLibrary {
         parseFailed: !!metadataError,
         coverPath: cover.path,
         coverMime: cover.mime,
+        // Which rung of the artwork chain answered, and — when it was the
+        // folder — the exact image it offered. Roughly sixty characters a
+        // track, so a 50k index grows by about 3MB, against a 64MB ceiling.
+        artworkKey,
         lyric,
         lyricSource,
         importedAt: Date.now(),

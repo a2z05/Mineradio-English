@@ -179,6 +179,149 @@ test('artwork dropped in later is picked up by a rescan, and keeps working once 
     'what is in the folder now beats what was cached from before');
 });
 
+// The test above hands importFiles the file directly, which is why it always
+// worked: importFiles never asks whether anything changed. A rescan does, and
+// it decides per FILE — while artwork belongs to the DIRECTORY. Dropping a
+// cover into an already-imported album moves no audio file at all, so every
+// scan of it used to come back with nothing to do and the art stayed invisible
+// no matter how many times Rescan was pressed.
+
+test('a rescan picks up artwork that appeared after the album was imported', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mr-artwork-rescan-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const album = albumFixture(root, ['One.flac', 'Two.flac']);
+
+  const library = openLibrary(path.join(root, 'profile'));
+  const first = await library.importFiles(
+    ['One.flac', 'Two.flac'].map((name) => ({ path: path.join(album, name) }))
+  );
+  assert.ok(first.tracks.every((track) => !track.cover),
+    'imported before the artwork existed, so there is nothing to show');
+
+  // Only the artwork moves. Both audio files keep the size and mtime the
+  // index already recorded, which is exactly what the skip looks at.
+  fs.writeFileSync(path.join(album, 'cover.png'), ONE_PIXEL_PNG);
+  const second = await library.rescan();
+  assert.equal(second.count, 2, 'the album did not gain or lose a track');
+  for (const track of second.tracks) {
+    assert.deepEqual(await coverBytes(library, track), ONE_PIXEL_PNG,
+      'the rescan re-read the folder instead of trusting the per-file skip');
+  }
+});
+
+test('artwork replaced in place is picked up by a rescan too', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mr-artwork-swap-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const album = albumFixture(root, ['Song.flac']);
+  const firstArt = ONE_PIXEL_PNG;
+  const swappedArt = otherPng();
+  fs.writeFileSync(path.join(album, 'cover.png'), firstArt);
+
+  const library = openLibrary(path.join(root, 'profile'));
+  await library.importFiles([{ path: path.join(album, 'Song.flac') }]);
+  const before = await library.importFiles([{ path: path.join(album, 'Song.flac') }]);
+  assert.deepEqual(await coverBytes(library, before.tracks[0]), firstArt);
+
+  // Same name, same directory, different bytes — the copy already staged under
+  // the cover cache would be served for ever if the folder were not asked again.
+  fs.writeFileSync(path.join(album, 'cover.png'), swappedArt);
+  const after = await library.rescan();
+  assert.deepEqual(await coverBytes(library, after.tracks[0]), swappedArt,
+    'what is in the folder now beats what was cached from before');
+});
+
+test('a rescan reads a folder only when that folder moved, and never when the tag already won', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mr-artwork-scope-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const fromTag = otherPng();
+  const swapped = Buffer.from(ONE_PIXEL_PNG);
+  swapped[0] ^= 1;
+  const taggedDir = albumFixture(root, ['Own.flac']);
+  const plainDir = path.join(root, 'Untagged');
+  fs.mkdirSync(plainDir, { recursive: true });
+  fs.writeFileSync(path.join(plainDir, 'Plain.flac'), 'audio-plain');
+  fs.writeFileSync(path.join(taggedDir, 'cover.png'), ONE_PIXEL_PNG);
+  fs.writeFileSync(path.join(plainDir, 'cover.png'), ONE_PIXEL_PNG);
+
+  const library = openLibrary(path.join(root, 'profile'));
+  library.parseMetadata = async (filePath) => ({
+    common: {
+      title: path.basename(filePath, path.extname(filePath)),
+      // One file brings its own picture, so the folder is never a candidate for
+      // it — and a later change to that folder cannot become one.
+      picture: /Own\.flac$/.test(filePath)
+        ? [{ format: 'image/png', data: fromTag }]
+        : [],
+    },
+    format: { duration: 1 },
+  });
+  await library.importFiles([
+    { path: path.join(taggedDir, 'Own.flac') },
+    { path: path.join(plainDir, 'Plain.flac') },
+  ]);
+
+  const count = { parses: 0 };
+  const real = library.parseMetadata;
+  library.parseMetadata = async (filePath) => {
+    count.parses += 1;
+    return real(filePath);
+  };
+
+  await library.rescan();
+  assert.equal(count.parses, 0,
+    'nothing on disk moved, so no tag is worth reading');
+
+  // Both folders get new artwork. Only the one whose file actually carries a
+  // picture tag may be talked out of re-reading — and only the other one moves.
+  fs.writeFileSync(path.join(plainDir, 'cover.png'), swapped);
+  fs.writeFileSync(path.join(taggedDir, 'cover.png'), swapped);
+  count.parses = 0;
+  const after = await library.rescan();
+  assert.equal(count.parses, 1,
+    'only the folder whose artwork moved is re-read, and only its one file');
+
+  const plain = after.tracks.find((track) => track.name === 'Plain');
+  assert.deepEqual(await coverBytes(library, plain), swapped,
+    'the folder that was re-read shows what it holds now');
+  const withTag = after.tracks.find((track) => track.name === 'Own');
+  assert.deepEqual(await coverBytes(library, withTag), fromTag,
+    'the file that brought its own picture is not talked out of it by the folder');
+});
+
+test('an index written before artwork was fingerprinted still finds art that arrived since', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mr-artwork-upgrade-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const album = albumFixture(root, ['Song.flac']);
+  const profile = path.join(root, 'profile');
+  const indexFile = path.join(profile, 'local-music-library.json');
+
+  const first = openLibrary(profile);
+  await first.importFiles([{ path: path.join(album, 'Song.flac') }]);
+
+  // Every index a released build has ever written looks like this: the whole
+  // record, minus the field that was added to detect the folder moving.
+  const index = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
+  for (const record of index.records) delete record.artworkKey;
+  fs.writeFileSync(indexFile, JSON.stringify(index));
+
+  const reopened = openLibrary(profile);
+  const count = { parses: 0 };
+  const real = reopened.parseMetadata;
+  reopened.parseMetadata = async (filePath) => {
+    count.parses += 1;
+    return real(filePath);
+  };
+
+  await reopened.rescan();
+  assert.equal(count.parses, 0,
+    'a folder with nothing in it is not worth re-reading, whatever the index lacks');
+
+  fs.writeFileSync(path.join(album, 'cover.png'), ONE_PIXEL_PNG);
+  const after = await reopened.rescan();
+  assert.deepEqual(await coverBytes(reopened, after.tracks[0]), ONE_PIXEL_PNG,
+    'the artwork that arrived after the index was written is found anyway');
+});
+
 test('taking one track out does not take the album cover with it', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mr-artwork-remove-one-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
