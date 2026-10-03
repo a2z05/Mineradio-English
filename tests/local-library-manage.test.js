@@ -168,6 +168,48 @@ test('rescan on an empty library is a no-op rather than an error', async (t) => 
   });
 });
 
+test('a folder that has gone away takes its rows with it, as the comment above says', async (t) => {
+  await withLibrary(t, async (library, root) => {
+    const directory = path.join(root, 'Music');
+    fs.mkdirSync(directory, { recursive: true });
+    const audioPath = path.join(directory, 'Song.flac');
+    fs.writeFileSync(audioPath, Buffer.from('audio'));
+    await library.importFiles([{ path: audioPath, relativePath: 'Song.flac' }]);
+
+    // The folder is renamed away. Nothing here is a permissions problem and
+    // nothing will bring the path back, so the row under it can never play —
+    // which is what the test above's own comment says a rescan is for.
+    //
+    // No folder was ever registered, so this directory reaches the walk as an
+    // orphan root: the case a library gets into when it was filled by file
+    // picker rather than by adding a folder, and the only case the real index
+    // was in.
+    fs.renameSync(directory, path.join(root, 'Music renamed'));
+    const pruned = await library.rescan();
+    assert.equal(pruned.removed, 1, 'the row under a folder that is not there any more');
+    assert.equal(pruned.count, 0);
+  });
+});
+
+test('a registered folder that is missing keeps its rows — an unplugged drive comes back', async (t) => {
+  await withLibrary(t, async (library, root) => {
+    const directory = path.join(root, 'Music');
+    fs.mkdirSync(directory, { recursive: true });
+    const audioPath = path.join(directory, 'Song.flac');
+    fs.writeFileSync(audioPath, Buffer.from('audio'));
+    await library.addFolder(directory);
+    await library.importFiles([{ path: audioPath, relativePath: 'Song.flac' }]);
+
+    // The folder the user chose is not there this instant. That is the shape a
+    // missing drive letter and a permissions failure both take, and the rows
+    // under it carry play counts that nothing can rebuild once they are gone.
+    fs.renameSync(directory, path.join(root, 'Music away'));
+    const result = await library.rescan();
+    assert.equal(result.removed, 0, 'a folder the user registered is not emptied because it is briefly absent');
+    assert.equal(result.count, 1);
+  });
+});
+
 test('both channels are reachable from the renderer, and neither takes a path', () => {
   assert.match(preloadSource, /removeLocalMusicTracks/);
   assert.match(preloadSource, /rescanLocalMusicLibrary/);

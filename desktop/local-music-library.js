@@ -690,12 +690,32 @@ class LocalMusicLibrary {
     const found = new Set();
     const unreadable = new Set();
     let scanned = 0;
-    const walk = async (root, prefix) => {
+    const walk = async (root, prefix, keepWhenMissing) => {
+      // One rule for both places that can report a directory unreadable, so
+      // they cannot drift into disagreeing about what "unreadable" means.
+      // A directory that is not there any more is gone, not unreadable: the
+      // index points at a path that was renamed away or deleted, nothing will
+      // bring it back, and every row under it is a row that can never play.
+      // Holding those is what left a rescan with no way to clear them — the
+      // walk could never see the files, because they were never under a path
+      // that exists.
+      //
+      // A folder the user registered is the opposite. An absent registered root
+      // is a missing drive letter or a share that has not mounted yet, and its
+      // rows carry play counts and favourites nothing can rebuild once
+      // removeTracks has dropped them, so the folder has to come back before
+      // the library concludes anything. That is also why removeFolder deletes
+      // those rows explicitly rather than leaving it to a scan.
+      const reportUnreadable = (error) => {
+        const code = error && error.code;
+        const missing = code === 'ENOENT' || code === 'ENOTDIR';
+        if (!missing || keepWhenMissing) unreadable.add(normalizedPathIdentity(root));
+      };
       let generator;
       try {
         generator = this.scanFolderPaths(root, onProgress);
-      } catch (_) {
-        unreadable.add(normalizedPathIdentity(root));
+      } catch (error) {
+        reportUnreadable(error);
         return;
       }
       let sawFile = false;
@@ -724,13 +744,13 @@ class LocalMusicLibrary {
       if (!sawFile) {
         try {
           await fs.promises.readdir(root);
-        } catch (_) {
-          unreadable.add(normalizedPathIdentity(root));
+        } catch (error) {
+          reportUnreadable(error);
         }
       }
     };
-    for (const root of roots) await walk(root, '');
-    for (const orphan of orphanRoots) await walk(orphan.root, orphan.prefix);
+    for (const root of roots) await walk(root, '', true);
+    for (const orphan of orphanRoots) await walk(orphan.root, orphan.prefix, false);
     if (!roots.length && !orphanRoots.length) {
       return { ...this.listTracksSync(), folders: [], added: 0, changed: 0, removed: 0, scanned: 0 };
     }
