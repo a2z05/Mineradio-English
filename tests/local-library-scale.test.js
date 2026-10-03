@@ -473,6 +473,50 @@ test('the list window holds the same handful of rows at 1k and at 50k', () => {
     'and the same number halfway down');
 });
 
+test('the window paints the rows the scroll offset names, not the first ones', () => {
+  // Counting rows proves the window stays small; it says nothing about whether
+  // those are the right rows. A renderer that painted 0..17 at every scroll
+  // offset would satisfy every assertion above while showing the same songs at
+  // the top and the bottom of a fifty thousand track library — bounded, and
+  // wrong in a way nobody notices until they scroll.
+  const tracks = [];
+  for (let i = 0; i < 50000; i += 1) tracks.push(scaleSong(i));
+  const sandbox = windowSandbox(tracks);
+  wrapRows(sandbox, tracks);
+
+  // The stub stamps each row with the index it was asked for, so the painted
+  // slice can be read straight back out of the markup.
+  const painted = () => (sandbox.elements['library-window'].innerHTML.match(/data-row="(\d+)"/g) || [])
+    .map((markup) => Number(markup.replace(/[^0-9]/g, '')));
+
+  for (const fraction of [0, 0.5, 0.999]) {
+    const target = Math.floor(tracks.length * fraction);
+    sandbox.libraryPage.scrollTop = target * 54;
+    sandbox.libraryRenderWindow(true);
+
+    const rows = painted();
+    assert.ok(rows.length > 0 && rows.length <= 20 + OVERSCAN,
+      `at ${fraction} the window holds ${rows.length} rows`);
+    assert.deepEqual(rows, Array.from({ length: rows.length }, (_, k) => rows[0] + k),
+      `at ${fraction} the slice is contiguous — no holes in the middle of the list`);
+
+    // The one that matters: the first row painted is the row the offset names,
+    // minus the overscan drawn above it to hide the seam on scroll.
+    const expectedFirst = Math.max(0, Math.floor(sandbox.libraryPage.scrollTop / 54) - OVERSCAN);
+    assert.equal(rows[0], expectedFirst,
+      `at ${fraction} the window starts at row ${expectedFirst}, not row ${rows[0]}`);
+    assert.ok(rows[0] <= target && target <= rows[rows.length - 1] + OVERSCAN,
+      `at ${fraction} the row being scrolled to is actually on screen`);
+
+    // And the offset that positions the window describes the same slice, so the
+    // rows cannot drift away from where the scrollbar says they are.
+    const transform = sandbox.elements['library-window'].style.transform;
+    const offset = Number(String(transform).replace(/[^0-9.\-]/g, ''));
+    assert.ok(Math.abs(offset / 54 - rows[0]) < 1,
+      `at ${fraction} the window is translated to row ${offset / 54}, but painted row ${rows[0]}`);
+  }
+});
+
 test('a window that has not moved is not rebuilt', () => {
   const tracks = [];
   for (let i = 0; i < 1000; i += 1) tracks.push(scaleSong(i));
