@@ -758,3 +758,74 @@ test('every literal the menu can paint is a key the dispatcher accepts', () => {
       `"${run}" is painted in the menu but is not a key the dispatcher accepts — it would do nothing when clicked`);
   }
 });
+
+test('a dragged track lands on a destination this page can actually reach', () => {
+  // Every destination outside this page is unreachable while it is open. The
+  // queue drawer sits inside #desktop-window-shell, whose transform makes a
+  // stacking context that the full-screen mask covers for good — no z-index on
+  // the drawer can lift it above a body-level 900 — and the folder tree only
+  // exists in a view where no track row is draggable. So the destinations are
+  // painted on this page and revealed for the length of the drag.
+  assert.match(pageSource, /data-library-drop="queue"/);
+  assert.match(pageSource, /data-library-drop="playlist"/);
+  assert.match(pageSource, /id: 'library-drop-bar-queue'/);
+  assert.match(pageSource, /id: 'library-drop-bar-playlist'/);
+  assert.match(css, /^\.library-drop-bar \{[^}]*display: none/m,
+    'the drop bar is permanent furniture, so it would sit under every list');
+  assert.match(css, /^body\.library-dragging \.library-drop-bar \{[^}]*display: flex/m,
+    'nothing reveals the drop bar, so a drag would have nowhere to land');
+
+  // The class that reveals it is set here and nowhere else, and a reveal that
+  // opens the drawer instead is dead code with a live side effect: it rewrites
+  // the tab the user last chose for a drop that can never arrive.
+  const start = namedFunctionSource(pageSource, 'libraryDragStartReveal');
+  const end = namedFunctionSource(pageSource, 'libraryDragEndReveal');
+  assert.match(start, /classList\.add\('library-dragging'\)/);
+  assert.match(end, /classList\.remove\('library-dragging'\)/);
+  assert.doesNotMatch(start, /playlist-panel|setPeek|switchPlaylistTab/,
+    'libraryDragStartReveal still opens the queue drawer, which it cannot reach');
+  assert.doesNotMatch(end, /closePlaylistPanelSoft|switchPlaylistTab/);
+});
+
+test('a modal opened from the library paints above it', () => {
+  // Both are body-level .modal-mask elements at the shared 50, and the library
+  // mask is 900 — so "Add to playlist" and "Edit metadata" opened a dialog
+  // painted underneath the page that opened it, visible and unclickable.
+  assert.match(css, /\.library-page-mask \{[^}]*z-index: 900/m);
+  assert.match(css, /#library-metadata-modal,\s*#library-playlist-picker \{\s*z-index: 960;/,
+    'the picker and the editor are below the library page they are opened from');
+  assert.match(css, /^\.library-context-menu \{[^}]*z-index: 960/m,
+    'the context menu is the precedent for clearing the library mask');
+});
+
+test('right-clicking a playlist row opens the playlist menu', () => {
+  // The song menu falls through to row.song, which a playlist row does not
+  // have — so without this branch right-clicking a playlist did nothing.
+  const sandbox = seed([makeSong('a')]);
+  sandbox.invoked = [];
+  sandbox.document = { getElementById: () => null };
+  sandbox.libraryRowAt = () => sandbox.row;
+  vm.runInNewContext(
+    [
+      namedFunctionSource(menuSource, 'libraryOnRowContextMenu'),
+      `function libraryShowPlaylistMenu(event, playlist) {
+         this.invoked.push('playlist:' + (playlist && playlist.id));
+       }`,
+      `function libraryOpenContextMenu() { this.invoked.push('open'); }`,
+    ].join('\n'),
+    sandbox
+  );
+
+  const handle = { closest: () => handle, getAttribute: () => '0' };
+  const event = { target: handle, preventDefault() {}, clientX: 10, clientY: 10 };
+
+  sandbox.row = { kind: 'playlist', playlist: { id: 'p7' } };
+  sandbox.libraryOnRowContextMenu(event);
+  assert.equal(sandbox.invoked.join(','), 'playlist:p7',
+    'a playlist row opened the generic menu instead');
+
+  sandbox.invoked = [];
+  sandbox.row = { kind: 'group', group: { title: 'Album' } };
+  sandbox.libraryOnRowContextMenu(event);
+  assert.equal(sandbox.invoked.join(','), 'open', 'a group row no longer opens its menu');
+});

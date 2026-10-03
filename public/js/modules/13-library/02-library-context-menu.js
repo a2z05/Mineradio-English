@@ -231,6 +231,14 @@ function libraryOnRowContextMenu(event) {
     return;
   }
 
+  // A playlist row has its own menu — Play, Shuffle, Rename, Export as M3U,
+  // Delete — and the song menu that falls through to here would be nonsense on
+  // it, since there is no row.song to act on.
+  if (row.kind === 'playlist') {
+    if (row.playlist && row.playlist.id) libraryShowPlaylistMenu(event, row.playlist);
+    return;
+  }
+
   var id = localLibrarySongKey(row.song);
   if (!id) return;
   // Right-clicking inside a selection operates on the whole selection, the

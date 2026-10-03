@@ -759,3 +759,80 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ------------------------------------------------- overlays opened from here
+   Both of these are body-level .modal-mask elements at the shared 50, and this
+   page's own mask is 900 — so "Add to playlist" and "Edit metadata" opened a
+   modal painted underneath the page they were opened from, and
+   elementFromPoint at its centre returned #library-page: a visible, focusable,
+   completely unclickable dialog. The context menu already sits at 960 for the
+   same reason; these are raised to match it. */
+#library-metadata-modal,
+#library-playlist-picker {
+  z-index: 960;
+}
+
+/* ---------------------------------------------------------------- drag & drop
+   A dragged track needs somewhere to land while this page is open, and every
+   named destination outside it is unreachable: the queue drawer sits inside
+   #desktop-window-shell, whose transform makes a stacking context the mask
+   covers for good, and the folder tree only exists in the folders view, where
+   no track is draggable. The bar under the scroller is the destination instead,
+   and it is only on screen while a drag runs — <body> carries that class for
+   exactly that long, and nothing else in the app reads it. */
+.library-drop-bar {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  border: 1px dashed rgba(244, 210, 138, .35);
+  border-radius: 12px;
+  background: rgba(244, 210, 138, .06);
+  color: rgba(255, 255, 255, .72);
+  font-size: 12px;
+}
+
+body.library-dragging .library-drop-bar {
+  display: flex;
+}
+
+.library-drop-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-drop-zone {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .06);
+  color: #fff;
+  font-weight: 600;
+  cursor: copy;
+  user-select: none;
+}
+
+.library-drop-zone.library-drop-over {
+  background: rgba(244, 210, 138, .22);
+  border-color: rgba(244, 210, 138, .55);
+  color: #f4d28a;
+}
+
+#playlist-panel.library-drop-over {
+  border-color: rgba(244, 210, 138, .55);
+  box-shadow: inset 0 0 0 1px rgba(244, 210, 138, .3), 0 24px 80px rgba(0, 0, 0, .45);
+}
+
+#queue-list.library-drop-over,
+#library-picker-list.library-drop-over,
+#library-playlist-list.library-drop-over,
+#library-folder-scroll.library-drop-over {
+  background: rgba(244, 210, 138, .07);
+  box-shadow: inset 0 0 0 1px rgba(244, 210, 138, .3);
+  border-radius: 12px;
+}

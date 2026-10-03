@@ -78,6 +78,11 @@ function libraryEnsureDom() {
             '</div>' +
             '<div class="library-empty" id="library-empty" hidden></div>' +
           '</div>' +
+          '<div class="library-drop-bar" id="library-drop-bar">' +
+            '<span class="library-drop-hint">Drop to…</span>' +
+            '<span class="library-drop-zone" data-library-drop="queue">Add to queue</span>' +
+            '<span class="library-drop-zone" data-library-drop="playlist">Add to playlist</span>' +
+          '</div>' +
           '<div class="library-status" id="library-status" hidden></div>' +
         '</div>' +
         '<div class="library-side" id="library-folders-host"></div>' +
@@ -111,8 +116,8 @@ function libraryEnsureDom() {
   scroller.addEventListener('click', libraryOnRowClick);
   scroller.addEventListener('contextmenu', libraryOnRowContextMenu);
   // Dragging is on the whole page, not the row list: a track has to be droppable
-  // on the playlist pane, the queue and the folder tree, none of which are
-  // inside the scroller.
+  // on the bar under the scroller, the playlist pane, the queue and the folder
+  // tree, none of which are inside the scroller.
   libraryInstallLibraryDropTargets(mask);
   return mask;
 }
@@ -120,9 +125,30 @@ function libraryEnsureDom() {
 // ---------------------------------------------------------------- drag & drop
 
 var libraryDragState = { songs: [], over: '' };
+var libraryDocumentDropBound = false;
 
 function libraryDraggableHtml(song, index) {
   return ' draggable="true" data-library-drag="' + index + '"';
+}
+
+// Every drop destination this page names is somewhere the pointer cannot reach
+// while this page is open. The queue drawer sits at z-index 17 behind this
+// mask's 900, and it is not merely hidden behind it — it lives inside
+// #desktop-window-shell, whose transform creates a stacking context, so no
+// z-index on the drawer can lift it above a body-level mask at all. The folder
+// tree only exists in the folders view, where nothing is draggable. The picker
+// and the editor are body-level modals of their own that paint UNDER this mask.
+//
+// So the destinations that actually work are the ones painted on this page and
+// revealed for the length of a drag by the body class set here — #library-drop-
+// bar carries the queue and the playlist, and the picker can be reached once
+// it clears this mask. The class is set here and nowhere else.
+function libraryDragStartReveal() {
+  document.body.classList.add('library-dragging');
+}
+
+function libraryDragEndReveal() {
+  document.body.classList.remove('library-dragging');
 }
 
 function libraryInstallLibraryDropTargets(mask) {
@@ -144,57 +170,82 @@ function libraryInstallLibraryDropTargets(mask) {
       event.dataTransfer.effectAllowed = 'copy';
       event.dataTransfer.setData('text/plain', songs.map(localFileIdOf).filter(Boolean).join('\n'));
     } catch (_) { /* a browser that refuses setData still gets the click behaviour */ }
+    libraryDragStartReveal();
     if (libraryOnRowDragVisual) mask.classList.add('dragging');
   });
   mask.addEventListener('dragend', function () {
     libraryDragState.songs = [];
     libraryDragState.over = '';
+    libraryDragEndReveal();
     if (libraryOnRowDragVisual) mask.classList.remove('dragging');
     document.querySelectorAll('.library-drop-over').forEach(function (el) {
       el.classList.remove('library-drop-over');
     });
   });
+  libraryInstallDocumentDropTargets();
+}
 
+// Every named destination of a dragged track — the queue drawer in the shell,
+// the playlist picker's own modal — sits OUTSIDE the library page, so listeners
+// bound on that page never saw a drop on either of them: the events simply do
+// not pass through it. The handlers therefore live on the document, gated on a
+// library drag being in flight, so they see drops anywhere while staying inert
+// for every other drag in the app.
+function libraryInstallDocumentDropTargets() {
+  if (libraryDocumentDropBound) return;
+  libraryDocumentDropBound = true;
   var targets = [
-    { id: 'library-drop-playlist', matches: function (node) { return !!node.closest('#library-playlist-list, .local-playlist-list, #library-picker-list'); } },
-    { id: 'library-drop-queue', matches: function (node) { return !!node.closest('#queue-list, .queue-panel, #playlist-panel'); } },
-    { id: 'library-drop-folders', matches: function (node) { return !!node.closest('#library-folder-scroll'); } }
+    // The two that are always reachable: they are painted on this page, under
+    // the scroller, and only exist while a drag is running.
+    { id: 'library-drop-bar-queue',
+      matches: function (node) { return !!node.closest('[data-library-drop="queue"]'); },
+      element: '[data-library-drop="queue"]' },
+    { id: 'library-drop-bar-playlist',
+      matches: function (node) { return !!node.closest('[data-library-drop="playlist"]'); },
+      element: '[data-library-drop="playlist"]' },
+    { id: 'library-drop-playlist',
+      matches: function (node) { return !!node.closest('#library-playlist-list, .local-playlist-list, #library-picker-list'); },
+      element: '#library-playlist-list, .local-playlist-list, #library-picker-list' },
+    { id: 'library-drop-queue',
+      matches: function (node) { return !!node.closest('#queue-list, .queue-panel, #playlist-panel'); },
+      element: '#queue-list, .queue-panel, #playlist-panel' },
+    { id: 'library-drop-folders',
+      matches: function (node) { return !!node.closest('#library-folder-scroll'); },
+      element: '#library-folder-scroll' }
   ];
   targets.forEach(function (target) {
-    mask.addEventListener('dragover', function (event) {
+    document.addEventListener('dragover', function (event) {
       if (!libraryDragState.songs.length) return;
       if (!event.target.closest || !target.matches(event.target)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
       libraryDragState.over = target.id;
-      var element = event.target.closest(target.id === 'library-drop-folders'
-        ? '#library-folder-scroll'
-        : (target.id === 'library-drop-queue' ? '#queue-list, .queue-panel' : '#library-playlist-list, .local-playlist-list'));
+      var element = event.target.closest(target.element);
       if (element) element.classList.add('library-drop-over');
     });
-    mask.addEventListener('dragleave', function (event) {
+    document.addEventListener('dragleave', function (event) {
       if (!event.target.closest || !target.matches(event.target)) return;
       libraryDragState.over = '';
-      var element = event.target.closest(target.id === 'library-drop-folders'
-        ? '#library-folder-scroll'
-        : (target.id === 'library-drop-queue' ? '#queue-list, .queue-panel' : '#library-playlist-list, .local-playlist-list'));
+      var element = event.target.closest(target.element);
       if (element) element.classList.remove('library-drop-over');
     });
-    mask.addEventListener('drop', function (event) {
+    document.addEventListener('drop', function (event) {
       if (!libraryDragState.songs.length) return;
       if (!event.target.closest || !target.matches(event.target)) return;
       event.preventDefault();
       var songs = libraryDragState.songs.slice();
       libraryDragState.songs = [];
       libraryDragState.over = '';
-      var element = event.target.closest(target.id === 'library-drop-folders'
-        ? '#library-folder-scroll'
-        : (target.id === 'library-drop-queue' ? '#queue-list, .queue-panel' : '#library-playlist-list, .local-playlist-list'));
+      var element = event.target.closest(target.element);
       if (element) element.classList.remove('library-drop-over');
-      if (target.id === 'library-drop-playlist') libraryDropOnPlaylist(songs, event);
-      else if (target.id === 'library-drop-queue') {
+      if (target.id === 'library-drop-queue' || target.id === 'library-drop-bar-queue') {
         for (var i = 0; i < songs.length; i += 1) queueSong(songs[i]);
         showToast('Added ' + songs.length + ' to the queue');
+      } else if (target.id === 'library-drop-playlist' || target.id === 'library-drop-bar-playlist') {
+        // The bar carries no playlist id, and neither does a drop on the middle
+        // of the picker's list — libraryDropOnPlaylist treats "no playlist here"
+        // as "offer to choose one", which is the picker itself.
+        libraryDropOnPlaylist(songs, event);
       } else libraryDropOnFolders(songs);
     });
   });
@@ -221,8 +272,11 @@ async function libraryDropOnPlaylist(songs, event) {
   if (typeof libraryPaintPlaylistPane === 'function') libraryPaintPlaylistPane();
 }
 
-// Dropping tracks onto a folder node queues that folder, which is the one
-// action a folder can do that a track cannot do to a track.
+// Dropping tracks onto a folder node queues the tracks. A folder in this index
+// is a path, not a container you can put a file into, so there is nothing else
+// for the drop to mean — the open node is only the gate that says the folder
+// tree is on screen with something in it, which is the one view where a track
+// row and a tree are visible at the same time.
 function libraryDropOnFolders(songs) {
   var nodeId = libraryFolderBrowser.nodeId;
   if (!nodeId) return;
