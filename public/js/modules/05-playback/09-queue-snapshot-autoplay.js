@@ -54,6 +54,9 @@ function saveLastPlaybackSnapshot(force, reason) {
     currentTime: Math.max(0, Number(currentSec) || 0),
     duration: Math.max(0, Number(durationSec) || playbackDurationFromSong(song) || 0),
     playing: !!(audio && !audio.paused && !audio.ended),
+    // The mode is what makes the restored order mean anything: a queue saved
+    // mid-shuffle coming back as "Repeat all" would play it in sequence.
+    playMode: playMode,
     current: playbackRestoreSongSnapshot(song),
     queue: queue
   };
@@ -80,6 +83,14 @@ function restoreLastPlaybackSnapshot() {
   restoredLastPlaybackSnapshot = snapshot;
   startupRestoreHomePending = !startupAutoplayPreference;
   pendingPlaybackResumeAt = startupResumeSecondsFromSnapshot(snapshot);
+  // Applied as saved, never re-derived: the queue below already carries the
+  // shuffled order, so reshuffling here would discard the arrangement being
+  // restored. An unknown value leaves the default alone rather than sticking
+  // the control on a mode no button can reach.
+  if (PLAY_MODES.indexOf(snapshot.playMode) >= 0) {
+    playMode = snapshot.playMode;
+    if (typeof updatePlayModeButton === 'function') updatePlayModeButton();
+  }
   if (isLocal) {
     currentLocalSong = current;
     currentIdx = -1;

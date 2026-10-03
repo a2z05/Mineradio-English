@@ -21,7 +21,10 @@ function installStartupLongTaskObserver() {
   } catch (e) { }
 }
 installStartupLongTaskObserver();
-var queueViewTab = readPlaylistPanelTabPreference(), playMode = 'loop', miniQueueOpen = false;
+// One list, so the control that cycles it and the restore that reads it back
+// out of a snapshot cannot drift apart and accept a mode the button never sets.
+var PLAY_MODES = ['loop', 'shuffle', 'single', 'off'];
+var queueViewTab = readPlaylistPanelTabPreference(), playMode = PLAY_MODES[0], miniQueueOpen = false;
 // Keys of the tracks actually played, in order. Previous walks this instead of
 // the index: in shuffle mode the queue array is physically reordered, so
 // "index minus one" is frequently a track the listener has never heard.

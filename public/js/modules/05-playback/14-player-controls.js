@@ -808,10 +808,9 @@ function updatePlayModeButton(animate) {
 }
 
 function cyclePlayMode() {
-  var modes = ['loop', 'shuffle', 'single', 'off'];
-  var idx = modes.indexOf(playMode);
+  var idx = PLAY_MODES.indexOf(playMode);
   var prevMode = playMode;
-  playMode = idx < 0 ? modes[0] : modes[(idx + 1) % modes.length];
+  playMode = idx < 0 ? PLAY_MODES[0] : PLAY_MODES[(idx + 1) % PLAY_MODES.length];
   if (playMode === 'shuffle' && prevMode !== 'shuffle') {
     // Only when the mode is entered: reshuffling on every later play would
     // scramble the queue out from under Previous. The history is kept — it is
@@ -822,6 +821,9 @@ function cyclePlayMode() {
   updatePlayModeButton(true);
   // The Now playing panel shows the mode too, in the same words.
   if (typeof paintNowPlayingTransport === 'function') paintNowPlayingTransport();
+  // Written now rather than only at unload: an unscheduled exit must not hand
+  // back a queue in the mode the listener had already left.
+  saveLastPlaybackSnapshot(true, 'play-mode');
   showToast('Play mode: ' + playModeLabel(playMode));
 }
 updatePlayModeButton(false);

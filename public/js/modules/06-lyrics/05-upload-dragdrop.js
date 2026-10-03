@@ -61,18 +61,43 @@ function isLocalPlaybackSnapshot(snapshot) {
   var song = snapshot && snapshot.current;
   return !!(song && (song.type === 'local' || song.source === 'local' || song.localKey || song.localFileId));
 }
+// Two records name the same file when their local id matches. The id is written
+// on save and only resolves against a library freshly read from disk, which is
+// why every lookup below goes through the disk copy rather than the snapshot.
+function restoredTrackId(song) {
+  return String((song && (song.localFileId || song.localKey)) || '').replace(/^local:/, '');
+}
 function restoredLocalTrackIndex(tracks, snapshot) {
-  var current = snapshot && snapshot.current || {};
-  var localId = String(current.localFileId || current.localKey || '').replace(/^local:/, '');
+  var localId = restoredTrackId(snapshot && snapshot.current);
   if (localId) {
     for (var i = 0; i < tracks.length; i++) {
-      var songId = String(tracks[i].localFileId || tracks[i].localKey || '').replace(/^local:/, '');
-      if (songId === localId) return i;
+      if (restoredTrackId(tracks[i]) === localId) return i;
     }
     return -1;
   }
   var fallback = Number(snapshot && snapshot.currentIdx);
   return isFinite(fallback) && fallback >= 0 && fallback < tracks.length ? Math.round(fallback) : 0;
+}
+// The snapshot saved a queue, not just a track — the order the listener had
+// arranged is the thing worth keeping, and the library on disk is the only
+// place its entries still resolve to playable files. Entries whose file has
+// gone since are dropped rather than kept as rows that will fail to play.
+// null means "no usable queue saved", which tells the caller to fall back to
+// the whole library rather than to an empty one.
+function restoredQueueTracks(tracks, snapshot) {
+  var queue = snapshot && snapshot.queue;
+  if (!Array.isArray(queue) || !queue.length) return null;
+  var byId = {};
+  for (var i = 0; i < tracks.length; i++) {
+    var trackId = restoredTrackId(tracks[i]);
+    if (trackId) byId[trackId] = tracks[i];
+  }
+  var out = [];
+  for (var j = 0; j < queue.length; j++) {
+    var entryId = restoredTrackId(queue[j]);
+    if (entryId && byId[entryId]) out.push(byId[entryId]);
+  }
+  return out.length ? out : null;
 }
 async function restorePersistedLocalLibrary() {
   if (!window.desktopWindow || typeof window.desktopWindow.listLocalMusicLibrary !== 'function') return false;
@@ -97,9 +122,14 @@ async function restorePersistedLocalLibrary() {
     || currentIdx !== indexAtRequest
     || currentLocalSong !== localSongAtRequest
   ) return false;
+  // Rebuild the queue before hunting for the cursor: the cursor is an index
+  // into whatever lands in playQueue, so if the queue is rebuilt afterwards
+  // the index points into the wrong list — which is how a saved five-track
+  // queue used to come back as the whole library with a cursor in it.
+  var targetQueue = (snapshot && restoredQueueTracks(tracks, snapshot)) || tracks;
   if (snapshot) {
-    var restoredIndex = restoredLocalTrackIndex(tracks, snapshot);
-    if (restoredIndex < 0 || !tracks[restoredIndex]) {
+    var restoredIndex = restoredLocalTrackIndex(targetQueue, snapshot);
+    if (restoredIndex < 0 || !targetQueue[restoredIndex]) {
       playQueue = tracks;
       currentIdx = -1;
       currentLocalSong = null;
@@ -116,7 +146,7 @@ async function restorePersistedLocalLibrary() {
   } else {
     currentIdx = -1;
   }
-  playQueue = tracks;
+  playQueue = targetQueue;
   currentLocalSong = null;
   if (!snapshot) {
     safeRenderQueuePanel('local-library-restore');

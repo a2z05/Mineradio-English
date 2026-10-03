@@ -22,6 +22,11 @@ const queueSource = read('public/js/modules/05-playback/09-queue-snapshot-autopl
 const guardSource = read('public/js/modules/13-library/06-library-playback-guard.js');
 const loaderSource = read('public/js/index-loader.js');
 const startupSource = read('public/js/modules/10-shell/05-startup-bindings.js');
+const stateSource = read('public/js/modules/00-state/01-perf-render-state.js');
+
+const playModesMatch = /var PLAY_MODES = (\[[^\]]*\]);/.exec(stateSource);
+if (!playModesMatch) throw new Error('PLAY_MODES is no longer a plain array literal in the state module');
+const playModesDeclaration = playModesMatch[1];
 
 const CONTROLS = ['shuffleArrayInPlace', 'reorderQueueForShufflePlaybackOrder',
   'playbackHistoryPush', 'playbackHistoryPop', 'clearPlaybackHistory', 'stopAtQueueEnd',
@@ -71,6 +76,10 @@ function player(opts) {
     [
       ...CONTROLS.map((n) => namedFunctionSource(controlsSource, n)),
       namedFunctionSource(queueSource, 'queueItemKey'),
+      // The cycle order is one list shared with the snapshot restore, so the
+      // sandbox takes the declaration from the state module rather than a copy
+      // that could quietly disagree with what the app runs.
+      'var PLAY_MODES = ' + playModesDeclaration + ';',
       'var playMode = ' + JSON.stringify(sandbox.playMode) + ';',
     ].join('\n'),
     sandbox
