@@ -511,6 +511,16 @@ class LocalMusicLibrary {
           lyricSource: source.lyricSource === 'sidecar' ? 'sidecar' : (source.lyricSource === 'embedded' ? 'embedded' : ''),
           importedAt: Math.max(0, Number(source.importedAt) || 0),
           addedAt: Math.max(0, Number(source.addedAt) || Number(source.importedAt) || 0),
+          // An index written before this field existed cannot say whether its
+          // parse worked, so fall back to what a working parse leaves behind:
+          // a container. No codec at all means the tag reader never answered,
+          // and those rows are retried on the next scan rather than showing
+          // year 0 and bitrate 0 for the life of the library. A record that
+          // already carries the flag keeps it — a file with genuinely no tags
+          // is not a failure and must not be re-read for ever.
+          parseFailed: source.parseFailed === undefined
+            ? !cleanText(source.codec, '', 100)
+            : source.parseFailed === true,
         };
         nextRecords.set(id, record);
         nextOrder.push(id);
@@ -657,17 +667,26 @@ class LocalMusicLibrary {
     return this.scanInFlight;
   }
 
-  async runFolderScan(onProgress) {
-    const orderSnapshot = this.order.slice();
-    const recordsSnapshot = new Map(this.records);
+  // The registered folders plus every directory the index already points at
+  // that sits outside them. Both callers need this list and neither may work it
+  // out for itself: the scanner walks these directories, and the watcher has to
+  // watch exactly the same ones. A library whose folders were never registered
+  // — an index written before folder tracking existed, or anything brought in
+  // by file picker — otherwise gets a rescan that sees it and a watcher that
+  // does not, which is how "automatic sync" quietly degrades into "the safety
+  // sweep, every two minutes, if it happens to run".
+  //
+  // Orphan roots carry the relative prefix their existing records already use,
+  // so a file dropped in beside them lands as "Album/Two.flac" and not a bare
+  // "Two.flac" — the relative path is the only grouping the index has.
+  scanRoots(order, records) {
+    const orderList = Array.isArray(order) ? order : this.order;
+    const recordMap = records instanceof Map ? records : this.records;
     const roots = this.folders.slice();
     const seenRoots = new Set(roots.map((root) => normalizedPathIdentity(root)));
-    // Orphan roots carry the relative prefix their existing records already
-    // use, so a file dropped in beside them lands as "Album/Two.flac" and not
-    // a bare "Two.flac" — the relative path is the only grouping the index has.
     const orphanRoots = [];
-    for (const id of orderSnapshot) {
-      const record = recordsSnapshot.get(id);
+    for (const id of orderList) {
+      const record = recordMap.get(id);
       if (!record) continue;
       const directory = path.dirname(record.audioPath);
       const identity = normalizedPathIdentity(directory);
@@ -686,6 +705,22 @@ class LocalMusicLibrary {
       });
       seenRoots.add(identity);
     }
+    return { roots, orphanRoots };
+  }
+
+  // The absolute directories fs.watch has to hold: the same set scanRoots
+  // walks. Duplicates are collapsed by identity in scanRoots, so the count is
+  // one entry per distinct directory — tens for a typical album library, not
+  // one per file.
+  watchDirectories() {
+    const { roots, orphanRoots } = this.scanRoots();
+    return roots.concat(orphanRoots.map((entry) => entry.root));
+  }
+
+  async runFolderScan(onProgress) {
+    const orderSnapshot = this.order.slice();
+    const recordsSnapshot = new Map(this.records);
+    const { roots, orphanRoots } = this.scanRoots(orderSnapshot, recordsSnapshot);
     const entries = [];
     const found = new Set();
     const unreadable = new Set();
@@ -733,7 +768,17 @@ class LocalMusicLibrary {
         }
         scanned += 1;
         const previous = recordsSnapshot.get(localFileId(filePath));
+        // Unchanged files are skipped so a 50k-track library does not re-read
+        // every tag on each sweep — but a record whose parse FAILED must not be
+        // skipped, or that emptiness is permanent: the file will not change, so
+        // no later scan would ever offer it a second chance. That is how a
+        // library ends up with hundreds of rows showing year 0, bitrate 0 and an
+        // empty codec for files the tag reader reads perfectly on the next
+        // attempt (a locked handle, a moment of disk pressure, an interrupted
+        // first scan). The flag is set by parseEntry, so a record that parsed
+        // fine — even if the file simply carries no tags — is still skipped.
         if (previous
+          && !previous.parseFailed
           && Math.round(Number(previous.mtimeMs) || 0) === Math.round(Number(stat.mtimeMs) || 0)
           && Number(previous.size) === Number(stat.size)) continue;
         const relativePath = `${prefix}${toRelativePath(path.relative(root, filePath)) || path.basename(filePath)}`;
@@ -1111,6 +1156,10 @@ class LocalMusicLibrary {
         size: Math.max(0, Number(stat.size) || 0),
         mtimeMs: Math.max(0, Number(stat.mtimeMs) || 0),
         revision: audioRevision(stat),
+        // Whether the tag reader actually answered. A scan skips files that
+        // have not changed, so this flag is the only thing that lets a failed
+        // read be tried again instead of being frozen into the index.
+        parseFailed: !!metadataError,
         coverPath: cover.path,
         coverMime: cover.mime,
         lyric,
@@ -1264,11 +1313,12 @@ class LocalMusicLibrary {
   // scanned, so a rescan never reaches into a directory the user never chose.
   rescan(onProgress) {
     // Unchanged files are skipped rather than re-parsed: a 500-track library
-    // would otherwise re-read every tag on each rescan. Both sides are rounded
-    // because record.mtimeMs is stored at whatever precision the OS handed out
-    // (and survives JSON untouched), while audioRevision() fingerprints with
-    // Math.round — comparing one rounded side against one raw side would
-    // report every track as newly edited forever.
+    // would otherwise re-read every tag on each rescan. The one exception is a
+    // record whose parse failed, which is retried because nothing else ever
+    // would be. Both sides are rounded because record.mtimeMs is stored at
+    // whatever precision the OS handed out (and survives JSON untouched), while
+    // audioRevision() fingerprints with Math.round — comparing one rounded side
+    // against one raw side would report every track as newly edited forever.
     return this.scanFolders(onProgress);
   }
 

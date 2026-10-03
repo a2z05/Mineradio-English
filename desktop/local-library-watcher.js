@@ -122,6 +122,19 @@ class LocalLibraryWatcher {
     try {
       const result = await this.library.scanFolders();
       this.changed += 1;
+      // A scan changes the very list this watcher is watching. Indexing a
+      // subdirectory beside an indexed file turns it into an orphan root of its
+      // own, and deleting the last file under one takes it away again — so the
+      // roots read at start() are stale the moment the walk finds something.
+      // Nothing else re-reads them on this path: the watcher's own scans never
+      // leave the watcher, so without this a library with no registered folder
+      // gains directories the sweep covers and fs.watch never does.
+      // Compared first because this runs after every debounced walk, and
+      // readdir-ing every root on each one is not free on a large library.
+      if (typeof this.library.watchDirectories === 'function') {
+        const roots = this.library.watchDirectories();
+        if (roots.join('\n') !== this.watchRoots.join('\n')) this.applyWatchRoots(roots);
+      }
       this.lastResult = result || null;
       if (typeof this.onChange === 'function') this.onChange({ reason: reason || 'watch', result });
       return result;

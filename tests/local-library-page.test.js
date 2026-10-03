@@ -476,6 +476,64 @@ test('the editor reports a change only when a field really moved', () => {
   assert.equal(byKey('track').after, '9999', 'a track number is clamped into range');
 });
 
+// 0 is how "no year", "no track number" and "no disc" are stored — 923 of 984
+// tracks in a real library. Reading it back through String() made the baseline
+// "0" while libraryMetadataChanges normalises "0" to "", so every one of those
+// tracks offered three changes nobody made, and saving a title rewrite also
+// wrote year=0, track=0 and disc=0 into the file.
+test('an unset numeric field starts empty, not zero', () => {
+  const sandbox = seed([]);
+  vm.runInNewContext(
+    [
+      namedFunctionSource(editorSource, 'libraryEditorBaselineValue'),
+      namedFunctionSource(editorSource, 'libraryMetadataChanges'),
+      `var LIBRARY_EDITOR_FIELDS = ${JSON.stringify([
+        ['name', 'Title'], ['artist', 'Artist'], ['album', 'Album'], ['albumArtist', 'Album artist'],
+        ['genre', 'Genre'], ['year', 'Year', true], ['track', 'Track', true],
+        ['disc', 'Disc', true], ['composer', 'Composer'], ['comment', 'Comment'],
+      ]).replace(/\],\[/g, '],[')
+        .replace(/\["(\w+)","([^"]+)",true\]/g, '{ key: "$1", label: "$2", numeric: true }')
+        .replace(/\["(\w+)","([^"]+)"\]/g, '{ key: "$1", label: "$2" }')};`,
+      'var libraryEditorState = { songs: [], draft: {}, baseline: {} };',
+    ].join('\n'),
+    sandbox
+  );
+
+  const fields = sandbox.LIBRARY_EDITOR_FIELDS;
+  const year = fields.filter((f) => f.key === 'year')[0];
+  const title = fields.filter((f) => f.key === 'name')[0];
+  assert.equal(sandbox.libraryEditorBaselineValue(year, 0), '');
+  assert.equal(sandbox.libraryEditorBaselineValue(year, '0'), '');
+  assert.equal(sandbox.libraryEditorBaselineValue(year, undefined), '');
+  assert.equal(sandbox.libraryEditorBaselineValue(year, null), '');
+  assert.equal(sandbox.libraryEditorBaselineValue(year, 2011), '2011');
+  // A title that is literally 0 is a title — only the numeric fields lose it.
+  assert.equal(sandbox.libraryEditorBaselineValue(title, 0), '0');
+  assert.equal(sandbox.libraryEditorBaselineValue(title, 'Faint'), 'Faint');
+
+  // The whole open-then-edit path: a track with no tags at all reports nothing
+  // to save, and editing the title alone reports exactly one change.
+  const untagged = {};
+  for (let i = 0; i < fields.length; i += 1) {
+    const field = fields[i];
+    untagged[field.key] = sandbox.libraryEditorBaselineValue(
+      field, field.numeric ? 0 : ''
+    );
+  }
+  sandbox.libraryEditorState = {
+    songs: [{ localPath: 'C:/a/b.mp3' }],
+    baseline: untagged,
+    draft: Object.assign({}, untagged),
+  };
+  assert.equal(sandbox.libraryMetadataChanges().length, 0,
+    'a track with no year, track or disc tags has nothing to write');
+
+  sandbox.libraryEditorState.draft.name = 'Rewritten title';
+  const changes = sandbox.libraryMetadataChanges();
+  assert.equal(changes.length, 1, 'editing the title must not drag year=0, track=0 and disc=0 along');
+  assert.equal(changes[0].field.key, 'name');
+});
+
 test('the write path states the change and the bridge needs the opt-in', async () => {
   const writes = [];
   const sandbox = seed([]);

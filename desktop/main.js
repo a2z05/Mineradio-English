@@ -4810,7 +4810,12 @@ function broadcastLocalLibraryChange(reason, result) {
 // be watched, and one removed has to stop being watched.
 function syncLocalLibraryWatcher() {
   try {
-    localLibraryWatcher.applyWatchRoots(localMusicLibrary.folders);
+    // The same directories the scanner walks, not just the registered folders.
+    // Passing folders alone left every library that has no registered folder —
+    // a legacy index, or anything imported by file picker — with a scanner that
+    // found those files and a watcher watching nothing, so a dropped album was
+    // only noticed by the two-minute sweep.
+    localLibraryWatcher.applyWatchRoots(localMusicLibrary.watchDirectories());
   } catch (error) {
     console.warn('[LocalMusic] watcher could not follow the folder list:', error && error.message || error);
   }
@@ -5006,7 +5011,13 @@ ipcMain.handle('mineradio-local-library-scan', async (event) => {
     sender.send('mineradio-local-library-scan-progress', { scanned });
   };
   try {
-    return await localMusicLibrary.scanFolders(emit);
+    const result = await localMusicLibrary.scanFolders(emit);
+    // A walk indexes directories that were not roots when it started, and
+    // forgets ones it found nothing under. The renderer's Refresh is a scan
+    // like any other, so it resyncs like every other mutation above — the
+    // watcher's own scans do their own re-read, this is the other half.
+    syncLocalLibraryWatcher();
+    return result;
   } catch (error) {
     return { ok: false, count: 0, tracks: [], added: 0, changed: 0, removed: 0, error: error.code || error.message || 'LOCAL_LIBRARY_SCAN_FAILED' };
   }

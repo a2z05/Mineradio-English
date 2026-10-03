@@ -264,6 +264,48 @@ test('a scan that is already running is not started a second time', async () => 
   }
 });
 
+// A scan indexes directories that were not roots when it started: drop a file
+// in a subdirectory beside an indexed one and that subdirectory becomes an
+// orphan root of its own. The watcher's own scans never leave the watcher, so
+// this is the path where nothing else re-reads the list.
+test('a scan that changes the orphan roots re-applies the watch set', async () => {
+  let roots = ['C:/Music/Album'];
+  const library = {
+    scans: 0,
+    async scanFolders() {
+      this.scans += 1;
+      // First walk finds Album/Disc 2/Two.mp3; the second finds nothing under
+      // Album at all, so its root goes away again.
+      roots = this.scans === 1
+        ? ['C:/Music/Album', 'C:/Music/Album/Disc 2']
+        : [];
+      return { ok: true, added: this.scans === 1 ? 1 : 0 };
+    },
+    watchDirectories() { return roots.slice(); },
+  };
+  const watcher = new LocalLibraryWatcher({ library, debounceMs: 40, intervalMs: 60000 });
+  watcher.applyWatchRoots(roots);
+  try {
+    assert.equal(watcher.watchRoots.length, 1, 'starts on the root the index had');
+    watcher.note('C:/Music', 'Two.mp3');
+    await wait(320);
+    assert.equal(library.scans, 1);
+    assert.deepEqual(watcher.watchRoots.slice(),
+      ['C:/Music/Album', 'C:/Music/Album/Disc 2'],
+      'the walk just created that root; fs.watch has to be holding it, or a file '
+      + 'dropped there is only ever seen by the two-minute sweep');
+
+    // And the other direction: a root the index no longer points at must be
+    // given up rather than watched forever.
+    watcher.note('C:/Music', 'Gone.mp3');
+    await wait(320);
+    assert.equal(library.scans, 2);
+    assert.deepEqual(watcher.watchRoots.slice(), [], 'a root with no records left is not watched');
+  } finally {
+    watcher.stop();
+  }
+});
+
 test('the sweep runs even where fs.watch cannot', async () => {
   const library = fakeLibrary();
   const watcher = new LocalLibraryWatcher({ library, debounceMs: 40, intervalMs: 120, intervalFloorMs: 20 });
@@ -385,4 +427,62 @@ test('background sync is announced to the renderer and subscribed once', () => {
   assert.match(mainSource, /startLocalLibraryWatcher\(\)/);
   assert.match(mainSource, /new LocalLibraryWatcher\(\{/);
   assert.match(mainSource, /syncLocalLibraryWatcher\(\);/);
+
+  // The watcher has to be handed the directories the scanner walks. Passing
+  // localMusicLibrary.folders alone left any library with no registered folder
+  // — a legacy index, or anything imported by file picker — watching nothing,
+  // so its files were only noticed by the two-minute sweep.
+  assert.match(mainSource,
+    /localLibraryWatcher\.applyWatchRoots\(localMusicLibrary\.watchDirectories\(\)\)/,
+    'the watcher follows the scan roots, not just the registered folders');
+});
+
+// The body of one handler, ending where the next one begins — asserting that a
+// call exists "somewhere in main.js" is not asserting that this handler makes it.
+function ipcHandlerBody(source, channel) {
+  const at = source.indexOf("ipcMain.handle('" + channel + "'");
+  if (at < 0) return null;
+  const next = source.indexOf('ipcMain.handle(', at + 1);
+  return source.slice(at, next < 0 ? source.length : next);
+}
+
+test('every folder mutation resyncs the watcher', () => {
+  // Adding or removing a root changes what fs.watch has to hold. A handler that
+  // mutates the folder list without re-syncing leaves the watcher on the old
+  // set: a newly added folder is then only noticed by the two-minute sweep, and
+  // a removed one keeps a handle open on a directory nobody scans any more.
+  for (const channel of [
+    'mineradio-local-library-folder-add',
+    'mineradio-local-library-folder-remove',
+    'mineradio-local-library-folder-rescan',
+    'mineradio-local-library-scan',
+    'mineradio-local-library-sync',
+  ]) {
+    const body = ipcHandlerBody(mainSource, channel);
+    assert.ok(body, 'the ' + channel + ' handler must exist');
+    assert.match(body, /syncLocalLibraryWatcher\(\)/,
+      channel + ' changes what is watched and has to tell the watcher');
+  }
+
+  // And the two that actually change the list do change it, so the resync is
+  // not resyncing a list that never moved.
+  assert.match(ipcHandlerBody(mainSource, 'mineradio-local-library-folder-add'),
+    /localMusicLibrary\.addFolder\(/);
+  assert.match(ipcHandlerBody(mainSource, 'mineradio-local-library-folder-remove'),
+    /localMusicLibrary\.removeFolder\(/);
+
+  // The renderer's half: both handlers repaint the header button, whose label
+  // is the only thing telling the user whether they are being asked to add or
+  // to add another. Forgetting it left "Add music folder" under a library that
+  // already had one.
+  for (const fn of ['libraryAddMusicFolder', 'libraryRemoveMusicFolder']) {
+    const at = pageSource.indexOf('async function ' + fn + '(');
+    assert.ok(at > 0, fn + ' must exist');
+    const next = pageSource.indexOf('\nasync function ', at + 1);
+    const body = pageSource.slice(at, next < 0 ? pageSource.length : next);
+    assert.match(body, /libraryUpdateFolderControls\(\)/, fn + ' must relabel the folder button');
+  }
+  assert.match(pageSource,
+    /localLibraryStore\.folders\.length \? 'Add folder' : 'Add music folder'/,
+    'the label is derived from the folder count, not set once');
 });

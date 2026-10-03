@@ -189,34 +189,74 @@ function encodeFlacBlock(type, data, isLast) {
   return Buffer.concat([descriptor, data]);
 }
 
-function buildVorbisComment(fields) {
-  const vendor = Buffer.from('Mineradio', UTF8);
+// A Vorbis comment is ONE block holding every field the file has, so building
+// it from the edited fields alone would silently drop everything the user did
+// not touch — TITLE, ARTIST, DATE, and whatever custom keys a tagger wrote.
+// The ID3 path carries untouched frames across; this is the same promise for
+// FLAC. Edited fields are overlaid on what was already there, and an emptied
+// field removes its key, matching "clearing a frame" on the MP3 side.
+//
+// `disc` maps to DISCNUMBER. It used to map to TRACKTOTAL, which meant setting
+// the disc number on a FLAC overwrote how many discs the album has.
+const VORBIS_KEYS = {
+  name: 'TITLE',
+  title: 'TITLE',
+  artist: 'ARTIST',
+  album: 'ALBUM',
+  albumArtist: 'ALBUMARTIST',
+  genre: 'GENRE',
+  year: 'DATE',
+  track: 'TRACKNUMBER',
+  disc: 'DISCNUMBER',
+  composer: 'COMPOSER',
+  comment: 'COMMENT'
+};
+
+function parseVorbisComment(block) {
+  const fallback = Buffer.from('Mineradio', UTF8);
+  if (!Buffer.isBuffer(block) || block.length < 8) return { vendor: fallback, entries: [] };
+  const vendorLength = block.readUInt32LE(0);
+  if (vendorLength + 8 > block.length) return { vendor: fallback, entries: [] };
+  const vendor = Buffer.from(block.slice(4, 4 + vendorLength));
+  let offset = 4 + vendorLength;
+  const count = block.readUInt32LE(offset);
+  offset += 4;
   const entries = [];
-  const map = {
-    name: 'TITLE',
-    title: 'TITLE',
-    artist: 'ARTIST',
-    album: 'ALBUM',
-    albumArtist: 'ALBUMARTIST',
-    genre: 'GENRE',
-    year: 'DATE',
-    track: 'TRACKNUMBER',
-    disc: 'TRACKTOTAL',
-    composer: 'COMPOSER',
-    comment: 'COMMENT'
-  };
   const seen = new Set();
-  for (const [key, name] of Object.entries(map)) {
-    if (fields[key] === undefined) continue;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    const value = String(fields[key] || '').trim();
-    entries.push(Buffer.from(`${name}=${value}`, UTF8));
+  for (let i = 0; i < count && offset + 4 <= block.length; i += 1) {
+    const length = block.readUInt32LE(offset);
+    offset += 4;
+    if (length < 0 || offset + length > block.length) break;
+    const entry = block.toString(UTF8, offset, offset + length);
+    offset += length;
+    // Duplicate keys are legal and readers take the first, so keeping the first
+    // here is what stops a rewrite from reordering somebody's tagger output.
+    const eq = entry.indexOf('=');
+    if (eq <= 0) continue;
+    const key = entry.slice(0, eq).toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push({ key, value: entry.slice(eq + 1) });
   }
+  return { vendor, entries };
+}
+
+function buildVorbisComment(fields, existingBlock) {
+  const { vendor, entries } = parseVorbisComment(existingBlock);
+  const merged = new Map();
+  for (const entry of entries) merged.set(entry.key, entry.value);
+  for (const [field, key] of Object.entries(VORBIS_KEYS)) {
+    if (fields[field] === undefined) continue;
+    const value = String(fields[field] || '').trim();
+    if (value) merged.set(key, value);
+    else merged.delete(key);
+  }
+  const encoded = [];
+  for (const [key, value] of merged) encoded.push(Buffer.from(`${key}=${value}`, UTF8));
   const parts = [Buffer.alloc(4), vendor, Buffer.alloc(4)];
   parts[0].writeUInt32LE(vendor.length, 0);
-  parts[2].writeUInt32LE(entries.length, 0);
-  for (const entry of entries) {
+  parts[2].writeUInt32LE(encoded.length, 0);
+  for (const entry of encoded) {
     const len = Buffer.alloc(4);
     len.writeUInt32LE(entry.length, 0);
     parts.push(len, entry);
@@ -261,6 +301,16 @@ async function swapInTemp(filePath, build) {
     await target.close();
     target = null;
     if (!bytesWritten) throw new Error('EMPTY_TAG_WRITE');
+    // Close the reader BEFORE the swap, not in the finally below. On Windows a
+    // rename cannot replace a file that any handle still has open, and the
+    // source handle we are reading from is exactly such a handle — so the swap
+    // failed with EPERM, the catch deleted the new tags, and the finally then
+    // closed a handle whose only remaining job had already been rejected. Every
+    // save on Windows hit this: the editor reported "Could not write those tags"
+    // and the file was left untouched, which is why the writer looked correct
+    // and did nothing.
+    await source.close();
+    source = null;
     await fs.promises.rename(temporary, filePath);
     return true;
   } catch (error) {
@@ -322,7 +372,8 @@ async function writeFlac(filePath, fields) {
     if (audioStart >= fileSize) throw new Error('FLAC_HAS_NO_AUDIO');
     const streamInfo = blocks.filter((block) => block.type === 0);
     if (!streamInfo.length) throw new Error('FLAC_MISSING_STREAMINFO');
-    const comment = buildVorbisComment(fields);
+    const existingComment = blocks.find((block) => block.type === 4);
+    const comment = buildVorbisComment(fields, existingComment && existingComment.data);
     // Rebuild the block list: STREAMINFO first (the spec requires it), then
     // everything else in its original order with our comment where the old one
     // was, or appended when there was not one.

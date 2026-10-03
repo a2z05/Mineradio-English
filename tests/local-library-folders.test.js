@@ -136,6 +136,47 @@ test('a rescan still reaches files that were imported by hand, with their prefix
   });
 });
 
+// The scanner was taught to reach a library with no registered folder; the
+// watcher was not, which meant the same library got a rescan that found new
+// files and an fs.watch on nothing at all — automatic sync then meant the
+// two-minute safety sweep and nothing else.
+test('the watcher is given the same directories the scanner walks', async (t) => {
+  await withLibrary(t, async (library, root) => {
+    const music = path.join(root, 'music');
+    const album = path.join(music, 'Album');
+    fs.mkdirSync(album, { recursive: true });
+    fs.writeFileSync(path.join(album, 'One.flac'), Buffer.from('one'));
+    await library.importFiles([{ path: path.join(album, 'One.flac'), relativePath: 'Album/One.flac' }]);
+
+    assert.deepEqual(library.folders, [], 'this library has no registered folder');
+    const roots = library.watchDirectories();
+    assert.equal(roots.includes(album), true,
+      'the directory the index points at has to be watched, or a file dropped '
+      + 'beside it is only noticed by the sweep: ' + JSON.stringify(roots));
+
+    // Registering the parent folds the orphan into the folder it sits under, so
+    // one recursive watch covers it rather than two overlapping ones.
+    const added = await library.addFolder(music);
+    assert.equal(added.ok !== false, true);
+    assert.deepEqual(library.watchDirectories(), [music],
+      'a directory inside a registered folder is covered by that folder');
+  });
+});
+
+test('watch roots collapse to one entry per distinct directory', async (t) => {
+  await withLibrary(t, async (library, root) => {
+    const music = path.join(root, 'music');
+    for (const album of ['A', 'B', 'C']) {
+      const dir = path.join(music, album);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${album}.flac`), Buffer.from(album));
+      await library.importFiles([{ path: path.join(dir, `${album}.flac`), relativePath: `${album}/${album}.flac` }]);
+    }
+    // One folder of three albums is three watch handles, not nine files' worth.
+    assert.equal(library.watchDirectories().length, 3);
+  });
+});
+
 test('the new tag fields ride along into the serialized track', async (t) => {
   await withLibrary(t, async (library, root) => {
     const music = path.join(root, 'music');
@@ -163,6 +204,97 @@ test('the new tag fields ride along into the serialized track', async (t) => {
     assert.equal(again.changed, 1);
     assert.equal(again.tracks[0].addedAt, addedAt);
   });
+});
+
+// A record whose first parse failed used to be frozen there forever. The scan
+// skips files whose mtime and size have not moved — correct for a library this
+// size — so a single bad read (a locked handle, an interrupted first scan) left
+// year 0, bitrate 0 and an empty codec on rows the tag reader reads perfectly
+// on the next attempt, and no later scan ever offered it a second chance. In a
+// real library that was 923 of 984 tracks.
+test('a record that never parsed is retried even when the file has not changed', async (t) => {
+  await withLibrary(t, async (library, root) => {
+    const music = path.join(root, 'music');
+    fs.mkdirSync(music, { recursive: true });
+    fs.writeFileSync(path.join(music, 'Song.flac'), Buffer.from('x'));
+
+    // The first pass fails to read the tag. The file itself is fine.
+    library.parseMetadata = async () => { throw new Error('reader had a bad day'); };
+    await library.addFolder(music);
+    const first = await library.scanFolders();
+    const broken = first.tracks[0];
+    assert.equal(broken.codec, '');
+    assert.equal(broken.year, 0);
+    assert.ok(broken.localPath, 'the row exists; only its metadata is missing');
+
+    // The reader recovers, and nothing on disk moves. The row has to heal —
+    // if it does not, the empty values are permanent, because the file will
+    // never look edited to a scan that only compares mtime and size.
+    fakeMetadata(library);
+    const second = await library.scanFolders();
+    const healed = second.tracks.find((track) => track.localPath === broken.localPath);
+    assert.ok(healed, 'the track must still be there after the retry');
+    assert.equal(healed.codec, 'flac');
+    assert.equal(healed.year, 2024);
+    assert.equal(healed.track, 1);
+    assert.ok(healed.bitrate > 0, 'a row with no bitrate cannot show how big the file is');
+
+    // And once it has parsed, an untouched file goes back to being skipped:
+    // otherwise every rescan would re-read the whole library.
+    let parses = 0;
+    const counting = library.parseMetadata;
+    library.parseMetadata = async (filePath) => { parses += 1; return counting(filePath); };
+    await library.scanFolders();
+    assert.equal(parses, 0, 'a healthy, unchanged file is not re-read on every scan');
+  });
+});
+
+// The flag only helps libraries written after it existed. An index from an
+// older build has no flag at all, and those are exactly the indexes full of
+// rows that never got parsed — so the load has to work out which of them to
+// retry, once, rather than leaving them empty for the life of the install.
+test('an index written before the retry flag existed is healed on the next scan', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mineradio-local-legacy-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const profile = path.join(root, 'profile');
+  const music = path.join(root, 'music');
+  fs.mkdirSync(music, { recursive: true });
+  fs.writeFileSync(path.join(music, 'Song.flac'), Buffer.from('x'));
+
+  const first = new LocalMusicLibrary({ userDataPath: profile });
+  fakeMetadata(first);
+  await first.addFolder(music);
+  await first.scanFolders();
+
+  // Rewrite the index the way an older build would have left it: no flag, and
+  // the tag fields a failed parse produces.
+  const indexPath = path.join(profile, 'local-music-library.json');
+  const raw = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+  for (const record of raw.records) {
+    delete record.parseFailed;
+    record.codec = '';
+    record.year = 0;
+    record.bitrate = 0;
+  }
+  fs.writeFileSync(indexPath, JSON.stringify(raw));
+
+  const reopened = new LocalMusicLibrary({ userDataPath: profile });
+  fakeMetadata(reopened);
+  let parsed = 0;
+  const counting = reopened.parseMetadata;
+  reopened.parseMetadata = async (filePath) => { parsed += 1; return counting(filePath); };
+
+  const healed = await reopened.rescan();
+  assert.equal(parsed, 1, 'the legacy row is read again even though the file never changed');
+  const track = healed.tracks.filter((row) => row.localPath.indexOf('Song') >= 0)[0];
+  assert.ok(track, 'the track is still in the library');
+  assert.equal(track.codec, 'flac');
+  assert.equal(track.year, 2024);
+  assert.ok(track.bitrate > 0);
+
+  parsed = 0;
+  await reopened.rescan();
+  assert.equal(parsed, 0, 'once healed it is skipped like any other unchanged file');
 });
 
 test('favourites, ratings and counters survive a reload and never go out of range', async (t) => {

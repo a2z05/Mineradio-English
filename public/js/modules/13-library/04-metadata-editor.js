@@ -24,6 +24,17 @@ var LIBRARY_EDITOR_FIELDS = [
   { key: 'comment', label: 'Comment' }
 ];
 
+// What a field starts as in the form. Kept out of the open function so it can
+// be tested without a DOM, because it is where a whole library's worth of
+// phantom edits comes from: 0 is how "no year", "no track number" and "no disc"
+// are stored — 923 of 984 tracks here — and showing it as a value makes the
+// diff claim three changes nobody made, so saving a title rewrite also wrote
+// year=0, track=0 and disc=0 into the file.
+function libraryEditorBaselineValue(field, value) {
+  if (field && field.numeric && !(Number(value) > 0)) return '';
+  return value === undefined || value === null ? '' : String(value);
+}
+
 function libraryOpenMetadataEditor(songs) {
   var list = Array.isArray(songs) && songs.length ? songs.slice() : [];
   if (!list.length) {
@@ -60,8 +71,7 @@ function libraryOpenMetadataEditor(songs) {
   var baseline = {};
   for (var i = 0; i < LIBRARY_EDITOR_FIELDS.length; i += 1) {
     var field = LIBRARY_EDITOR_FIELDS[i];
-    var value = single ? single[field.key] : '';
-    baseline[field.key] = value === undefined || value === null ? '' : String(value);
+    baseline[field.key] = libraryEditorBaselineValue(field, single ? single[field.key] : '');
   }
   libraryEditorState.baseline = baseline;
   libraryEditorState.draft = Object.assign({}, baseline);
