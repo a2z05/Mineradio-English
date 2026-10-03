@@ -48,6 +48,12 @@ function localLibraryUserState(song) {
 }
 
 function localLibraryIsFavorite(song) {
+  // Every module is bundled into one classic script, so this declaration is
+  // hoisted above the statement below that fills the store in — and the player
+  // calls updateLikeButtons() from an earlier module's top level. Reading an
+  // object that does not exist yet would throw there, and an uncaught throw
+  // stops the bundle for good: nothing after that line ever runs.
+  if (!localLibraryStore || !localLibraryStore.userData) return false;
   return localLibraryUserState(song).favorite === true;
 }
 
@@ -601,6 +607,14 @@ function libraryGroupTracks(query) {
 
 // Every write goes to the main process and adopts its answer. Optimistic UI
 // would be faster by a frame, and wrong the first time the disk is busy.
+// The hearts in the player read this store rather than keeping a second copy
+// of the flag, so a favourite set from a row or a context menu has to reach
+// them instead of waiting for the next track change. Guarded because the
+// startup bindings call updateLikeButtons() before this module is parsed.
+function notifyLikeButtonsChanged() {
+  if (typeof updateLikeButtons === 'function') updateLikeButtons();
+}
+
 async function librarySetFavorite(song, favorite) {
   var id = localLibrarySongKey(song);
   if (!id || !window.desktopWindow || typeof window.desktopWindow.setLocalLibraryUser !== 'function') return null;
@@ -611,6 +625,7 @@ async function librarySetFavorite(song, favorite) {
     entry.rating = result.rating || entry.rating || 0;
     localLibraryStore.userData.songs[id] = entry;
     invalidateLocalLibraryIndex();
+    notifyLikeButtonsChanged();
   }
   return result;
 }
@@ -624,6 +639,7 @@ async function libraryToggleFavorite(song) {
     entry.favorite = !!result.favorite;
     localLibraryStore.userData.songs[id] = entry;
     invalidateLocalLibraryIndex();
+    notifyLikeButtonsChanged();
   }
   return result;
 }

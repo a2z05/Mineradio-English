@@ -159,6 +159,10 @@ function paintMiniPlayerHeart() {
   } catch (e) { }
   btn.classList.toggle('liked', liked);
   btn.setAttribute('aria-pressed', liked ? 'true' : 'false');
+  // The other two hearts retitle themselves with the action they will take; a
+  // tooltip that still offers to like a track already liked contradicts the
+  // pressed state sitting next to it.
+  btn.title = liked ? 'Remove from favourites' : 'Add to favourites';
 }
 
 function paintMiniPlayerProgress() {

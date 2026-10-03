@@ -38,6 +38,7 @@ const STORE_NAMES = [
   'localLibraryCompareHits', 'localLibrarySearchSongs',
   'librarySearchTracks', 'localLibrarySearchCandidates',
   'libraryGroupTracks', 'librarySetFavorite', 'libraryToggleFavorite',
+  'notifyLikeButtonsChanged',
   'librarySetRating', 'libraryRecordPlaybackEvent',
 ];
 

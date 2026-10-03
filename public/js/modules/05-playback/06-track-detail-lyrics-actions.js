@@ -1269,7 +1269,23 @@ function songAccountUnsupportedMessage(provider, action) {
 function isCloudSong(song) {
   return !!(song && song.id && songAccountProvider(song) === 'netease');
 }
+// Whether a song is one of our own files. The store's own id is not a usable
+// test: localFileIdOf falls back to song.id, which every cloud track also has,
+// so the file url / key is what actually marks a track as local.
+function isLocalFavoriteSong(song) {
+  if (!song) return false;
+  if (song.localUrl || song.localKey || song.localFileId) return true;
+  return song.type === 'local';
+}
 function isSongLiked(song) {
+  // A favourite on disk lives in the library store the library page already
+  // writes to; likedSongMap only ever holds cloud saves. Reading it alone left
+  // every heart in the player unlit for the tracks this build plays offline.
+  // Guarded because the startup bindings call updateLikeButtons() before the
+  // store module has been parsed.
+  if (isLocalFavoriteSong(song) && typeof localLibraryIsFavorite === 'function') {
+    return localLibraryIsFavorite(song);
+  }
   var key = songAccountStateKey(song);
   return !!(key && likedSongMap[key]);
 }
@@ -1407,6 +1423,34 @@ function refreshSearchResultActionStates() {
   });
 }
 async function toggleLikeSong(song) {
+  // A file on disk has no cloud adapter by design, so it has to be handled
+  // before the adapter lookup below. After it, this branch can never run: the
+  // guard would already have toasted "does not support syncing to likes", which
+  // is how the player's own heart became a control that did nothing.
+  if (isLocalFavoriteSong(song)) {
+    if (typeof libraryToggleFavorite !== 'function' || typeof localLibraryIsFavorite !== 'function') {
+      showToast('Favourites are unavailable until the library has loaded');
+      return;
+    }
+    var localKey = localLibrarySongKey(song);
+    if (localKey && likeBusyMap[localKey]) return;
+    if (localKey) likeBusyMap[localKey] = true;
+    try {
+      // The store writes through IPC and repaints the hearts itself, so this
+      // side only has to report the result and redraw the rows around it.
+      var saved = await libraryToggleFavorite(song);
+      if (!saved) {
+        showToast('Could not save that favourite');
+        return;
+      }
+      showToast(localLibraryIsFavorite(song) ? 'Added to your Likes' : 'Removed from your Likes');
+      safeRenderQueuePanel('local-favorite-toggle', { scrollCurrent: miniQueueOpen });
+      refreshSearchResultActionStates();
+    } finally {
+      if (localKey) delete likeBusyMap[localKey];
+    }
+    return;
+  }
   var provider = songAccountProvider(song);
   var adapter = songAccountAdapter(provider);
   if (!adapter || !adapter.like || !adapter.likeUrl) {
@@ -1453,7 +1497,9 @@ async function toggleLikeSong(song) {
     refreshSearchResultActionStates();
   }
 }
-function toggleLikeCurrent() { toggleLikeSong(currentCoverSong()); }
+// Returns the save so a caller can wait for it; dropping the promise meant the
+// only way to observe the write finish was to guess how long the IPC took.
+function toggleLikeCurrent() { return toggleLikeSong(currentCoverSong()); }
 function toggleLikeSearchResult(i) { if (playlist[i]) toggleLikeSong(playlist[i]); }
 function toggleLikeQueueIndex(i) { if (playQueue[i]) toggleLikeSong(playQueue[i]); }
 function toggleLikeDetailSong(song) { toggleLikeSong(song); }
