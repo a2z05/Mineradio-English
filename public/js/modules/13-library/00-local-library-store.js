@@ -30,6 +30,11 @@ var localLibraryStore = {
 // into a frozen window.
 function invalidateLocalLibraryIndex() {
   localLibraryStore.index = null;
+  // The route cache sorts and filters on rating, plays and last played, which
+  // live in the user state rather than in the track. A favourite toggle or a
+  // play count therefore has to drop it too, or the table keeps the order it
+  // had before the change.
+  if (typeof libraryInvalidateRouteCache === 'function') libraryInvalidateRouteCache();
 }
 
 function localFileIdOf(song) {
@@ -160,6 +165,10 @@ function setLocalLibraryStoreTracks(tracks) {
   if (typeof updateLocalLibraryChoiceLabel === 'function') {
     updateLocalLibraryChoiceLabel(localLibraryStore.tracks.length);
   }
+  // The sorted/filtered table is cached per route, and a route's contents are
+  // a function of the tracks — so a rescan has to drop it or the user keeps
+  // looking at the library as it was before the scan.
+  if (typeof libraryInvalidateRouteCache === 'function') libraryInvalidateRouteCache();
   return localLibraryStore.tracks;
 }
 

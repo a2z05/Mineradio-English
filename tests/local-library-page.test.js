@@ -18,6 +18,7 @@ const read = (p) => fs.readFileSync(path.join(appRoot, p), 'utf8');
 
 const storeSource = read('public/js/modules/13-library/00-local-library-store.js');
 const pageSource = read('public/js/modules/13-library/01-library-page.js');
+const viewsSource = read('public/js/modules/13-library/08-library-views.js');
 const menuSource = read('public/js/modules/13-library/02-library-context-menu.js');
 const playlistSource = read('public/js/modules/13-library/03-library-playlists.js');
 const editorSource = read('public/js/modules/13-library/04-metadata-editor.js');
@@ -100,6 +101,10 @@ function seed(tracks, userData, extra) {
       + '\n' + varBlock(storeSource, 'LIBRARY_VIEWS'),
     sandbox
   );
+  // The sort/filter module ships whole: it declares its own column tables and
+  // its own route cache, and pulling it apart name by name would mean the
+  // constants the page leans on were never seeded at all.
+  vm.runInNewContext(viewsSource, sandbox);
   return sandbox;
 }
 

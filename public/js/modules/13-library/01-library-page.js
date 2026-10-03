@@ -24,10 +24,23 @@ var libraryPage = {
   anchor: -1,
   drill: null,
   drillStamp: 0,
-  status: ''
+  status: '',
+  // Sort, filter and column state. Every route the table can show is one
+  // string, so switching view, sort and filter at once is one lookup and one
+  // rebuild — see 08-library-views.js for the route format.
+  route: '',
+  sieve: null,
+  columns: []
 };
 
 var LIBRARY_ROW_H_SONG = 54;
+// Reserved for the two inline row buttons, as the grid's last track.
+var LIBRARY_ROW_ACTIONS_W = '60px';
+// The window is translated by a flat rowHeight, so a variable-height table
+// cannot use it — a divider inside a fixed-stride list would drift a track per
+// letter. Dividers are therefore drawn as part of the row they precede, at the
+// song's own height, rather than as their own taller row.
+var LIBRARY_ROW_H_DIVIDER = 0;
 var LIBRARY_ROW_H_GROUP = 64;
 var LIBRARY_OVERSCAN = 6;
 var LIBRARY_PAGE_STORAGE_KEY = 'mineradio-library-view';
@@ -66,13 +79,22 @@ function libraryEnsureDom() {
           '<div class="library-toolbar">' +
             '<div class="library-crumb" id="library-crumb"></div>' +
             '<div class="library-toolbar-actions">' +
+              '<button class="fx-mini-btn ghost" type="button" id="library-sort-btn" onclick="libraryToggleSortMenu(event)" title="Sort and filter the tracks in this view">Sort</button>' +
               '<button class="fx-mini-btn ghost" type="button" onclick="libraryPlayRows(true)">Shuffle</button>' +
               '<button class="fx-mini-btn ghost" type="button" onclick="libraryPlayRows(false)">Play</button>' +
               '<button class="fx-mini-btn ghost" type="button" onclick="librarySelectAll()">Select all</button>' +
             '</div>' +
           '</div>' +
+          '<div class="library-sort-menu" id="library-sort-menu" hidden></div>' +
           '<div class="library-bulk" id="library-bulk" hidden></div>' +
           '<div class="library-scroller" id="library-scroller" tabindex="0">' +
+            // The header lives inside the scroller, above the spacer, so it is
+            // laid out in the same box as the rows. It used to be a sibling of
+            // the scroller, and a grid that resolves its flexible columns over
+            // a different width from the one under it puts every label a few px
+            // off its column — as soon as a scrollbar or the folder side panel
+            // appeared. Same box, same template, no measurement to keep in sync.
+            '<div class="library-columns" id="library-columns" role="row"></div>' +
             '<div class="library-spacer" id="library-spacer" style="height:0">' +
               '<div class="library-window" id="library-window" style="top:0"></div>' +
             '</div>' +
@@ -115,6 +137,15 @@ function libraryEnsureDom() {
   scroller.addEventListener('keydown', libraryOnKeyDown);
   scroller.addEventListener('click', libraryOnRowClick);
   scroller.addEventListener('contextmenu', libraryOnRowContextMenu);
+  // The column set is a function of the width, so a resize is a table change.
+  // A ResizeObserver was the first choice and looked right, but it never
+  // delivered a callback in this renderer: observing an element and changing
+  // its width produced zero calls, so the columns could not react to the window
+  // at all. The window event is what actually runs. libraryCheckColumns is the
+  // second half — the Folders view slides a side panel in and out without any
+  // window event, and that moves the row area without any event anywhere.
+  window.addEventListener('resize', libraryOnColumnsResize);
+  libraryInstallLibraryLayoutWatch(mask);
   // Dragging is on the whole page, not the row list: a track has to be droppable
   // on the bar under the scroller, the playlist pane, the queue and the folder
   // tree, none of which are inside the scroller.
@@ -345,16 +376,105 @@ function libraryCrumbHtml() {
 
 function libraryPaintHeader() {
   var count = document.getElementById('library-count');
-  if (count) count.textContent = localLibraryStore.tracks.length + ' track' + (localLibraryStore.tracks.length === 1 ? '' : 's');
+  if (count) {
+    var visible = libraryPage.songs.length;
+    var total = localLibraryStore.tracks.length;
+    // Both numbers matter: the library is this big, the table is showing that
+    // much. Saying only one of them turns a filter into a mystery.
+    count.textContent = total === visible
+      ? total + ' track' + (total === 1 ? '' : 's')
+      : visible + ' of ' + total + ' tracks';
+  }
   var crumb = document.getElementById('library-crumb');
   if (crumb) crumb.innerHTML = libraryCrumbHtml();
+  libraryPaintColumnHeader();
+}
+
+// The header row and the data rows are one grid: the template comes from the
+// same column list, written to a single custom property, so a column can never
+// drift out of alignment with the cell under it.
+function libraryGridTemplate(columns) {
+  var parts = [];
+  for (var i = 0; i < columns.length; i += 1) {
+    var column = columns[i];
+    if (column.fill) parts.push('minmax(64px,' + column.fill + 'fr)');
+    else parts.push(column.width.replace('fixed:', ''));
+  }
+  // The last track holds the row's inline buttons. The header lays out only
+  // the real columns, so this trailing track stays empty on top and the data
+  // columns line up with the labels above them either way.
+  parts.push(LIBRARY_ROW_ACTIONS_W);
+  return parts.join(' ');
+}
+
+function libraryScrollerWidth() {
+  var scroller = document.getElementById('library-scroller');
+  return scroller ? (scroller.clientWidth || 0) : 0;
+}
+
+function libraryPaintColumnHeader() {
+  var host = document.getElementById('library-columns');
+  if (!host) return;
+  if (!libraryPage.isTable) { host.innerHTML = ''; host.hidden = true; return; }
+  host.hidden = false;
+  var columns = libraryPage.columns || [];
+  var key = librarySortKeyForRoute(libraryPage.route);
+  var html = '';
+  for (var i = 0; i < columns.length; i += 1) {
+    var column = columns[i];
+    if (!column.label) {
+      html += '<span class="library-col' + (column.field === 'cover' ? ' cover' : '') + '" aria-hidden="true"></span>';
+      continue;
+    }
+    var sortable = column.key !== 'index' && column.key !== 'cover';
+    var on = column.key === key.field;
+    var cls = 'library-col' + (on ? ' sorted' : '') + (column.align === 'right' ? ' right' : '');
+    var arrow = on ? (key.direction === 'desc' ? ' ↓' : ' ↑') : '';
+    html += sortable
+      ? '<button class="' + cls + '" type="button" data-library-sort-field="' + column.key + '"' +
+        ' onclick="libraryApplySort(\'' + column.key + '\')"' +
+        ' title="Sort by ' + escHtml(column.label.toLowerCase()) + '">' +
+        escHtml(column.label) + '<em>' + arrow + '</em></button>'
+      : '<span class="' + cls + '">' + escHtml(column.label) + '</span>';
+  }
+  host.innerHTML = html;
+  libraryApplyColumnsVar();
+}
+
+// One template, written to the shared custom property the header and the rows
+// both read. The two grids sit in the same box, so the same `fr` tracks resolve
+// against the same number of pixels and a label cannot drift off its column.
+function libraryApplyColumnsVar() {
+  var main = document.querySelector('.library-main');
+  if (!main) return;
+  var template = libraryGridTemplate(libraryPage.columns || []);
+  main.style.setProperty('--library-cols', template);
+  var host = document.getElementById('library-columns');
+  if (host) host.style.gridTemplateColumns = template;
 }
 
 // ---------------------------------------------------------------- rows
 
 function libraryRebuildRows(resetScroll) {
+  // The column set follows the width and the view, and both the header and the
+  // rows read it, so it is resolved once here rather than per row.
+  var wanted = libraryVisibleColumns(libraryPage.view, libraryScrollerWidth());
+  if (wanted.length !== (libraryPage.columns || []).length) libraryPage.columns = wanted;
+  else {
+    for (var ci = 0; ci < wanted.length; ci += 1) {
+      if (wanted[ci] !== libraryPage.columns[ci]) { libraryPage.columns = wanted; break; }
+    }
+  }
+  libraryPage.columnsStamp = libraryPage.columns.map(function (c) { return c.key; }).join(',');
+
+  // The column header only makes sense over a list of uniform rows. A drilled
+  // folder, a search that mixed groups with tracks, and the playlist list all
+  // draw their own shapes, so those fall back to the flex rows they had.
+  libraryPage.isTable = !libraryPage.drill && !libraryPage.query &&
+    (libraryViewMeta(libraryPage.view).kind !== 'playlists');
+
   if (libraryPage.drill) {
-    libraryPage.songs = libraryPage.drill.songs.slice();
+    libraryPage.songs = (libraryPage.drill.songs || []).slice();
     // Wrapped the way every other branch wraps them. The renderer and
     // librarySelectAll both read row.kind / row.song, so raw song objects sent
     // undefined into librarySongRowHtml: the render threw with the spacer
@@ -374,7 +494,7 @@ function libraryRebuildRows(resetScroll) {
     libraryPage.rowHeight = groups.length ? LIBRARY_ROW_H_GROUP : LIBRARY_ROW_H_SONG;
   } else {
     var view = libraryViewMeta(libraryPage.view);
-    var raw = libraryViewRows(libraryPage.view);
+    var raw = libraryRouteSongs(libraryPage.route);
     if (view.kind === 'playlists') {
       libraryPage.rows = libraryPlaylists().map(function (playlist) {
         return { kind: 'playlist', playlist: playlist };
@@ -386,8 +506,19 @@ function libraryRebuildRows(resetScroll) {
       libraryPage.rowHeight = LIBRARY_ROW_H_GROUP;
       libraryPage.songs = [];
     } else {
-      libraryPage.rows = raw.map(function (song) { return { kind: 'song', song: song }; });
-      libraryPage.rowHeight = LIBRARY_ROW_H_SONG;
+      // A title-sorted song list is broken into letter runs, so a big library
+      // can be found by eye as well as by search. Any other sort is a value
+      // order where a letter divider would be a lie.
+      var key = librarySortKeyForRoute(libraryPage.route);
+      var divides = view.kind === 'songs' && key.field === 'title' &&
+        key.direction === 'asc' && !librarySieveActive(libraryPage.sieve);
+      if (divides) {
+        libraryPage.rows = libraryRowsWithDividers(raw, 'title');
+        libraryPage.rowHeight = LIBRARY_ROW_H_SONG + LIBRARY_ROW_H_DIVIDER;
+      } else {
+        libraryPage.rows = raw.map(function (song) { return { kind: 'song', song: song }; });
+        libraryPage.rowHeight = LIBRARY_ROW_H_SONG;
+      }
       libraryPage.songs = raw;
     }
   }
@@ -398,6 +529,69 @@ function libraryRebuildRows(resetScroll) {
   }
   libraryPaintHeader();
   libraryRenderWindow(true);
+}
+
+// A resize can drop or add a column, which changes the grid template, the
+// header and the cell count in every row. Rebuilding keeps the scroll place
+// (resetScroll false) so widening a window does not dump the user at the top.
+// It bails out when the set is unchanged, which is the common case and the one
+// that would otherwise re-render on every scroll-triggered layout change.
+function libraryOnColumnsResize() {
+  if (!libraryPage.open) return;
+  var wanted = libraryVisibleColumns(libraryPage.view, libraryScrollerWidth());
+  var stamp = wanted.map(function (c) { return c.key; }).join(',');
+  if (stamp === (libraryPage.columnsStamp || '')) return;
+  libraryRebuildRows(false);
+}
+
+// The row area can change width with no window event at all: the Folders view
+// slides a 300px side panel in and out, and so does any panel the user collapses.
+// ResizeObserver is the right tool and it is native here, but it delivers
+// nothing in this renderer, so the only thing that reliably observes a width is
+// a measure on the frames that follow the click. The last width is remembered,
+// so an idle page costs nothing and a layout that settles is not re-measured
+// forever.
+var libraryLayoutWatchLast = 0;
+var libraryLayoutWatchLeft = 0;
+var libraryLayoutWatchRunning = false;
+
+function libraryCheckColumns() {
+  var width = libraryScrollerWidth();
+  if (!width || width === libraryLayoutWatchLast) return;
+  libraryLayoutWatchLast = width;
+  libraryOnColumnsResize();
+}
+
+// A short burst of frames rather than a permanent rAF loop: the frames a panel
+// slide or a window drag is drawn in, and then the page stops asking. A burst
+// already running absorbs the request instead of starting a second chain.
+function libraryWatchLayout(frames) {
+  var want = Number(frames) || 8;
+  if (want > libraryLayoutWatchLeft) libraryLayoutWatchLeft = want;
+  if (libraryLayoutWatchRunning) return;
+  libraryLayoutWatchRunning = true;
+  requestAnimationFrame(function step() {
+    libraryCheckColumns();
+    if (libraryLayoutWatchLeft <= 0) {
+      libraryLayoutWatchRunning = false;
+      libraryLayoutWatchLeft = 0;
+      return;
+    }
+    libraryLayoutWatchLeft -= 1;
+    requestAnimationFrame(step);
+  });
+}
+
+function libraryInstallLibraryLayoutWatch(mask) {
+  // The scroller catches scroll-driven layout changes too, which is how the
+  // scrollbar appearing or disappearing is noticed.
+  var scroller = document.getElementById('library-scroller');
+  if (scroller) {
+    scroller.addEventListener('scroll', function () { libraryWatchLayout(3); }, { passive: true });
+  }
+  // And a click anywhere in the page is the moment a side panel or a view is
+  // about to move the row area — before its slide has drawn a single frame.
+  if (mask) mask.addEventListener('click', function () { libraryWatchLayout(45); });
 }
 
 function libraryRowAt(index) {
@@ -439,6 +633,81 @@ function librarySongRowHtml(song, index) {
     '</div>';
 }
 
+// Sonora draws one row per cell so a table can drop and reorder columns without
+// every row needing its own layout rules. This is that: one cell per visible
+// column, in the column's own order, with the artwork and the inline actions
+// folded into the title cell where the columns list says they belong.
+function librarySongTableRowHtml(song, index) {
+  var id = localLibrarySongKey(song);
+  var selected = !!libraryPage.selection[id];
+  var state = localLibraryUserState(song);
+  var cover = songCoverSrc(song, 64);
+  var columns = libraryPage.columns || LIBRARY_COLUMNS;
+  var cells = '';
+  for (var i = 0; i < columns.length; i += 1) {
+    var column = columns[i];
+    cells += librarySongCellHtml(column, song, index, state, cover);
+  }
+  // The inline row actions ride after the last column rather than inside the
+  // grid, so adding or dropping a column never shifts them.
+  cells += '<span class="library-row-actions">' +
+    '<button class="library-row-btn" type="button" title="Play next" data-library-act="queue">＋</button>' +
+    '<button class="library-row-btn" type="button" title="Add to playlist" data-library-act="collect">⋯</button>' +
+    '</span>';
+  return '<div class="library-row library-song-row library-grid-row' + (selected ? ' selected' : '') +
+      (state.favorite ? ' is-favorite' : '') + '" data-library-index="' + index + '"' +
+      ' data-library-id="' + escHtml(id) + '"' + libraryDraggableHtml(song, index) + ' role="row">' +
+    cells + '</div>';
+}
+
+function librarySongCellHtml(column, song, index, state, cover) {
+  var field = column.field;
+  var cls = 'library-cell' + (column.align === 'right' ? ' right' : '');
+  if (field === 'index') {
+    return '<span class="' + cls + ' library-cell-num">' + (index + 1) + '</span>';
+  }
+  if (field === 'cover') {
+    return '<span class="' + cls + ' library-cell-cover">' + (cover
+      ? '<img src="' + cover + '" alt="" loading="lazy" onerror="this.style.opacity=0.2">'
+      : '<span class="library-row-cover-ph" aria-hidden="true"></span>') + '</span>';
+  }
+  if (field === 'title') {
+    return '<span class="' + cls + ' library-cell-title">' +
+      '<span class="library-cell-title-text">' + escHtml(song.name || 'Untitled') +
+        (state.favorite ? '<b class="library-row-fav" title="Favorite">♥</b>' : '') + '</span>' +
+      '<span class="library-cell-sub">' + escHtml(song.artist || 'Unknown artist') + '</span>' +
+      '</span>';
+  }
+  if (field === 'artist') {
+    var stars = '';
+    for (var s = 1; s <= 5; s += 1) stars += '<i class="' + (s <= state.rating ? 'on' : '') + '"></i>';
+    return '<span class="' + cls + ' library-cell-artist">' +
+      escHtml(song.artist || 'Unknown artist') +
+      '<span class="library-row-stars" aria-label="' + state.rating + ' of 5">' + stars + '</span>' +
+      '</span>';
+  }
+  if (field === 'album') {
+    return '<span class="' + cls + ' library-cell-album" title="' + escHtml(song.localPath || '') + '">' +
+      escHtml(song.album || 'Unknown album') + '</span>';
+  }
+  if (field === 'addedAt') {
+    return '<span class="' + cls + ' library-cell-added">' + escHtml(libraryFormatAdded(song.addedAt)) + '</span>';
+  }
+  if (field === 'duration') {
+    return '<span class="' + cls + ' library-cell-time">' + escHtml(libraryFormatDuration(song.duration)) + '</span>';
+  }
+  return '<span class="' + cls + '"></span>';
+}
+
+function libraryFormatAdded(ms) {
+  var value = Number(ms) || 0;
+  if (!value) return '';
+  var date = new Date(value);
+  if (isNaN(date.getTime())) return '';
+  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return date.getDate() + ' ' + months[date.getMonth()] + ' ' + date.getFullYear();
+}
+
 function libraryGroupRowHtml(group, index) {
   var cover = group.cover || '';
   var coverHtml = cover
@@ -460,12 +729,198 @@ function libraryGroupRowHtml(group, index) {
     '</div>';
 }
 
+// The group view is a table too, just with its own column preset: a group has
+// no single duration, so the right-hand column counts tracks instead.
+function libraryGroupTableRowHtml(group, index) {
+  var cover = group.cover || '';
+  var sub = group.sub || '';
+  var count = Number(group.count) || 0;
+  var columns = libraryPage.columns || LIBRARY_GROUP_COLUMNS;
+  var cells = '';
+  for (var i = 0; i < columns.length; i += 1) {
+    var column = columns[i];
+    var cls = 'library-cell' + (column.align === 'right' ? ' right' : '');
+    if (column.field === 'index') {
+      cells += '<span class="' + cls + ' library-cell-num">▸</span>';
+    } else if (column.field === 'cover') {
+      cells += '<span class="' + cls + ' library-cell-cover">' + (cover
+        ? '<img src="' + cover + '" alt="" loading="lazy" onerror="this.style.opacity=0.2">'
+        : '<span class="library-row-cover-ph" aria-hidden="true"></span>') + '</span>';
+    } else if (column.field === 'title') {
+      cells += '<span class="' + cls + ' library-cell-title">' +
+        '<span class="library-cell-title-text">' + escHtml(group.name) + '</span>' +
+        (sub ? '<span class="library-cell-sub">' + escHtml(sub) + '</span>' : '') +
+        '</span>';
+    } else if (column.field === 'artist') {
+      cells += '<span class="' + cls + ' library-cell-album">' + escHtml(group.artist || '—') + '</span>';
+    } else if (column.field === 'count') {
+      cells += '<span class="' + cls + ' library-cell-time">' + count + '</span>';
+    } else {
+      cells += '<span class="' + cls + '"></span>';
+    }
+  }
+  cells += '<span class="library-row-actions">' +
+    '<button class="library-row-btn" type="button" title="Play group" data-library-act="play-group">▶</button>' +
+    '<button class="library-row-btn" type="button" title="More" data-library-act="group-menu">⋯</button>' +
+    '</span>';
+  return '<div class="library-row library-group-row library-grid-row" data-library-index="' + index +
+    '" role="row">' + cells + '</div>';
+}
+
 function libraryFormatDuration(seconds) {
   var total = Math.round(Number(seconds) || 0);
   if (!total) return '';
   var mins = Math.floor(total / 60);
   var secs = total % 60;
   return mins + ':' + (secs < 10 ? '0' : '') + secs;
+}
+
+// A letter divider rides on top of the track it introduces rather than taking a
+// row of its own, because the window is positioned by a flat stride and a
+// taller divider row would drift the table by one row per letter. Sonora gives
+// group headers their own line; the window here cannot afford the extra line,
+// so the letter is drawn in the dead space above its own row instead.
+function libraryDividerRowHtml(initial) {
+  return '<span class="library-divider" aria-hidden="true">' +
+    '<span class="library-divider-initial">' + escHtml(initial) + '</span>' +
+    '<span class="library-divider-rule"></span>' +
+    '</span>';
+}
+
+// ---------------------------------------------------------------- sort menu
+
+// The one menu that turns Sonora's column spec, sieve and sort into controls.
+// It reads the live route, so what it shows is always what the table is doing
+// — there is no separate saved state to drift out of sync with the rows.
+function librarySortMenuHtml() {
+  var key = librarySortKeyForRoute(libraryPage.route);
+  var sieve = libraryPage.sieve || libraryNewSieve();
+  var arrow = key.direction === 'desc' ? ' ↓' : ' ↑';
+  var rows = '';
+  var meta = libraryViewMeta(libraryPage.view);
+  var isGroups = !!(meta && meta.kind === 'groups');
+  var columns = libraryColumnsForView(libraryPage.view)
+    .filter(function (column) { return column.key !== 'index' && column.key !== 'cover'; });
+  for (var i = 0; i < columns.length; i += 1) {
+    var column = columns[i];
+    var on = column.key === key.field;
+    rows += '<button class="library-sort-row' + (on ? ' on' : '') + '" type="button" ' +
+      'data-library-sort-field="' + column.key + '"' +
+      'onclick="libraryApplySort(\'' + column.key + '\')">' +
+      '<span>' + escHtml(column.label || 'Track') + '</span>' +
+      (on ? '<em>' + (key.direction === 'desc' ? 'Descending' : 'Ascending') + '</em>' : '') +
+      '</button>';
+  }
+  // The filters are per track. A group has no favourite flag of its own, so
+  // offering them on an album or artist view would be a control that does
+  // nothing when pressed.
+  if (!isGroups) {
+    rows += '<div class="library-sort-sep"></div>';
+    rows += '<button class="library-sort-row' + (sieve.favorites ? ' on' : '') + '" type="button" ' +
+      'onclick="libraryToggleSieve(\'favorites\')"><span>Favourites only</span></button>';
+    rows += '<button class="library-sort-row' + (sieve.rated ? ' on' : '') + '" type="button" ' +
+      'onclick="libraryToggleSieve(\'rated\')"><span>Rated only</span></button>';
+    rows += '<button class="library-sort-row' + (sieve.unplayed ? ' on' : '') + '" type="button" ' +
+      'onclick="libraryToggleSieve(\'unplayed\')"><span>Not played yet</span></button>';
+    rows += '<div class="library-sort-sep"></div>';
+    var duration = sieve.duration || [];
+    rows += '<div class="library-sort-range">' +
+      '<label>Length between</label>' +
+      '<input id="library-sieve-min" type="number" min="0" step="30" placeholder="0" value="' +
+        (duration[0] != null ? duration[0] : '') + '" aria-label="Minimum length in seconds">' +
+      '<span>and</span>' +
+      '<input id="library-sieve-max" type="number" min="0" step="30" placeholder="9999" value="' +
+        (duration[1] != null ? duration[1] : '') + '" aria-label="Maximum length in seconds">' +
+      '<button class="fx-mini-btn" type="button" onclick="libraryApplySieveRange()">Apply</button>' +
+      '</div>';
+    if (librarySieveActive(sieve)) {
+      rows += '<div class="library-sort-sep"></div>';
+      rows += '<button class="library-sort-row clear" type="button" onclick="libraryClearSieve()">' +
+        '<span>Clear filters</span></button>';
+    }
+  }
+  rows += '<div class="library-sort-note">' + (isGroups ? 'Grouped list' : librarySieveSummary(sieve)) + arrow + '</div>';
+  return rows;
+}
+
+function librarySieveSummary(sieve) {
+  var bits = [];
+  if (sieve.duration) {
+    bits.push('under ' + libraryFormatDuration(sieve.duration[1] || 600));
+  }
+  if (sieve.favorites) bits.push('favourites');
+  if (sieve.rated) bits.push('rated');
+  if (sieve.unplayed) bits.push('unplayed');
+  return bits.length ? bits.join(' · ') : 'No filter';
+}
+
+function libraryToggleSortMenu(event) {
+  if (event) event.stopPropagation();
+  var menu = document.getElementById('library-sort-menu');
+  if (!menu) return;
+  var open = !menu.hidden;
+  menu.innerHTML = librarySortMenuHtml();
+  menu.hidden = open;
+  var btn = document.getElementById('library-sort-btn');
+  if (btn) btn.classList.toggle('active', !open);
+}
+
+function libraryCloseSortMenu() {
+  var menu = document.getElementById('library-sort-menu');
+  if (menu) menu.hidden = true;
+  var btn = document.getElementById('library-sort-btn');
+  if (btn) btn.classList.remove('active');
+}
+
+function libraryApplySort(field) {
+  libraryPage.route = libraryToggleSort(libraryPage.route, field);
+  libraryRebuildRows(true);
+  libraryCloseSortMenu();
+  // The menu is the readout of the sort, so it is repainted in place rather
+  // than closed — otherwise turning a column around looks like nothing happened.
+  var menu = document.getElementById('library-sort-menu');
+  if (menu) menu.innerHTML = librarySortMenuHtml();
+}
+
+function libraryToggleSieve(axis) {
+  var sieve = libraryPage.sieve || libraryNewSieve();
+  sieve[axis] = !sieve[axis];
+  libraryPage.sieve = sieve;
+  libraryPage.route = libraryRouteId(libraryPage.view,
+    librarySortKeyForRoute(libraryPage.route).field,
+    librarySortKeyForRoute(libraryPage.route).direction, sieve);
+  libraryRebuildRows(true);
+  var menu = document.getElementById('library-sort-menu');
+  if (menu) menu.innerHTML = librarySortMenuHtml();
+}
+
+function libraryApplySieveRange() {
+  var min = document.getElementById('library-sieve-min');
+  var max = document.getElementById('library-sieve-max');
+  var sieve = libraryPage.sieve || libraryNewSieve();
+  var low = min && min.value !== '' ? Number(min.value) : 0;
+  var high = max && max.value !== '' ? Number(max.value) : 0;
+  if (isFinite(low) && isFinite(high) && high > low) {
+    sieve.duration = [low, high];
+  } else {
+    sieve.duration = null;
+  }
+  libraryPage.sieve = sieve;
+  libraryPage.route = libraryRouteId(libraryPage.view,
+    librarySortKeyForRoute(libraryPage.route).field,
+    librarySortKeyForRoute(libraryPage.route).direction, sieve);
+  libraryRebuildRows(true);
+  var menu = document.getElementById('library-sort-menu');
+  if (menu) menu.innerHTML = librarySortMenuHtml();
+}
+
+function libraryClearSieve() {
+  libraryPage.sieve = libraryNewSieve();
+  var key = librarySortKeyForRoute(libraryPage.route);
+  libraryPage.route = libraryRouteId(libraryPage.view, key.field, key.direction, libraryPage.sieve);
+  libraryRebuildRows(true);
+  var menu = document.getElementById('library-sort-menu');
+  if (menu) menu.innerHTML = librarySortMenuHtml();
 }
 
 function libraryOnScroll() {
@@ -493,16 +948,23 @@ function libraryRenderWindow(force) {
   var first = Math.max(0, Math.floor(libraryPage.scrollTop / libraryPage.rowHeight) - LIBRARY_OVERSCAN);
   var last = Math.min(total, Math.ceil((libraryPage.scrollTop + viewport) / libraryPage.rowHeight) + LIBRARY_OVERSCAN);
   var key = first + ':' + last + ':' + total + ':' + libraryPage.view + ':' + libraryPage.query + ':' +
-    libraryPage.rowHeight + ':' + libraryPage.drillStamp;
+    libraryPage.rowHeight + ':' + libraryPage.drillStamp + ':' + libraryPage.route + ':' +
+    (libraryPage.columnsStamp || '') + ':' + (libraryPage.isTable ? 't' : 'f');
   if (!force && win.dataset.key === key) return;
   win.dataset.key = key;
 
   var html = '';
+  var table = libraryPage.isTable;
   for (var i = first; i < last; i += 1) {
     var row = libraryRowAt(i);
     if (!row) continue;
-    if (row.kind === 'group') html += libraryGroupRowHtml(row.group, i);
+    if (row.kind === 'group') html += table
+      ? libraryGroupTableRowHtml(row.group, i)
+      : libraryGroupRowHtml(row.group, i);
     else if (row.kind === 'playlist') html += libraryPlaylistRowHtml(row.playlist, i);
+    else if (row.kind === 'divider') html += '<span class="library-divider-holder">' +
+      libraryDividerRowHtml(row.initial) + '</span>';
+    else if (table) html += librarySongTableRowHtml(row.song, i);
     else html += librarySongRowHtml(row.song, i);
   }
   win.style.transform = 'translateY(' + (first * libraryPage.rowHeight) + 'px)';
@@ -531,6 +993,16 @@ function libraryEmptyStateHtml() {
       '</div>';
   }
   if (libraryPage.drill) return 'Nothing here.';
+  // A filter that matches nothing is not an empty view, and telling the user
+  // to play something first sends them looking for tracks that are already
+  // sitting there, one switch away.
+  if (librarySieveActive(libraryPage.sieve)) {
+    return '<strong>No tracks match these filters</strong>' +
+      '<span>Turn the filters off in the Sort menu to see the rest of this view.</span>' +
+      '<div class="library-empty-actions">' +
+      '<button class="fx-mini-btn ghost" type="button" onclick="libraryClearSieve()">Clear filters</button>' +
+      '</div>';
+  }
   return 'Nothing in this view yet — play something first.';
 }
 
@@ -541,12 +1013,22 @@ async function openLibraryPage(viewId) {
   libraryPage.open = true;
   if (viewId) libraryPage.view = viewId;
   if (window.desktopWindow) libraryPage.drill = null;
+  libraryPage.sieve = libraryPage.sieve || libraryNewSieve();
+  if (!libraryPage.route) {
+    libraryPage.route = libraryRouteId(libraryPage.view, 'title', 'asc', libraryPage.sieve);
+  }
   if (typeof closeUploadPanel === 'function') closeUploadPanel();
   if ($results) $results.classList.remove('show');
   libraryPaintNav();
   libraryPaintHeader();
   libraryRenderWindow(true);
   openGsapModal(mask);
+  // The panel grows as it enters (autoAlpha, y, scale 0.965 -> 1), so a width
+  // measured now is not the width it settles at. Nothing re-measures when the
+  // tween ends — a window event only fires if the user resizes — and the layout
+  // watch rides on clicks and scrolls, so a column set resolved mid-entrance
+  // would stick. The tween is 0.68s; the burst outlives it.
+  libraryWatchLayout(75);
   var input = document.getElementById('library-search-input');
   if (input) input.value = libraryPage.query;
   var clear = document.getElementById('library-search-clear');
@@ -563,6 +1045,7 @@ function closeLibraryPage() {
   var mask = document.getElementById('library-page');
   libraryPage.open = false;
   closeLibraryMenu();
+  libraryCloseSortMenu();
   if (!mask) return;
   closeGsapModal(mask, function () {
     libraryClearSelection();
@@ -573,6 +1056,12 @@ function librarySetView(viewId) {
   libraryPage.view = viewId;
   libraryPage.drill = null;
   libraryPage.drillStamp = 0;
+  // A view swap keeps the user's sort if that view has the column, because
+  // losing "sorted by plays" every time you glance at an album is annoying —
+  // but a group view has no album column to keep it on.
+  var key = librarySortKeyForRoute(libraryPage.route);
+  var has = libraryColumnsForView(viewId).some(function (column) { return column.key === key.field; });
+  libraryPage.route = libraryRouteId(viewId, has ? key.field : 'title', key.direction, libraryPage.sieve);
   try {
     window.localStorage.setItem(LIBRARY_PAGE_STORAGE_KEY, viewId);
   } catch (_) {}
@@ -679,6 +1168,8 @@ function libraryOnRowClick(event) {
   var index = Number(target.getAttribute('data-library-index'));
   var row = libraryRowAt(index);
   if (!row) return;
+  // A letter divider is decoration, not a row.
+  if (row.kind === 'divider') return;
 
   var actionBtn = event.target.closest ? event.target.closest('[data-library-act]') : null;
   if (actionBtn) {

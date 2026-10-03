@@ -124,6 +124,7 @@
     'js/modules/13-library/05-library-transfer.js',
     'js/modules/13-library/06-library-playback-guard.js',
     'js/modules/13-library/07-library-folder-browser.js',
+    'js/modules/13-library/08-library-views.js',
     'js/modules/14-system/00-media-session.js',
     'js/modules/14-system/01-mini-player.js',
     'js/modules/14-system/02-now-playing.js',

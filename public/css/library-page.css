@@ -836,3 +836,338 @@ body.library-dragging .library-drop-bar {
   box-shadow: inset 0 0 0 1px rgba(244, 210, 138, .3);
   border-radius: 12px;
 }
+
+/* ============================================================
+   The sortable track table.
+
+   Ported from Sonora's column model (GPL-3.0-or-later,
+   github.com/sonorahq/sonora — crates/views/src/shared/tracks/columns.rs):
+   a ranked column spec that drops the least useful columns as the window
+   narrows, drawn as one grid shared by the header and every row so a column
+   can never drift out of line with the label above it.
+   ============================================================ */
+
+.library-columns {
+  display: grid;
+  grid-template-columns: var(--library-cols, none);
+  gap: 12px;
+  padding: 8px 18px 6px;
+  /* Inside the scroller now, so it has to stay put while the rows move under
+     it. position:sticky needs a scrolling ancestor to work against, which is
+     exactly what it now has — and the scroller is a column, so sticky needs no
+     bottom offset to land directly above the first row. */
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: linear-gradient(rgba(9, 14, 16, .97), rgba(9, 14, 16, .92));
+  backdrop-filter: blur(8px);
+  align-items: end;
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .34);
+  border-bottom: 1px solid rgba(255, 255, 255, .05);
+}
+
+.library-columns[hidden] {
+  display: none;
+}
+
+.library-col {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.library-col.right {
+  text-align: right;
+}
+
+button.library-col {
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  justify-content: flex-start;
+}
+
+button.library-col.right {
+  justify-content: flex-end;
+}
+
+.library-col:hover {
+  color: rgba(255, 255, 255, .62);
+}
+
+.library-col em {
+  font-style: normal;
+  color: #f4d28a;
+  font-size: 10px;
+}
+
+.library-col.sorted {
+  color: rgba(255, 255, 255, .72);
+}
+
+.library-grid-row {
+  display: grid;
+  grid-template-columns: var(--library-cols, none);
+  gap: 12px;
+}
+
+.library-cell {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.library-cell.right {
+  justify-content: flex-end;
+}
+
+.library-cell-num {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, .3);
+  font-variant-numeric: tabular-nums;
+}
+
+.library-cell-cover {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.library-cell-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.library-cell-title {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.library-cell-title-text {
+  font-size: 12.8px;
+  color: rgba(255, 255, 255, .92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.library-cell-sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, .42);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.library-cell-artist {
+  font-size: 12px;
+  color: rgba(255, 255, 255, .72);
+  justify-content: space-between;
+  gap: 9px;
+}
+
+.library-cell-artist .library-row-stars {
+  flex: 0 0 auto;
+}
+
+.library-cell-album {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, .5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-cell-added {
+  font-size: 11px;
+  color: rgba(255, 255, 255, .38);
+  font-variant-numeric: tabular-nums;
+}
+
+.library-cell-time {
+  font-size: 11px;
+  color: rgba(255, 255, 255, .4);
+  font-variant-numeric: tabular-nums;
+}
+
+.library-grid-row .library-row-stars {
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, .2);
+  text-align: right;
+}
+
+.library-grid-row .library-row-stars i {
+  font-style: normal;
+  color: rgba(244, 210, 138, .28);
+}
+
+.library-grid-row .library-row-stars i.on {
+  color: #f4d28a;
+}
+
+.library-grid-row .library-row-actions {
+  justify-content: flex-end;
+}
+
+/* A letter divider rides above the track it introduces rather than taking a row
+   of its own: the window is positioned by a flat stride, so a taller divider
+   row would drift the table by one row per letter. The holder is the positioning
+   anchor and is zero-height, so the row spacing it sits between is unchanged. */
+.library-divider-holder {
+  position: relative;
+  display: block;
+  height: 0;
+}
+
+.library-divider {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 0;
+  transform: translateY(-11px);
+  pointer-events: none;
+}
+
+.library-divider-initial {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  color: rgba(244, 210, 138, .68);
+  background: rgba(14, 14, 18, .92);
+  padding-right: 8px;
+}
+
+.library-divider-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(244, 210, 138, .3), rgba(255, 255, 255, .05) 42%, transparent);
+}
+
+/* ---------------------------------------------------- the sort menu */
+
+.library-sort-menu {
+  position: absolute;
+  right: 18px;
+  top: 0;
+  z-index: 40;
+  min-width: 224px;
+  padding: 7px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, .11);
+  background: rgba(16, 16, 20, .96);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .6);
+}
+
+.library-sort-menu[hidden] {
+  display: none;
+}
+
+.library-sort-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: rgba(255, 255, 255, .78);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.library-sort-row:hover {
+  background: rgba(255, 255, 255, .06);
+  color: rgba(255, 255, 255, .95);
+}
+
+.library-sort-row.on {
+  color: #f4d28a;
+}
+
+.library-sort-row em {
+  font-style: normal;
+  font-size: 10px;
+  color: rgba(255, 255, 255, .4);
+}
+
+.library-sort-row.clear {
+  color: rgba(255, 255, 255, .5);
+  font-size: 12px;
+}
+
+.library-sort-sep {
+  height: 1px;
+  margin: 6px 8px;
+  background: rgba(255, 255, 255, .08);
+}
+
+.library-sort-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, .5);
+}
+
+.library-sort-range label {
+  white-space: nowrap;
+}
+
+.library-sort-range input {
+  width: 62px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(0, 0, 0, .34);
+  color: rgba(255, 255, 255, .88);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.library-sort-range input:focus {
+  outline: 0;
+  border-color: rgba(244, 210, 138, .5);
+}
+
+.library-sort-note {
+  padding: 5px 10px 2px;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, .34);
+}
