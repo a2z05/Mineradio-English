@@ -594,12 +594,16 @@ function librarySyncFolderPane() {
   side.hidden = !wanted;
   if (!wanted) return;
   libraryInstallFolderBrowser();
-  libraryPaintFolderBrowser();
-  if (!libraryFolderBrowser.tree.length) {
-    libraryLoadFolderTree(true).then(function () {
-      if (wanted && libraryPage.open) libraryPaintFolderBrowser();
-    });
-  }
+  var paint = function () {
+    if (!wanted || !libraryPage.open) return;
+    libraryPaintFolderBrowser();
+    // A selection left over from the last visit still needs its listing: the
+    // browse answer may have been dropped by a scan that ran while this page
+    // was closed, and painting the folder without it reads as an empty one.
+    libraryFolderEnsureBrowse();
+  };
+  paint();
+  if (!libraryFolderBrowser.tree.length) libraryLoadFolderTree(true).then(paint);
 }
 
 function libraryDrillInto(group) {

@@ -23,6 +23,7 @@ const {
 } = require('../desktop/local-library-folder-tree');
 const { LocalLibraryWatcher } = require('../desktop/local-library-watcher');
 const { namedFunctionSource } = require('./helpers/extract-function');
+const vm = require('node:vm');
 
 const appRoot = path.resolve(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(appRoot, p), 'utf8');
@@ -517,4 +518,216 @@ test('a drilled folder lists its tracks as song rows', () => {
   assert.match(rebuild, /libraryPage\.rows = libraryPage\.songs\.map/,
     'the drill branch still stores unwrapped songs');
   assert.match(rebuild, /\{ kind: 'song', song: song \}/);
+});
+
+// ---------------------------------------------------------------- the open folder
+
+// The pane reads two sources: the selected node's tree children, and the Browse
+// answer for the directory itself. Files are not tree nodes, so a folder of
+// tracks has no children at all and is filled entirely by Browse — which means
+// dropping the Browse answer empties it, whatever the path bar still says.
+function folderBrowserSandbox() {
+  const elements = {};
+  const element = (id) => {
+    if (!elements[id]) {
+      const listeners = {};
+      elements[id] = {
+        id, innerHTML: '', textContent: '', hidden: false, dataset: {},
+        listeners,
+        addEventListener(type, fn) { (listeners[type] || (listeners[type] = [])).push(fn); },
+        // The handlers are installed with addEventListener, so a test that only
+        // replaces innerHTML would never reach them. This is the other half.
+        fire(type, event) { (listeners[type] || []).slice().forEach((fn) => fn(event)); },
+      };
+    }
+    return elements[id];
+  };
+  const state = { tree: [], browseCalls: 0 };
+  const sandbox = {
+    Date, Promise, setTimeout, clearTimeout, console,
+    libraryPage: { open: true, view: 'folders', query: '' },
+    elements,
+    state,
+    escHtml: (value) => String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+    libraryFormatDuration: () => '0:00',
+    localLibraryStore: { tracks: [] },
+    localLibrarySongKey: (song) => song.id,
+    window: {
+      desktopWindow: {
+        getLocalMusicTree: async () => ({ ok: true, tree: JSON.parse(JSON.stringify(state.tree)) }),
+        browseLocalMusicFolder: async () => {
+          state.browseCalls += 1;
+          return { ok: true, directories: [], files: ['One.mp3', 'Two.mp3', 'Three.mp3'], childIds: {} };
+        },
+      },
+    },
+    document: { getElementById: element },
+  };
+  vm.runInNewContext(browserSource, sandbox);
+  return sandbox;
+}
+
+const paintedRows = (sandbox) =>
+  (sandbox.elements['library-folder-scroll'].innerHTML.match(/data-library-folder-index/g) || []).length;
+
+const until = async (fn, ms = 600) => {
+  const end = Date.now() + ms;
+  for (;;) {
+    if (fn()) return true;
+    if (Date.now() >= end) return fn();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+};
+
+test('a background scan does not empty the folder the user is reading', async () => {
+  // Every scan announces itself, and the handler invalidates the tree. It threw
+  // the Browse answer away with the old tree and repainted — but nothing asked
+  // for the listing again, so a folder still holding all three of its files
+  // read "Nothing in this folder" while its own path bar counted 3 indexed.
+  // The scan runs on a timer, so this was a folder silently going blank while
+  // the user was looking at it, with no way back but re-clicking the crumb.
+  const sandbox = folderBrowserSandbox();
+  sandbox.state.tree = [
+    { id: 'leaf', label: 'ASHES & ECHOES', count: 3, childCount: 0, depth: 0, children: [] },
+    { id: 'other', label: 'Other', count: 1, childCount: 0, depth: 0, children: [] },
+  ];
+  await sandbox.libraryLoadFolderTree(true);
+  await sandbox.libraryFolderSelect('leaf');
+
+  assert.equal(paintedRows(sandbox), 3, 'the folder opens with its three files');
+  assert.deepEqual(Array.from(sandbox.libraryFolderBrowser.rows, (row) => row.kind),
+    ['file', 'file', 'file'], 'a folder of tracks has no tree children, only files');
+
+  const before = sandbox.state.browseCalls;
+  sandbox.libraryInvalidateFolderTree();
+  await until(() => sandbox.state.browseCalls > before);
+
+  assert.equal(paintedRows(sandbox), 3,
+    'the folder still holds three files after the scan rebuilt the tree');
+  assert.match(sandbox.elements['library-folder-scroll'].innerHTML, /One\.mp3/);
+  assert.doesNotMatch(sandbox.elements['library-folder-scroll'].innerHTML,
+    /Nothing in this folder/);
+  assert.equal(sandbox.libraryFolderBrowser.nodeId, 'leaf', 'the selection survives');
+  // And the path bar and the rows must not be describing different folders.
+  assert.match(sandbox.elements['library-folder-path'].innerHTML, /ASHES &amp; ECHOES/);
+});
+
+test('a folder the rebuilt tree no longer has falls back to the roots', async () => {
+  // Node ids are digests, so a renamed or removed folder comes back under a
+  // different one. Keeping the old id left the path bar blank, the toolbar's
+  // six actions still enabled, and every one of them acting on a node that
+  // resolves to nothing — a pane that looks live and answers nobody.
+  const sandbox = folderBrowserSandbox();
+  sandbox.state.tree = [
+    { id: 'leaf', label: 'Gone', count: 3, childCount: 0, depth: 0, children: [] },
+  ];
+  await sandbox.libraryLoadFolderTree(true);
+  await sandbox.libraryFolderSelect('leaf');
+  assert.equal(paintedRows(sandbox), 3);
+
+  sandbox.state.tree = [
+    { id: 'fresh', label: 'Other', count: 1, childCount: 0, depth: 0, children: [] },
+  ];
+  sandbox.libraryInvalidateFolderTree();
+  await until(() => sandbox.libraryFolderBrowser.tree.length === 1
+    && sandbox.libraryFolderBrowser.tree[0].id === 'fresh'
+    && sandbox.libraryFolderBrowser.nodeId === '');
+
+  assert.equal(sandbox.libraryFolderBrowser.nodeId, '');
+  assert.match(sandbox.elements['library-folder-path'].innerHTML, /Every music folder/,
+    'the path bar names a folder that exists, not the one that was deleted');
+  assert.deepEqual(Array.from(sandbox.libraryFolderBrowser.rows, (row) => row.kind), ['node'],
+    'the roots are shown, so there is a first node to click again');
+  assert.match(sandbox.elements['library-folder-actions'].innerHTML, / disabled/);
+});
+
+test('a folder is reached by clicking a row and left by the breadcrumb', async () => {
+  // Click wiring and the path bar, on a tree this library can actually produce:
+  // a root that holds subfolders as well as files. The user's library is flat —
+  // every directory is an orphan root — so a nested pane is unreachable by hand,
+  // and it was only ever going to be tested through the browser's own DOM.
+  const sandbox = folderBrowserSandbox();
+  sandbox.state.tree = [{
+    id: 'parent',
+    label: 'Vnerxy Music',
+    count: 4,
+    childCount: 2,
+    depth: 0,
+    registered: true,
+    children: [
+      { id: 'child-a', label: 'Lost signal', count: 2, childCount: 0, depth: 1, children: [] },
+      { id: 'child-b', label: 'idk', count: 2, childCount: 0, depth: 1, children: [] },
+    ],
+  }];
+  await sandbox.libraryLoadFolderTree(true);
+  sandbox.libraryInstallFolderBrowser();
+  sandbox.libraryPaintFolderBrowser();
+
+  const scroll = sandbox.elements['library-folder-scroll'];
+  const row = (id) => new RegExp('data-library-folder-id="' + id + '"').exec(scroll.innerHTML);
+  assert.ok(row('parent'), 'the root has a row');
+  assert.match(scroll.innerHTML, /data-library-folder-child="1"/,
+    'a node with subfolders must say so, or the chevron has nothing to open');
+
+  // The handler walks out from the event target to the row, so the click has to
+  // arrive the way the DOM would deliver it: a target whose closest() answers
+  // for the row, and for the chevron half of it.
+  const clickRow = (attrs, { chevron = false } = {}) => {
+    scroll.fire('click', {
+      target: {
+        closest: (sel) => {
+          if (sel === '.library-folder-chevron') return chevron ? {} : null;
+          if (sel.indexOf('data-library-folder-index') >= 0) {
+            return { getAttribute: (name) => (name in attrs ? attrs[name] : null) };
+          }
+          return null;
+        },
+      },
+    });
+  };
+  const parentIndex = /data-library-folder-index="(\d+)"[^>]*data-library-folder-id="parent"/.exec(scroll.innerHTML)
+    || /data-library-folder-id="parent"[^>]*data-library-folder-index="(\d+)"/.exec(scroll.innerHTML);
+  assert.ok(parentIndex, 'the root row carries its index');
+  clickRow({
+    'data-library-folder-index': parentIndex[1],
+    'data-library-folder-id': 'parent',
+    'data-library-folder-kind': 'node',
+    'data-library-folder-child': '1',
+  });
+  await until(() => sandbox.libraryFolderBrowser.nodeId === 'parent');
+  assert.equal(sandbox.libraryFolderBrowser.nodeId, 'parent',
+    'clicking the name opens the folder');
+  await until(() => scroll.innerHTML.includes('Lost signal'));
+
+  assert.match(scroll.innerHTML, /Lost signal/, 'the subfolders are listed');
+  assert.match(scroll.innerHTML, /--folder-depth:1/,
+    'a child is indented under its parent');
+  assert.equal((scroll.innerHTML.match(/data-library-folder-kind="file"/g) || []).length, 3,
+    'the files sit alongside the subfolders, not instead of them');
+
+  // And the way out: the first crumb, which names the whole set rather than
+  // re-opening the folder already shown.
+  const home = /data-library-folder=""/.test(sandbox.elements['library-folder-path'].innerHTML);
+  assert.ok(home, 'the path bar has a crumb that goes to the folder list');
+  const crumbs = [...sandbox.elements['library-folder-path'].innerHTML.matchAll(
+    /data-library-folder="([^"]*)"[^>]*>([^<]*)</g)];
+  assert.equal(crumbs[0][1], '', 'and it is the first one, so it is the one that is pressed');
+  assert.equal(crumbs[0][2], 'Every music folder');
+
+  // Press it through the path bar's own handler, so the wiring is under test
+  // and not just the function it happens to call.
+  sandbox.elements['library-folder-path'].fire('click', {
+    target: {
+      closest: (sel) => (sel === '[data-library-folder]'
+        ? { getAttribute: (name) => (name === 'data-library-folder' ? '' : null) }
+        : null),
+    },
+  });
+  await until(() => sandbox.libraryFolderBrowser.nodeId === '');
+  assert.equal(sandbox.libraryFolderBrowser.nodeId, '');
+  assert.deepEqual(Array.from(sandbox.libraryFolderBrowser.rows, (row) => row.kind), ['node'],
+    'the root list is back, and it is the only thing in the pane');
+  assert.doesNotMatch(scroll.innerHTML, /One\.mp3/,
+    'the listing for the folder just left is not left underneath the roots');
 });

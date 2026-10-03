@@ -175,9 +175,15 @@ function libraryPaintFolderPath() {
     return;
   }
   var trail = libraryFolderTrail(libraryFolderBrowser.nodeId);
-  var html = '';
+  // The trail starts at a root, so the bar's first crumb re-opened the very
+  // folder it was already showing and nothing else in the pane went the other
+  // way: switching views and closing the page both kept the selection, so once
+  // a folder was opened there was no route back to the list of folders. This
+  // crumb is that route, and it is the only control in the pane that clears the
+  // selection rather than acting on it.
+  var html = '<button type="button" data-library-folder="" class="library-folder-home">Every music folder</button>';
   for (var i = 0; i < trail.length; i += 1) {
-    if (i) html += '<span class="sep">›</span>';
+    html += '<span class="sep">›</span>';
     html += '<button type="button" data-library-folder="' + escHtml(trail[i].id) + '">' +
       escHtml(trail[i].label) + '</button>';
   }
@@ -300,6 +306,13 @@ async function libraryFolderSelect(nodeId) {
   libraryPaintFolderPath();
   libraryPaintFolderActions();
   libraryPaintFolderCount();
+  // The roots are the tree itself — there is no directory to read for them,
+  // and asking for one with an empty id would paint their rows underneath the
+  // listing that came back for nothing.
+  if (!libraryFolderBrowser.nodeId) {
+    libraryPaintFolderScroll();
+    return;
+  }
   await libraryFolderBrowseNow();
   libraryPaintFolderCount();
 }
@@ -344,6 +357,33 @@ function libraryFolderToggle(nodeId) {
   var id = String(nodeId || '');
   libraryFolderBrowser.open[id] = !libraryFolderBrowser.open[id];
   libraryPaintFolderScroll();
+}
+
+// The Browse answer belongs to one node and one tree — it is the listing of a
+// directory as it was when it was asked for, and it is thrown away with the
+// tree it was read against. So a caller that repaints after a rebuild has to
+// ask again: a folder of tracks has no tree children to fall back on, and
+// without this the pane read "Nothing in this folder" while its own path bar
+// counted the files it holds. Returns the pending read, or null when there is
+// nothing to read.
+function libraryFolderEnsureBrowse() {
+  if (!libraryFolderBrowser.nodeId) return null;
+  // A read already in flight, or an answer that still matches the selection.
+  if (libraryFolderBrowser.loading || libraryFolderBrowser.browse) return null;
+  // Nothing to judge the id against yet: the roots paint, and the caller asks
+  // again once the tree is in.
+  if (!libraryFolderBrowser.tree.length) return null;
+  // Node ids are digests, so a renamed or removed folder comes back under a
+  // different one. Holding the old id left a blank path bar over six enabled
+  // toolbar buttons that all resolve to nothing — a pane that looks live and
+  // answers nobody. The roots always exist.
+  if (!libraryFolderNodeById(libraryFolderBrowser.nodeId)) {
+    libraryFolderBrowser.nodeId = '';
+    libraryFolderBrowser.trail = [];
+    libraryPaintFolderBrowser();
+    return null;
+  }
+  return libraryFolderBrowseNow();
 }
 
 // ---------------------------------------------------------------- actions
@@ -491,7 +531,14 @@ function libraryInvalidateFolderTree() {
   libraryFolderBrowser.tree = [];
   libraryFolderBrowser.browse = null;
   libraryFolderBrowser.status = '';
-  if (libraryFolderBrowserVisible()) libraryLoadFolderTree(true).then(libraryPaintFolderBrowser);
+  if (!libraryFolderBrowserVisible()) return;
+  libraryLoadFolderTree(true).then(function () {
+    if (!libraryFolderBrowserVisible()) return;
+    libraryPaintFolderBrowser();
+    // The selection is still on screen and its listing was just discarded, so
+    // the folder has to be read again rather than repainted as an empty one.
+    libraryFolderEnsureBrowse();
+  });
 }
 
 // ---------------------------------------------------------------- live sync
