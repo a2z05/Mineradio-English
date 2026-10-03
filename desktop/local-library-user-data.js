@@ -396,9 +396,19 @@ class LocalLibraryUserData {
       // Anything that does not actually look like a backup is refused rather
       // than "merged". An empty merge would look like success and leave the
       // user believing their favourite came back when nothing was written.
-      const looksLikeBackup = (payload && payload.kind === 'mineradio-local-library')
-        || incoming.songs !== undefined
-        || incoming.playlists !== undefined;
+      // The shape decides, not the label: a truncated download still carries
+      // `kind`, and key names alone prove nothing about the content behind
+      // them. The two halves are read below with a fallback to {} and [], and
+      // under replace those fallbacks are deletions — so a payload missing a
+      // half is refused when it would be destructive, and accepted when it
+      // would only add. An empty but well-formed backup is content and still
+      // replaces; a missing one is not.
+      const usableSongs = !!incoming.songs && typeof incoming.songs === 'object'
+        && !Array.isArray(incoming.songs);
+      const usablePlaylists = Array.isArray(incoming.playlists);
+      const looksLikeBackup = options.replace
+        ? (usableSongs && usablePlaylists)
+        : (usableSongs || usablePlaylists);
       if (!looksLikeBackup) {
         return { ok: false, error: 'BAD_BACKUP', playlists: this.listPlaylists() };
       }
@@ -406,7 +416,7 @@ class LocalLibraryUserData {
         this.songs = new Map();
         this.playlists = [];
       }
-      const songs = incoming.songs && typeof incoming.songs === 'object' ? incoming.songs : {};
+      const songs = usableSongs ? incoming.songs : {};
       for (const [key, value] of Object.entries(songs)) {
         const id = cleanId(key);
         if (!id || !value || typeof value !== 'object') continue;

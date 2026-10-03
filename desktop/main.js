@@ -5160,10 +5160,13 @@ ipcMain.handle('mineradio-local-library-export-m3u', async (event, request = {})
     const ids = (Array.isArray(request.ids) ? request.ids : [])
       .map((id) => String(id || '').replace(/^local:/, '').toLowerCase())
       .filter((id) => /^[a-f0-9]{24}$/.test(id));
-    const requested = ids.length ? ids : Array.from(localMusicLibrary.records.keys());
+    // No fallback to every record in the library. Both callers send ids meaning
+    // "what is in front of me", so an empty selection and an empty view both
+    // arrive as [], and reading that as "no filter" exported all of it under the
+    // label of a search that matched nothing. An empty list is an empty export.
     const lines = ['#EXTM3U'];
     let written = 0;
-    for (const id of requested) {
+    for (const id of ids) {
       const record = localMusicLibrary.records.get(id);
       if (!record) continue;
       const duration = Math.round(Number(record.duration) || 0);

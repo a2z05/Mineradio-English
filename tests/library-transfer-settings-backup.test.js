@@ -314,6 +314,53 @@ test('the dialog that offers .pls actually understands one', () => {
   assert.match(handler, /PLAYLIST_HAD_NO_AUDIO/);
 });
 
+test('exporting a view that is empty writes nothing, not the whole library', async () => {
+  // Both callers pass ids meaning "what is in front of me" — the drilled
+  // folder, the selection, or the songs on screen. An empty view therefore
+  // arrives as [], and the handler read that as "no filter": an empty search
+  // or an empty playlist exported all 984 tracks under the label of the view
+  // that held none of them. The fallback also made NO_TRACKS_TO_EXPORT
+  // unreachable, so the "Nothing here to export" toast never fired either.
+  const at = mainSource.indexOf("ipcMain.handle('mineradio-local-library-export-m3u'");
+  assert.ok(at >= 0, 'the export handler must exist');
+  const source = mainSource.slice(at, mainSource.indexOf('ipcMain.handle(', at + 10));
+
+  const registered = {};
+  const records = new Map([
+    ['aaaabbbbccccddddeeeeffff', { duration: 162, artist: 'Linkin Park', name: 'Faint', audioPath: 'C:\\music\\faint.mp3' }],
+    ['111122223333444455556666', { duration: 217, artist: 'Linkin Park', name: 'In the End', audioPath: 'C:\\music\\in-the-end.mp3' }]
+  ]);
+  vm.runInNewContext(source, {
+    ipcMain: { handle: (name, fn) => { registered[name] = fn; } },
+    isTrustedMainWindowIpc: () => true,
+    localMusicLibrary: { records }
+  });
+  const handler = registered['mineradio-local-library-export-m3u'];
+  assert.ok(handler, 'the handler registered itself');
+  const ask = (ids) => handler({}, { ids });
+
+  const picked = await ask(['local:AAAABBBBCCCCDDDDEEEEFFFF']);
+  assert.equal(picked.ok, true, 'the prefix and case are normalised away');
+  assert.equal(picked.count, 1);
+  assert.match(picked.text, /^#EXTM3U\r\n/, 'a playlist starts with the header');
+  assert.match(picked.text, /#EXTINF:162,Linkin Park - Faint/);
+  assert.match(picked.text, /faint\.mp3/);
+
+  const both = await ask(['aaaabbbbccccddddeeeeffff', '111122223333444455556666']);
+  assert.equal(both.count, 2, 'two ids give two tracks');
+
+  const nothing = await ask([]);
+  assert.equal(nothing.ok, false, 'an empty view must not become the whole library');
+  assert.equal(nothing.error, 'NO_TRACKS_TO_EXPORT');
+
+  const unresolved = await ask(['999999999999999999999999']);
+  assert.equal(unresolved.ok, false, 'ids that name no track are not a licence to export everything');
+  assert.equal(unresolved.error, 'NO_TRACKS_TO_EXPORT');
+
+  assert.ok(!/records\.keys\(\)/.test(source),
+    'no fallback to every record in the library');
+});
+
 // ---------------------------------------------------------------- the store
 
 test('a backup round trip puts ratings and playlists back without wiping what is newer', async (t) => {
@@ -370,6 +417,61 @@ test('a backup that does not look like one is refused rather than merged', async
   assert.equal(after.userData.songs['aaaabbbbccccddddeeeeffff'].favorite, true,
     'nothing that was refused was allowed to clear what was already there');
   assert.deepEqual(Object.keys(after.userData.songs), Object.keys(before.userData.songs));
+});
+
+test('a replace that has nothing to put back is refused, not applied', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mr-backup-'));
+  t.after(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { } });
+
+  const store = new LocalLibraryUserData({ userDataPath: dir });
+  await store.setFavorite('aaaabbbbccccddddeeeeffff', true);
+  await store.setRating('aaaabbbbccccddddeeeeffff', 4);
+  await store.recordEvent('aaaabbbbccccddddeeeeffff', 'play');
+  await store.createPlaylist('Road trip', 'pl-road');
+
+  // The label survives a truncated download; the content behind it does not.
+  // restorePayload decides on `kind` alone, then coerces whatever songs and
+  // playlists it did not find to {} and [] — under replace those two coercions
+  // are deletions, so the library is cleared and nothing is written back.
+  // A restore is the one operation here that cannot be undone by restoring
+  // something else, so a payload that carries no content is refused.
+  const empty = [
+    { kind: 'mineradio-local-library' },
+    { kind: 'mineradio-local-library', version: 1 },
+    { kind: 'mineradio-local-library', songs: 'not-an-object' },
+    { songs: null },
+    { playlists: {} }
+  ];
+  for (const bad of empty) {
+    const merged = await store.restorePayload(bad);
+    assert.equal(merged.ok, false, 'merge refused: ' + JSON.stringify(bad));
+    assert.equal(merged.error, 'BAD_BACKUP');
+    const replaced = await store.restorePayload(bad, { replace: true });
+    assert.equal(replaced.ok, false, 'replace refused: ' + JSON.stringify(bad));
+    assert.equal(replaced.error, 'BAD_BACKUP');
+  }
+
+  // A payload that names neither half must not be able to clear a rating or a
+  // playlist, which is the whole point of refusing it.
+  const after = store.backupPayload();
+  assert.equal(after.userData.songs['aaaabbbbccccddddeeeeffff'].rating, 4, 'the rating is still there');
+  assert.ok(after.userData.songs['aaaabbbbccccddddeeeeffff'].plays >= 1, 'so is the play count');
+  assert.ok(after.userData.playlists.some((p) => p.id === 'pl-road'), 'so is the playlist');
+
+  // Replace still means replace for a payload the app itself wrote, even when
+  // that payload honestly has no history in it — empty is content, missing is not.
+  const blankDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mr-blank-'));
+  t.after(() => { try { fs.rmSync(blankDir, { recursive: true, force: true }); } catch (e) { } });
+  const blank = new LocalLibraryUserData({ userDataPath: blankDir });
+  const fresh = blank.backupPayload();
+  assert.ok(fresh.userData && typeof fresh.userData.songs === 'object'
+    && Array.isArray(fresh.userData.playlists), 'a real backup carries both halves');
+  const wiped = await store.restorePayload(fresh, { replace: true });
+  assert.equal(wiped.ok, true, 'an empty but well-formed backup still replaces');
+  assert.ok(!wiped.playlists.some((p) => p.id === 'pl-road'), 'replace means replace');
+  const restored = await store.restorePayload(after, { replace: true });
+  assert.equal(restored.ok, true);
+  assert.equal(restored.songs['aaaabbbbccccddddeeeeffff'].rating, 4, 'and put the real backup back');
 });
 
 test('the transfer module is loaded and its menu reaches both halves', () => {
