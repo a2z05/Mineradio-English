@@ -217,7 +217,10 @@ function libraryFolderRowHtml(entry, kind, index) {
   var chevron = kind === 'dir'
     ? (isOpen ? '▾' : '▸')
     : (hasChildren ? (isOpen ? '▾' : '▸') : '·');
-  var label = kind === 'dir' ? entry.name : entry.name;
+  // A tree node carries `label`; a browsed directory and a file carry `name`.
+  // Reading `name` for both gave every indexed folder an empty label — rows of
+  // bare chevrons and counts, with nothing to click on by name.
+  var label = kind === 'node' ? entry.label : entry.name;
   var sub = kind === 'file'
     ? escHtml(libraryFormatDuration(entry.duration))
     : count + ' indexed';
@@ -235,13 +238,21 @@ function libraryFolderRowHtml(entry, kind, index) {
 // the Browse button rather than by expanding rows — a 50k-file tree is not
 // something to render in full.
 function libraryBuildFolderRows() {
-  var node = libraryFolderBrowser.nodeId ? libraryFolderNodeById(libraryFolderBrowser.nodeId) : null;
+  var selected = libraryFolderBrowser.nodeId;
+  var node = selected ? libraryFolderNodeById(selected) : null;
   var rows = [];
   if (node) {
     var children = (node.children || []).slice().sort(function (a, b) {
       return String(a.label).localeCompare(String(b.label), undefined, { numeric: true, sensitivity: 'base' });
     });
     for (var i = 0; i < children.length; i += 1) rows.push({ kind: 'node', entry: children[i] });
+  } else if (!selected) {
+    // The roots. With nothing selected this pane was empty, which left the
+    // browser with no first node to click — the only thing that sets nodeId is
+    // clicking a node, so the folder view opened onto a blank list that could
+    // not be entered. The roots arrive sorted by label already.
+    var roots = libraryFolderBrowser.tree || [];
+    for (var r = 0; r < roots.length; r += 1) rows.push({ kind: 'node', entry: roots[r] });
   }
   var browse = libraryFolderBrowser.browse;
   if (browse) {

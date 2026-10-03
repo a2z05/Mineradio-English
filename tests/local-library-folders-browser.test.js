@@ -22,6 +22,7 @@ const {
   resolveNodeId,
 } = require('../desktop/local-library-folder-tree');
 const { LocalLibraryWatcher } = require('../desktop/local-library-watcher');
+const { namedFunctionSource } = require('./helpers/extract-function');
 
 const appRoot = path.resolve(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(appRoot, p), 'utf8');
@@ -485,4 +486,35 @@ test('every folder mutation resyncs the watcher', () => {
   assert.match(pageSource,
     /localLibraryStore\.folders\.length \? 'Add folder' : 'Add music folder'/,
     'the label is derived from the folder count, not set once');
+});
+
+test('the folder tree lists its roots when nothing is selected', () => {
+  // The rows were built from the selected node's children only, and the only
+  // thing that selects a node is clicking a row — so the folders view opened
+  // onto an empty pane with no first node to click, and could not be entered.
+  const build = namedFunctionSource(browserSource, 'libraryBuildFolderRows');
+  assert.match(build, /else if \(!selected\)/, 'nothing renders above the first node');
+  assert.match(build, /libraryFolderBrowser\.tree/,
+    'the roots are the only thing to show before a node is open');
+  assert.match(build, /kind: 'node', entry: roots\[r\]/);
+});
+
+test('a folder row carries the name the tree gave it', () => {
+  // A tree node has `label`; a browsed directory and a file have `name`.
+  // Reading `name` for every kind left each indexed folder as a bare chevron
+  // and a count — the rows were there, with nothing to tell them apart.
+  const row = namedFunctionSource(browserSource, 'libraryFolderRowHtml');
+  assert.match(row, /kind === 'node' \? entry\.label : entry\.name/);
+});
+
+test('a drilled folder lists its tracks as song rows', () => {
+  // The drill branch pushed raw songs into libraryPage.rows while every reader
+  // — the renderer, librarySelectAll, the drag start — expects { kind, song }.
+  // librarySongRowHtml was handed undefined and threw with the spacer already
+  // resized, which is how a crumb could claim 92 tracks over the group rows
+  // still sitting in the window.
+  const rebuild = namedFunctionSource(pageSource, 'libraryRebuildRows');
+  assert.match(rebuild, /libraryPage\.rows = libraryPage\.songs\.map/,
+    'the drill branch still stores unwrapped songs');
+  assert.match(rebuild, /\{ kind: 'song', song: song \}/);
 });

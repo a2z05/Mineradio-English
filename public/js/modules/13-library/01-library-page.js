@@ -272,14 +272,14 @@ async function libraryDropOnPlaylist(songs, event) {
   if (typeof libraryPaintPlaylistPane === 'function') libraryPaintPlaylistPane();
 }
 
-// Dropping tracks onto a folder node queues the tracks. A folder in this index
-// is a path, not a container you can put a file into, so there is nothing else
-// for the drop to mean — the open node is only the gate that says the folder
-// tree is on screen with something in it, which is the one view where a track
-// row and a tree are visible at the same time.
+// Dropping tracks onto the folder tree queues the tracks. A folder in this
+// index is a path, not a container you can put a file into, so there is nothing
+// else for the drop to mean. The drop target being the tree at all is what
+// says it is on screen — the tree only appears in the folders view, which is
+// the one view where a track row and a tree are visible together. Gating this
+// on a node being open as well made the reachable case do nothing, because
+// drilling into a folder group does not select a tree node.
 function libraryDropOnFolders(songs) {
-  var nodeId = libraryFolderBrowser.nodeId;
-  if (!nodeId) return;
   for (var i = 0; i < songs.length; i += 1) queueSong(songs[i]);
   showToast('Added ' + songs.length + ' to the queue');
 }
@@ -355,7 +355,14 @@ function libraryPaintHeader() {
 function libraryRebuildRows(resetScroll) {
   if (libraryPage.drill) {
     libraryPage.songs = libraryPage.drill.songs.slice();
-    libraryPage.rows = libraryPage.songs;
+    // Wrapped the way every other branch wraps them. The renderer and
+    // librarySelectAll both read row.kind / row.song, so raw song objects sent
+    // undefined into librarySongRowHtml: the render threw with the spacer
+    // already resized, which is how a crumb could claim 92 tracks over the
+    // group rows still sitting in the window.
+    libraryPage.rows = libraryPage.songs.map(function (song) {
+      return { kind: 'song', song: song };
+    });
     libraryPage.rowHeight = LIBRARY_ROW_H_SONG;
   } else if (libraryPage.query) {
     var groups = libraryGroupTracks(libraryPage.query) || [];
