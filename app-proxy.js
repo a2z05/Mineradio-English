@@ -21,7 +21,12 @@ const PROXY_CONFIG_FILE = path.join(__dirname, 'data', 'app-proxy.json');
 // EN-FORK: itunes and archive are opt-in here. They reach the network without a
 // proxy, so they stay off by default and the user only enables them if their
 // network needs it.
-const PROXY_APPS = ['spotify', 'ytmusic', 'deezer', 'soundcloud', 'itunes', 'archive'];
+// EN-FORK: `ytdlp` is not a music service — it is the bundled extractor that
+// reaches YouTube on the app's behalf. It is proxied separately because the
+// network that DNS-blocks YouTube is exactly the network where yt-dlp has to go
+// through the proxy, and a user may want the extractor routed while the
+// services that still resolve directly stay direct.
+const PROXY_APPS = ['spotify', 'ytmusic', 'deezer', 'soundcloud', 'itunes', 'archive', 'ytdlp'];
 const PROXY_PROTOCOLS = ['http', 'https', 'socks5'];
 
 // ---------------------------------------------------------------------------
@@ -68,7 +73,7 @@ const DEFAULT_CONFIG = {
   port: 0,
   username: '',
   password: '',
-  apps: { spotify: true, ytmusic: true, deezer: true, soundcloud: true, itunes: false, archive: false },
+  apps: { spotify: true, ytmusic: true, deezer: true, soundcloud: true, itunes: false, archive: false, ytdlp: true },
 };
 
 let cachedConfig = null;
@@ -468,6 +473,28 @@ function status() {
   };
 }
 
+// The proxy as a URL, for the one caller that cannot take an undici dispatcher
+// or an https.Agent: yt-dlp is a separate process and only understands
+// `--proxy <url>`. Returns '' when this app is not routed, so a caller can pass
+// the result straight through as an optional flag.
+//
+// Credentials are embedded the way yt-dlp's own documentation specifies. They
+// are percent-encoded because a proxy password is arbitrary user text and an
+// unencoded '@' or '/' silently reparses the URL into a different host.
+function proxyUrlFor(appName) {
+  const config = loadConfig();
+  if (!config.enabled || !config.host || !config.port) return '';
+  // SOCKS5 has no transport in this build either, so offering it here would
+  // promise a route that cannot be taken.
+  if (config.protocol === 'socks5') return '';
+  if (!config.apps || config.apps[appName] !== true) return '';
+  if (proxyHostIsUnreachable(config)) return '';
+  const auth = config.username
+    ? `${encodeURIComponent(config.username)}:${encodeURIComponent(config.password)}@`
+    : '';
+  return `${config.protocol}://${auth}${proxyAuthority(config)}`;
+}
+
 module.exports = {
   PROXY_APPS,
   loadConfig,
@@ -477,5 +504,6 @@ module.exports = {
   getTunnelAgent,
   getDispatcher,
   applyToOptions,
+  proxyUrlFor,
   status,
 };

@@ -574,6 +574,15 @@ function resumeLoginModalAfterGate() {
   setLoginAuthDrawerOpen(false);
   updateLoginProviderUi();
   scheduleLoginWorkflowEdges('open');
+  // EN-FORK: ask the real account state once per open. Without this the modal
+  // would render whatever the hardcoded defaults said, which is the bug this
+  // page was rebuilt to remove. It re-renders when the answer arrives.
+  // The previous open's import outcome is dropped here — it answered a paste
+  // that is no longer on screen.
+  ytmusicAuthStatus.lastImport = null;
+  refreshYtMusicAuthStatus(false).then(function () {
+    try { updateLoginProviderUi(); } catch (e) { }
+  });
 }
 function closeLoginModal() {
   stopQrPoll();
@@ -789,19 +798,66 @@ function updateLoginProviderUi() {
     updateLoginNodeGraphUi();
     return;
   }
-  // EN-FORK: ytmusic/deezer/soundcloud need no sign-in.
+  // EN-FORK: the global providers. Only YouTube Music has a real account in
+  // this build — Deezer and SoundCloud are genuinely keyless, so their pages
+  // report the network honestly and offer nothing that cannot work.
+  //
+  // Every string below comes from a real probe. The previous version reported
+  // Deezer/YT Music/SoundCloud as loggedIn:true from a hardcoded default, which
+  // is what made the modal show a signed-in account for providers that were
+  // never asked.
   if (loginProvider === 'ytmusic' || loginProvider === 'deezer' || loginProvider === 'soundcloud') {
     if (spotifyBtn) spotifyBtn.classList.toggle('active', false);
     var provMeta = platformMeta(loginProvider);
-    // EN-FORK: "no sign-in needed" is true, and it used to be the whole message.
-    // That read as "nothing here works" on any network where the provider is
-    // unreachable, because the modal never asked whether it could be reached:
-    // Deezer, YT Music and SoundCloud report configured:true and loggedIn:true
-    // from a hardcoded default and only fail when a search is actually sent.
-    // The honest status is the reachability probe — which provider it is, that
-    // it needs no account, and whether this network can reach it at all.
-    var provStatus = providerReachabilityStatus(loginProvider);
     if (title) title.textContent = provMeta.label || loginProvider;
+
+    // YouTube Music carries the one real account surface.
+    if (loginProvider === 'ytmusic') {
+      var ytStatus = typeof ytmusicAuthStatus !== 'undefined' ? ytmusicAuthStatus : { loggedIn: false, checked: false };
+      if (shell) { shell.classList.remove('qq-preview', 'netease-preview'); shell.classList.remove('web-login-preview'); }
+      // The import panel is only meaningful for this provider.
+      if (qqCookieToggle) qqCookieToggle.classList.toggle('show', true);
+      if (qqCookieSaveBtn) { qqCookieSaveBtn.disabled = providerBusy(); qqCookieSaveBtn.textContent = 'Save session'; }
+      if (qqCard) {
+        qqCard.style.display = '';
+        qqCard.disabled = false;
+        var ytMark = qqCard.querySelector('b');
+        var ytLabel = qqCard.querySelector('span');
+        if (ytMark) ytMark.textContent = 'YT';
+        if (ytLabel) ytLabel.textContent = 'Sign in at youtube.com in your browser';
+      }
+      if (desc) {
+        desc.textContent = ytStatus.loggedIn
+          ? 'Signed in as ' + (ytStatus.name || 'your account') + '. Likes and library sync with this session.'
+          : 'YouTube Music has no desktop sign-in window — Google blocks it. Sign in at music.youtube.com in your browser, then import the session cookie below.';
+      }
+      if (st) {
+        // The outcome of the last import outranks the generic status: it is the
+        // answer to what the user just did. It clears on the next successful
+        // sign-in or when the modal reopens.
+        if (ytStatus.lastImport && !ytStatus.loggedIn) {
+          st.className = ytStatus.lastImport.ok ? 'fail' : 'fail';
+          st.textContent = ytStatus.lastImport.message;
+        } else {
+          st.className = ytStatus.loggedIn ? 'scan' : (ytStatus.reachable === false ? 'fail' : 'preview');
+          st.textContent = ytStatus.loggedIn
+            ? ('Signed in: ' + (ytStatus.name || 'YouTube account'))
+            : (ytStatus.reachable === false
+              ? 'YouTube cannot be reached on this network — set a proxy, then import a session.'
+              : 'Not signed in — import a session cookie to enable likes and your library.');
+        }
+      }
+      if (refreshBtn) {
+        refreshBtn.disabled = providerBusy();
+        refreshBtn.textContent = ytStatus.loggedIn ? 'Refresh session' : 'Check session';
+        refreshBtn.onclick = function () { refreshYtMusicAuthStatus(true).then(updateLoginProviderUi); };
+      }
+      updateLoginNodeGraphUi();
+      return;
+    }
+
+    // Deezer and SoundCloud: no account, and no pretending otherwise.
+    var provStatus = providerReachabilityStatus(loginProvider);
     if (desc) desc.textContent = provStatus.detail;
     if (shell) { shell.classList.remove('qq-preview', 'netease-preview'); shell.classList.remove('web-login-preview'); }
     if (qqPanel) { qqPanel.classList.remove('show', 'spotify-guide-panel'); }
@@ -860,13 +916,174 @@ function stopQrPoll() {
   }
 }
 // EN-FORK: scheduleQishuiQrPoll, pollQishuiQr removed — Chinese providers removed from UI.
+// EN-FORK: the session-import panel is live again, for YouTube Music. It used
+// to be a no-op left over from the QQ importer, next to a Save button whose
+// handler no longer existed.
 function toggleQQCookiePanel() {
-  // EN-FORK: cookie panel disabled for global providers.
+  var panel = document.getElementById('qq-cookie-panel');
+  if (!panel) return;
+  var open = !panel.classList.contains('show');
+  // Only YouTube Music has a session to import; opening it elsewhere would
+  // present a box that cannot succeed.
+  if (open && loginProvider !== 'ytmusic') {
+    if (typeof showToast === 'function') showToast('Only YouTube Music takes a session import — the others need no sign-in');
+    return;
+  }
+  panel.classList.toggle('show', open);
+  if (open) {
+    var input = document.getElementById('qq-cookie-input');
+    if (input) { try { input.focus({ preventScroll: true }); } catch (e) { try { input.focus(); } catch (_) { } } }
+  }
 }
+
 function openProviderWebLogin() {
   if (loginProvider === 'spotify') return openSpotifyWebLogin();
-  // EN-FORK: ytmusic/deezer/soundcloud need no web login.
+  if (loginProvider === 'ytmusic') {
+    // There is no embedded sign-in to offer: Google refuses its auth flow in an
+    // Electron webview. Saying so, and pointing at the import box, is the honest
+    // action — better than a window that renders Google's "this browser may not
+    // be secure" page.
+    openYtMusicWebSignIn();
+    return;
+  }
+  // Deezer and SoundCloud have no account to open.
+  updateLoginProviderUi();
 }
+
+// Which real session state the YouTube Music page is showing.
+//
+// lastImport holds the outcome of the most recent session import. Without it
+// the specific answer — "that is not a YouTube cookie" versus "saved, but
+// YouTube did not confirm it" — was written to the status line and then
+// immediately overwritten by the re-render, so the user pasted a cookie and got
+// no explanation at all.
+var ytmusicAuthStatus = { loggedIn: false, name: '', channelId: '', checked: false, reachable: true, reason: '', lastImport: null };
+
+// The Spotify flags are the only "a connection is in flight" state this modal
+// has. It used to be a local named spotifyBusy inside updateLoginProviderUi;
+// anything outside that function has to ask for it, or it throws.
+function providerBusy() {
+  return !!(spotifyConfigBusy || spotifyOAuthBusy);
+}
+
+function refreshYtMusicAuthStatus(force) {
+  if (providerBusy() && !force) return Promise.resolve(ytmusicAuthStatus);
+  var statusEl = document.getElementById('qr-status');
+  if (force && statusEl) { statusEl.className = 'preview'; statusEl.textContent = 'Checking the YouTube Music session…'; }
+  return apiJson('/api/ytmusic/auth/status', { timeoutMs: 12000 })
+    .then(function (res) {
+      res = res || {};
+      var verified = !!res.loggedIn;
+      ytmusicAuthStatus = {
+        loggedIn: verified,
+        name: String(res.name || ''),
+        channelId: String(res.channelId || ''),
+        checked: true,
+        // A failed request is a network verdict, not a signed-out verdict.
+        reachable: res.ok !== false || res.reason !== 'unreachable',
+        reason: String(res.reason || ''),
+        // A confirmed sign-in supersedes whatever the last import said.
+        lastImport: verified ? null : (ytmusicAuthStatus.lastImport || null),
+      };
+      // The account modal reads platformStatus('ytmusic'), so the probe result
+      // has to land there too or the two surfaces disagree.
+      if (typeof ytmusicStatus !== 'undefined' && ytmusicStatus) {
+        ytmusicStatus.loggedIn = ytmusicAuthStatus.loggedIn;
+        ytmusicStatus.nickname = ytmusicAuthStatus.name || 'YT Music';
+        ytmusicStatus.userId = ytmusicAuthStatus.channelId || '';
+      }
+      return ytmusicAuthStatus;
+    })
+    .catch(function () {
+      ytmusicAuthStatus = Object.assign({}, ytmusicAuthStatus, { reachable: false, checked: true, reason: 'unreachable' });
+      return ytmusicAuthStatus;
+    });
+}
+
+// Opens music.youtube.com in the user's real browser, not in an app window: the
+// browser is where they are already signed in, and where a cookie can actually
+// be copied from.
+function openYtMusicWebSignIn() {
+  var opened = false;
+  try {
+    if (window.desktopWindow && typeof window.desktopWindow.openExternal === 'function') {
+      window.desktopWindow.openExternal('https://music.youtube.com/');
+      opened = true;
+    }
+  } catch (e) { opened = false; }
+  if (!opened) { try { window.open('https://music.youtube.com/', '_blank'); opened = true; } catch (e) { opened = false; } }
+  // Open the paste box in the same breath, because the next step is to paste
+  // what the browser just gave them.
+  var panel = document.getElementById('qq-cookie-panel');
+  if (panel) panel.classList.add('show');
+  if (typeof showToast === 'function') {
+    showToast(opened
+      ? 'Opened music.youtube.com — copy the Cookie header, then paste it here'
+      : 'Open music.youtube.com, sign in, then paste the Cookie header here');
+  }
+  updateLoginProviderUi();
+}
+
+// The Save button in the session-import panel. Previously submitQQCookieLogin(),
+// which was deleted with the Chinese providers, leaving the button dead.
+async function submitProviderSessionImport() {
+  var input = document.getElementById('qq-cookie-input');
+  var statusEl = document.getElementById('qr-status');
+  var saveBtn = document.getElementById('qq-cookie-save-btn');
+  var raw = input ? String(input.value || '').trim() : '';
+  if (!raw) {
+    if (statusEl) { statusEl.className = 'fail'; statusEl.textContent = 'Paste the Cookie header first.'; }
+    if (input) { try { input.focus({ preventScroll: true }); } catch (e) { } }
+    return;
+  }
+  if (loginProvider !== 'ytmusic') {
+    if (typeof showToast === 'function') showToast('Session import is only used by YouTube Music here');
+    return;
+  }
+  if (saveBtn) saveBtn.classList.add('busy');
+  if (statusEl) { statusEl.className = 'preview'; statusEl.textContent = 'Saving the YouTube Music session…'; }
+  try {
+    var res = await apiJson('/api/ytmusic/auth/cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      timeoutMs: 20000,
+      body: JSON.stringify({ cookie: raw })
+    });
+    // The outcome is recorded before the refresh, because the refresh re-renders
+    // the status line and would otherwise erase the explanation.
+    var missing = res && Array.isArray(res.missing) && res.missing.length ? (' Missing: ' + res.missing.join(', ')) : '';
+    if (res && res.ok && res.loggedIn) {
+      ytmusicAuthStatus.lastImport = null;
+      if (input) input.value = '';
+    } else if (res && res.ok) {
+      // Saved but unverified. Say exactly that rather than claiming a login
+      // YouTube never confirmed.
+      ytmusicAuthStatus.lastImport = { ok: false, message: String(res.message || 'Cookie saved, but YouTube did not confirm an account for it.') };
+    } else {
+      ytmusicAuthStatus.lastImport = { ok: false, message: String((res && (res.message || res.error)) || 'The session cookie was rejected.') + missing };
+    }
+    await refreshYtMusicAuthStatus(true);
+
+    if (ytmusicAuthStatus.loggedIn) {
+      if (statusEl) { statusEl.className = 'scan'; statusEl.textContent = 'Signed in to YouTube Music as ' + (res.name || 'your account'); }
+      if (typeof showToast === 'function') showToast('YouTube Music connected');
+      if (typeof markLoginWorkflowConnected === 'function') markLoginWorkflowConnected('ytmusic');
+    } else if (statusEl) {
+      statusEl.className = 'fail';
+      statusEl.textContent = ytmusicAuthStatus.lastImport.message;
+    }
+  } catch (err) {
+    ytmusicAuthStatus.lastImport = { ok: false, message: 'Saving the session failed: ' + (err && err.message || err) };
+    if (statusEl) { statusEl.className = 'fail'; statusEl.textContent = ytmusicAuthStatus.lastImport.message; }
+  } finally {
+    if (saveBtn) saveBtn.classList.remove('busy');
+    updateLoginProviderUi();
+  }
+}
+
+window.submitProviderSessionImport = submitProviderSessionImport;
+window.refreshYtMusicAuthStatus = refreshYtMusicAuthStatus;
+window.openYtMusicWebSignIn = openYtMusicWebSignIn;
 async function openSpotifyWebLogin() {
   if (spotifyOAuthBusy) return;
   var statusEl = document.getElementById('qr-status');

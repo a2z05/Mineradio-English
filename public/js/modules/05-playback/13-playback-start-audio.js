@@ -587,6 +587,17 @@ async function resolveAlbumGaplessPlaybackData(song) {
   if (playbackProvider === 'ytmusic') {
     return apiJson('/api/ytmusic/song/url?id=' + encodeURIComponent(song.videoId || song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 12000 });
   }
+  // EN-FORK: the bundled extractor. It takes the web URL when one is known, so
+  // the resolve lands on the entry the user picked rather than re-searching and
+  // possibly choosing a different upload.
+  if (playbackProvider === 'ytdlp') {
+    var ytdlpUrl = String(song.webUrl || '').trim();
+    var ytdlpId = song.videoId || song.id || song.providerSongId || '';
+    // Resolving through the extractor is slower than the InnerTube call, so it
+    // gets a longer ceiling than the other providers.
+    return apiJson('/api/ytdlp/song/url?url=' + encodeURIComponent(ytdlpUrl) +
+      '&id=' + encodeURIComponent(ytdlpId) + qualityParam, { timeoutMs: 45000 });
+  }
   if (playbackProvider === 'deezer') {
     return apiJson('/api/deezer/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 9000 });
   }

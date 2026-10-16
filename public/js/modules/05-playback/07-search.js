@@ -8,7 +8,7 @@ var SEARCH_HISTORY_STORE_VERSION = 3;
 // EN-FORK global swap: search modes for the global providers. Legacy Chinese
 // modes stay in the history whitelist so old persisted entries don't throw.
 // EN-FORK: search modes (Chinese tabs removed from UI; kept in history whitelist for migration)
-var SEARCH_HISTORY_MODES = ['song', 'ytmusic', 'deezer', 'soundcloud', 'spotify', 'podcast', 'netease', 'qq', 'kugou', 'qishui'];
+var SEARCH_HISTORY_MODES = ['song', 'ytmusic', 'ytdlp', 'deezer', 'soundcloud', 'spotify', 'podcast', 'netease', 'qq', 'kugou', 'qishui'];
 var MUSIC_SEARCH_INITIAL_VISIBLE = 18;
 var MUSIC_SEARCH_APPEND_BATCH = 14;
 var MUSIC_SEARCH_MAX_RESULTS = 180;
@@ -245,7 +245,24 @@ function runSearchHistory(q) {
   $input.focus();
 }
 function updateSearchModeTabs() {
-  var ids = ['song', 'ytmusic', 'deezer', 'soundcloud', 'spotify', 'podcast'];
+  var ids = ['song', 'ytmusic', 'ytdlp', 'deezer', 'soundcloud', 'spotify', 'podcast'];
+  // EN-FORK: the extractor tab exists only where the binary does. It is shown
+  // after the capability answer arrives, so a build without yt-dlp never offers
+  // a search source that cannot answer.
+  var ytdlpTab = document.getElementById('search-mode-ytdlp');
+  if (ytdlpTab) {
+    var ytdlpReady = typeof ytdlpRouteUsableForPlayback === 'function' && ytdlpRouteUsableForPlayback();
+    ytdlpTab.style.display = ytdlpReady ? '' : 'none';
+    // A tab that disappears while selected would leave the search pinned to a
+    // source no longer offered.
+    if (!ytdlpReady && searchMode === 'ytdlp') searchMode = 'song';
+    // The first call happens before the server has answered, so the tab shows
+    // once the capability is known rather than staying hidden until something
+    // else happens to re-render.
+    if (!ytdlpReady && typeof whenYtDlpStatusKnown === 'function') {
+      whenYtDlpStatusKnown(function () { try { updateSearchModeTabs(); } catch (e) { } });
+    }
+  }
   for (var i = 0; i < ids.length; i++) {
     var btn = document.getElementById('search-mode-' + ids[i]);
     if (!btn) continue;
@@ -257,9 +274,10 @@ function updateSearchModeTabs() {
     $input.placeholder = searchMode === 'podcast'
       ? 'Search podcasts, radio...'
       : (searchMode === 'ytmusic' ? 'Search YouTube Music...'
-        : (searchMode === 'deezer' ? 'Search Deezer...'
-          : (searchMode === 'soundcloud' ? 'Search SoundCloud...'
-            : (searchMode === 'spotify' ? 'Search Spotify match source...' : 'Search songs, artists...'))));
+        : (searchMode === 'ytdlp' ? 'Search YouTube via yt-dlp...'
+          : (searchMode === 'deezer' ? 'Search Deezer...'
+            : (searchMode === 'soundcloud' ? 'Search SoundCloud...'
+              : (searchMode === 'spotify' ? 'Search Spotify match source...' : 'Search songs, artists...')))));
   }
   requestAnimationFrame(updateSearchPillGlassDisplacementMap);
 }
@@ -507,6 +525,10 @@ function songProviderKey(song) {
   // falling through to the default tagged it "YT" — a local file presented as
   // a YouTube Music result, with no way to tell the two apart in the row.
   if (song && (song.provider === 'local' || song.source === 'local' || song.type === 'local' || song.localKey || song.localFileId)) return 'local';
+  // EN-FORK: the bundled extractor is checked before ytmusic because both carry
+  // a YouTube id. Without this an explicitly yt-dlp track was tagged and then
+  // dispatched as YouTube Music, so the extractor route was never reached.
+  if (song && (song.provider === 'ytdlp' || song.source === 'ytdlp' || song.type === 'ytdlp')) return 'ytdlp';
   if (song && (song.provider === 'ytmusic' || song.source === 'ytmusic' || song.type === 'ytmusic' || song.videoId)) return 'ytmusic';
   // EN-FORK: the two keyless sources. iTunes and the Internet Archive are the
   // only providers that resolve on a network where the streaming services are
@@ -521,9 +543,9 @@ function songProviderKey(song) {
   if (song && (song.provider === 'kugou' || song.source === 'kugou' || song.type === 'kugou' || song.hash || song.audioHash)) return 'kugou';
   return 'ytmusic';
 }
-var SONG_SOURCE_TAG_LABELS = { local: 'LC', ytmusic: 'YT', deezer: 'DZ', soundcloud: 'SC', spotify: 'SP', itunes: 'AP', archive: 'IA', netease: 'NE', qq: 'QQ', kugou: 'KG', qishui: 'QS' };
+var SONG_SOURCE_TAG_LABELS = { local: 'LC', ytmusic: 'YT', ytdlp: 'YD', deezer: 'DZ', soundcloud: 'SC', spotify: 'SP', itunes: 'AP', archive: 'IA', netease: 'NE', qq: 'QQ', kugou: 'KG', qishui: 'QS' };
 function platformMeta(provider) {
-  var map = { local: { label: 'This device' }, ytmusic: { label: 'YouTube Music' }, deezer: { label: 'Deezer' }, soundcloud: { label: 'SoundCloud' }, spotify: { label: 'Spotify' }, itunes: { label: 'Apple Music preview' }, archive: { label: 'Internet Archive' }, netease: { label: 'NetEase' }, qq: { label: 'QQ Music' }, kugou: { label: 'Kugou' }, qishui: { label: 'Soda Music' } };
+  var map = { local: { label: 'This device' }, ytmusic: { label: 'YouTube Music' }, ytdlp: { label: 'YouTube (yt-dlp)' }, deezer: { label: 'Deezer' }, soundcloud: { label: 'SoundCloud' }, spotify: { label: 'Spotify' }, itunes: { label: 'Apple Music preview' }, archive: { label: 'Internet Archive' }, netease: { label: 'NetEase' }, qq: { label: 'QQ Music' }, kugou: { label: 'Kugou' }, qishui: { label: 'Soda Music' } };
   return map[provider] || { label: provider };
 }
 function songSourceTagHtml(song, opts) {
@@ -860,10 +882,13 @@ function searchProviderCanSearch(provider) {
   if (st.searchReady === true || st.publicCatalog === true || capabilities.search === true) return true;
   if (provider === 'spotify') return !!(st.loggedIn && !st.reauthRequired);
   if (provider === 'ytmusic' || provider === 'deezer' || provider === 'soundcloud') return true;
+  // EN-FORK: the extractor searches, but only when the binary is in this build,
+  // so it is never offered as a search source that cannot answer.
+  if (provider === 'ytdlp') return typeof ytdlpRouteUsableForPlayback === 'function' && ytdlpRouteUsableForPlayback();
   return false;
 }
 function searchModeProvider(mode) {
-  return mode === 'ytmusic' || mode === 'deezer' || mode === 'soundcloud' || mode === 'netease' || mode === 'qq' || mode === 'kugou' || mode === 'qishui' || mode === 'spotify' || mode === 'itunes' || mode === 'archive' ? mode : '';
+  return mode === 'ytmusic' || mode === 'ytdlp' || mode === 'deezer' || mode === 'soundcloud' || mode === 'netease' || mode === 'qq' || mode === 'kugou' || mode === 'qishui' || mode === 'spotify' || mode === 'itunes' || mode === 'archive' ? mode : '';
 }
 function activeSearchProvidersForMode(mode) {
   var specific = searchModeProvider(mode);
@@ -881,6 +906,9 @@ function searchProviderLoginNotice(mode) {
 function searchProviderUrl(provider, q, limit, offset) {
   var suffix = '&limit=' + limit + '&offset=' + Math.max(0, Number(offset) || 0);
   if (provider === 'ytmusic') return '/api/ytmusic/search?keywords=' + encodeURIComponent(q) + suffix;
+  // EN-FORK: the extractor's own search, which reaches YouTube without going
+  // through the InnerTube endpoint.
+  if (provider === 'ytdlp') return '/api/ytdlp/search?keywords=' + encodeURIComponent(q) + suffix;
   if (provider === 'deezer') return '/api/deezer/search?keywords=' + encodeURIComponent(q) + suffix;
   if (provider === 'soundcloud') return '/api/soundcloud/search?keywords=' + encodeURIComponent(q) + suffix;
   if (provider === 'spotify') return '/api/spotify/search?keywords=' + encodeURIComponent(q) + suffix;

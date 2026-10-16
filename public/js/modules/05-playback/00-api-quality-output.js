@@ -40,6 +40,52 @@ function normalizePlaybackQuality(value) {
   return 'hires';
 }
 // EN-FORK global swap: YouTube Music is the default playback provider.
+// EN-FORK: whether the bundled extractor can be used in this build.
+//
+// It lives in this file, not with the rest of the source-fallback logic,
+// because the search-mode tabs ask for it while modules are still loading —
+// calling into a file loaded later threw "Cannot read properties of undefined"
+// at startup and stopped the whole module chain.
+//
+// The answer comes from /api/ytdlp/status and is cached for the session: a
+// missing binary is a property of the install, not of the track. Until the
+// first answer arrives the route counts as unavailable, so a build without
+// yt-dlp never offers a control that cannot work.
+var ytdlpPlaybackStatus = { known: false, answered: false, available: false };
+var ytdlpStatusWaiters = [];
+
+function ytdlpRouteUsableForPlayback() {
+  if (!ytdlpPlaybackStatus.known) {
+    ytdlpPlaybackStatus.known = true; // ask once; never re-ask per caller
+    if (typeof apiJson === 'function') {
+      apiJson('/api/ytdlp/status', { timeoutMs: 8000 })
+        .then(function (res) {
+          ytdlpPlaybackStatus.available = !!(res && res.available);
+          ytdlpPlaybackStatus.answered = true;
+        })
+        .catch(function () {
+          ytdlpPlaybackStatus.available = false;
+          ytdlpPlaybackStatus.answered = true;
+        })
+        .then(function () {
+          // Everything that hid itself waiting for this answer re-renders once.
+          var waiters = ytdlpStatusWaiters.slice();
+          ytdlpStatusWaiters = [];
+          waiters.forEach(function (fn) { try { fn(); } catch (_) { } });
+        });
+    }
+  }
+  return ytdlpPlaybackStatus.available;
+}
+
+// Runs `fn` once the capability answer is known. Callers that render a control
+// conditionally use this instead of polling.
+function whenYtDlpStatusKnown(fn) {
+  if (typeof fn !== 'function') return;
+  if (ytdlpPlaybackStatus.answered) { fn(); return; }
+  ytdlpStatusWaiters.push(fn);
+}
+
 function normalizePlaybackProvider(provider) {
   if (provider === 'ytmusic') return 'ytmusic';
   if (provider === 'deezer') return 'deezer';
@@ -47,6 +93,10 @@ function normalizePlaybackProvider(provider) {
   // EN-FORK: keyless sources — reachable without a proxy and without an account.
   if (provider === 'itunes') return 'itunes';
   if (provider === 'archive') return 'archive';
+  // EN-FORK: the bundled extractor is its own source, not a flavour of ytmusic.
+  // Without this line it fell to the ytmusic default below, so every yt-route
+  // track was dispatched to the InnerTube endpoint instead.
+  if (provider === 'ytdlp') return 'ytdlp';
   if (provider === 'spotify') return 'spotify';
   if (provider === 'qq') return 'qq';
   if (provider === 'kugou') return 'kugou';

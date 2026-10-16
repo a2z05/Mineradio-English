@@ -10,6 +10,10 @@ releases/
 win-unpacked/
 *.exe
 *.msi
+# EN-FORK: the bundled YouTube extractor is a shipped asset, not build output.
+# electron-builder copies it via build.extraResources, so it has to be in the
+# tree; every other .exe above stays ignored.
+!bin/yt-dlp.exe
 *.blockmap
 *.zip
 *.7z

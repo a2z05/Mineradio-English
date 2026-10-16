@@ -248,6 +248,10 @@ var KEYLESS_PLATFORM_STATUS = {
   configured: true,
   publicCatalog: true,
   searchReady: true,
+  // EN-FORK: these sources need no account at all, which is the fact the
+  // playable-source test reads. It is separate from loggedIn, which for them
+  // only ever meant "nothing to sign in to".
+  keylessReady: true,
   preview: false,
   nickname: 'No sign-in needed',
   vipType: 0,
@@ -324,7 +328,38 @@ function hasPlatformLogin(provider) {
   var st = platformStatus(provider);
   return !!(st && st.loggedIn);
 }
-// EN-FORK: global-only login check — Chinese providers removed from UI.
+// EN-FORK: a source that needs no account is usable without anyone signing in.
+// Deezer and SoundCloud have no account in this build, and YouTube Music is
+// usable keyless even when its optional session is absent, so "is there a
+// working source" must not be asked as "is anyone signed in".
+function platformKeylessReady(provider) {
+  var st = platformStatus(provider);
+  return !!(st && st.keylessReady);
+}
+// Whether the app has anything to play and a reason to show the home feed.
+// Previously this was only true when a provider claimed loggedIn, which is why
+// the home page depended on a hardcoded default to render at all.
+function hasPlayableSource() {
+  return ['archive', 'itunes', 'soundcloud', 'deezer'].some(platformKeylessReady)
+    || hasPlatformLogin('spotify') || hasPlatformLogin('ytmusic');
+}
+// Whether the discover feed actually produced anything to look at. The startup
+// guide is for a home with nothing on it, and "nothing on it" has to be judged
+// by the feed, not by whether an account exists.
+function hasHomeFeedContent() {
+  try {
+    if (typeof homeDiscoverState === 'undefined' || !homeDiscoverState) return false;
+    if (homeDiscoverState.loading) return true; // still arriving — not empty yet
+    return !!(homeDiscoverState.songs && homeDiscoverState.songs.length)
+      || !!(homeDiscoverState.playlists && homeDiscoverState.playlists.length);
+  } catch (e) {
+    return false;
+  }
+}
+// EN-FORK: global-only login check — Chinese providers removed from UI. This is
+// kept for the places that genuinely mean "a signed-in account exists" (the
+// account pills, the sign-out list) and no longer doubles as the
+// is-the-app-usable test.
 function hasAnyPlatformLogin() {
   return hasPlatformLogin('spotify') || hasPlatformLogin('ytmusic') || hasPlatformLogin('deezer') || hasPlatformLogin('soundcloud');
 }

@@ -47,7 +47,9 @@ function renderHomeTiles() {
   var note = document.getElementById('home-rail-note');
   if (!row) return;
   var tiles = [];
-  var loggedOutHome = !homeDiscoverState.loggedIn && !hasAnyPlatformLogin();
+  // EN-FORK: "logged out" describes the absence of an account, not the absence
+  // of a usable source — the keyless catalogs need no sign-in.
+  var loggedOutHome = !homeDiscoverState.loggedIn && !hasPlayableSource();
   var summary = homeListenSummary();
   if (summary.recent && tiles.length < 5) {
     tiles.push({ kind: 'recent', title: summary.recent.name || 'Keep Listening', sub: summary.recent.artist || summary.recent.source || '', cover: summary.recent.cover, record: summary.recent });
@@ -90,7 +92,9 @@ function renderHomeTiles() {
 }
 function renderHomeDiscover() {
   var sub = document.getElementById('home-subtitle');
-  var loggedOutHome = !homeDiscoverState.loggedIn && !hasAnyPlatformLogin();
+  // EN-FORK: "logged out" describes the absence of an account, not the absence
+  // of a usable source — the keyless catalogs need no sign-in.
+  var loggedOutHome = !homeDiscoverState.loggedIn && !hasPlayableSource();
   var weatherTitle = document.getElementById('home-weather-title');
   var weatherKicker = document.getElementById('home-weather-kicker');
   var weatherMeta = document.getElementById('home-weather-meta');
@@ -170,6 +174,9 @@ async function loadHomeDiscover(force) {
     var data = await apiJson('/api/discover/home?t=' + Date.now());
     if (token !== homeDiscoverToken) return;
     homeDiscoverState.loggedIn = !!(data && data.loggedIn) || hasAnyPlatformLogin();
+    // The feed renders from the keyless catalogs when there is no account, so
+    // "is there anything to show" is the playable-source test.
+    homeDiscoverState.hasSource = hasPlayableSource();
     homeDiscoverState.mode = data && data.mode || (homeDiscoverState.loggedIn ? 'member' : 'starter');
     homeDiscoverState.songs = homeDiscoverState.loggedIn ? (data && data.dailySongs || []).map(cloneSong) : [];
     homeDiscoverState.playlists = homeDiscoverState.loggedIn ? ((data && data.playlists && data.playlists.length) ? data.playlists : userPlaylists.slice(0, 10)) : [];

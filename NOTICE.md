@@ -10,6 +10,7 @@ Mineradio 使用了以下第三方项目或服务。各项目版权归其原作�
 - music-tempo
 - NeteaseCloudMusicApi
 - mpg123-decoder
+- yt-dlp (English fork): the Windows `yt-dlp.exe` release is bundled under `bin/` and shipped inside the installer as an unpacked resource. It is released into the public domain under the Unlicense by its authors (<https://github.com/yt-dlp/yt-dlp>). Mineradio invokes it as a separate process for the optional YouTube search, playback-resolve and download routes; it is not linked into this application. No rights to the media it retrieves are granted or implied — downloading is offered for the user's own lawful use and is off unless the user picks that route.
 
 ## Community Contributions
 

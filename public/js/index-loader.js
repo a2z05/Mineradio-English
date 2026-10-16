@@ -116,6 +116,7 @@
     'js/modules/12-remote/02-phone-qr-modal.js',
     'js/modules/12-remote/03-remote-folders-settings.js',
     'js/modules/12-remote/03-overlay-panel.js',
+    'js/modules/12-remote/04-download-routes.js',
     'js/modules/13-library/00-local-library-store.js',
     'js/modules/13-library/01-library-page.js',
     'js/modules/13-library/02-library-context-menu.js',

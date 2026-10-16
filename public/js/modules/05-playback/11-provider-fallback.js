@@ -318,7 +318,7 @@ var SOURCE_FALLBACK_SEARCH_TIMEOUT_MS = 6500;
 // EN-FORK: the keyless sources lead. They are the only ones that resolve on a
 // network where the streaming services are DNS-blocked, so a fallback walk that
 // skips them has nothing left to try.
-var SOURCE_FALLBACK_DIRECT_PROVIDERS = ['archive', 'itunes', 'ytmusic', 'soundcloud', 'deezer', 'netease', 'qq', 'kugou'];
+var SOURCE_FALLBACK_DIRECT_PROVIDERS = ['archive', 'itunes', 'ytmusic', 'ytdlp', 'soundcloud', 'deezer', 'netease', 'qq', 'kugou'];
 var SOURCE_FALLBACK_RECOVERY_TIMEOUT_MS = 20000;
 var SOURCE_FALLBACK_MAX_QUEUE_ADVANCES = 2;
 var SOURCE_FALLBACK_MAX_PROVIDER_ATTEMPTS = 4;
@@ -496,6 +496,11 @@ var PLAYBACK_STREAM_CAPABILITY = {
   itunes: { canStream: true, note: '30-second preview, no sign-in, no proxy' },
   soundcloud: { canStream: true, note: 'Full tracks, no sign-in (needs proxy)' },
   deezer: { canStream: true, note: '30-second preview, no sign-in' },
+  // EN-FORK: the bundled extractor is a real playback route, not just a
+  // downloader. It reaches YouTube through 500 maintained extractors, so it can
+  // play a track the InnerTube path reported as "no progressive stream" — and
+  // it is the one source that can be pointed at the proxy by name.
+  ytdlp: { canStream: true, note: 'Full tracks via the bundled extractor (proxy-aware)' },
   ytmusic: { canStream: false, note: 'Search and lyrics only' },
   spotify: { canStream: false, note: 'Library and metadata only' },
   netease: { canStream: true, note: 'Needs sign-in' },
@@ -520,7 +525,7 @@ var PLAYBACK_PROVIDER_ORDER_STORE_KEY = 'mineradio-playback-provider-order-v1';
 // neither an account nor a proxy. iTunes follows as the wide-catalog preview.
 // SoundCloud and Deezer come next. YouTube Music and Spotify stay listed for
 // reordering but are skipped while they cannot stream.
-var PLAYBACK_PROVIDER_ORDER_DEFAULT = ['archive', 'itunes', 'soundcloud', 'deezer', 'ytmusic', 'spotify', 'netease', 'qq', 'kugou', 'qishui'];
+var PLAYBACK_PROVIDER_ORDER_DEFAULT = ['archive', 'itunes', 'soundcloud', 'deezer', 'ytdlp', 'ytmusic', 'spotify', 'netease', 'qq', 'kugou', 'qishui'];
 function normalizePlaybackProviderOrder(list) {
   var seen = {};
   var out = [];
@@ -573,6 +578,7 @@ function playbackProviderDisplayLabel(provider) {
   if (provider === 'ytmusic') return 'YouTube Music';
   if (provider === 'deezer') return 'Deezer';
   if (provider === 'soundcloud') return 'SoundCloud';
+  if (provider === 'ytdlp') return 'YouTube (yt-dlp)';
   if (provider === 'spotify') return 'Spotify';
   if (provider === 'qq') return 'QQ Music';
   if (provider === 'kugou') return 'Kugou Music';
@@ -616,6 +622,9 @@ function renderPlaybackProviderOrderList() {
       '</div>';
   }).join('');
 }
+// EN-FORK: ytdlpRouteUsableForPlayback lives in 00-api-quality-output.js — it
+// is called from the search tabs, which load before this file, so it cannot be
+// defined here without being called before its own state exists.
 function sourceFallbackProviderReady(provider) {
   provider = normalizePlaybackProvider(provider);
   if (SOURCE_FALLBACK_DIRECT_PROVIDERS.indexOf(provider) < 0) return false;
@@ -627,6 +636,9 @@ function sourceFallbackProviderReady(provider) {
   // reported as "Sign in to use as a fallback" — the one message that told the
   // user to sign in for providers that have no sign-in.
   if (provider === 'deezer' || provider === 'soundcloud' || provider === 'itunes' || provider === 'archive') return true;
+  // EN-FORK: the bundled extractor needs no account either, and its presence is
+  // reported by the server rather than assumed from the build.
+  if (provider === 'ytdlp') return ytdlpRouteUsableForPlayback();
   var status = typeof platformStatus === 'function' ? platformStatus(provider) : null;
   if (!status || !status.loggedIn) return false;
   return true;
@@ -660,6 +672,7 @@ var SOURCE_FALLBACK_SEARCH_URLS = {
   soundcloud: function (q) { return '/api/soundcloud/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
   deezer: function (q) { return '/api/deezer/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
   ytmusic: function (q) { return '/api/ytmusic/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
+  ytdlp: function (q) { return '/api/ytdlp/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
   qq: function (q) { return '/api/qq/search?keywords=' + encodeURIComponent(q) + '&limit=8'; },
   kugou: function (q) { return '/api/kugou/search?keywords=' + encodeURIComponent(q) + '&limit=8'; }
 };

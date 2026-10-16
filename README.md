@@ -22,8 +22,9 @@
 | 🎮 **In-game overlay** | Steam-style Ctrl+Alt+M deck over any game — transport, seek, volume, lyric, queue. No alt-tab |
 | 🖥️ **Second screen** | Big now-playing display (art, lyrics, progress) for a second monitor |
 | 📊 **Mini overlay bar** | Compact always-on-top now-playing strip (Ctrl+Alt+B) |
-| 🎧 **Spotify integration** | Sign in with PKCE OAuth. Search, playlists and likes alongside NetEase / QQ / Kugou / Soda Music |
-| 🔀 **Per-app proxy** | Route Spotify/Kugou/Soda/QQ through an HTTP/SOCKS proxy where geo-blocked — titlebar toggle + per-service checkboxes |
+| 🎧 **Spotify integration** | PKCE OAuth sign-in with search, playlists and likes — ⚠️ **untested, see the notice above** |
+| ▶️ **yt-dlp routes** | A bundled yt-dlp powers a third download route *and* a player source: full tracks where the built-in YouTube path only offers a preview, plus its own search tab. No account required |
+| 🔀 **Per-app proxy** | Route Spotify / YouTube Music / Deezer / SoundCloud / yt-dlp / Apple Music / Internet Archive through one HTTP proxy where geo-blocked — titlebar toggle + per-service checkboxes. (HTTP and HTTPS only; SOCKS5 is not implemented.) A proxy that stops answering is detected and reported instead of silently swallowing every request |
 | 🎤 **Word-by-word lyrics** | Apple-Music-style karaoke (AMLL/TTML), Japanese/Korean romanization, decoded QQ QRC, instant lyric cache |
 | 📱 **Phone remote** | Scan once → control playback from your phone browser. Pairing survives PC restarts and auto-reconnects to your last PC. Restyled to match the desktop app, PWA-installable via built-in install prompt |
 | 🔊 **Play anywhere** | Spotify-style output switcher — one button casts the PC's current track to your phone speaker (or back), local files included |
@@ -32,6 +33,27 @@
 | ⌨️ **Rebindable hotkeys** | Every action (incl. overlays) configurable in the built-in Hotkeys settings |
 | ⚡ **Fast startup** | Cached module loading — cold start only pays full cost once |
 | ⬆️ **Auto-updating releases** | Tag-push CI builds installers automatically; in-app updater points at this repo |
+
+## ⚠️ Online providers are not tested — expect them not to work
+
+**Read this before reporting a bug.**
+
+This fork's **local library, playback, lyrics, overlays, phone remote and downloads are the maintained, tested surface.** The **online music providers are not.**
+
+| Area | Status |
+| --- | --- |
+| Local files, folders, tags, artwork, queue | ✅ Maintained and tested |
+| Overlays, second screen, phone remote, transfer | ✅ Maintained and tested |
+| Downloads (direct URL + bundled yt-dlp) | ✅ Maintained and tested |
+| **Spotify** | ⚠️ **Untested — likely not working** |
+| **YouTube Music, Deezer, SoundCloud** | ⚠️ **Untested — likely not working** |
+| **NetEase, QQ, Kugou, Soda** | ⚠️ Legacy, hidden from the UI, unsupported |
+
+Every provider integration here was written against an unofficial or undocumented endpoint, and they all break whenever the service on the other end changes something. Nothing in this fork is verified against a live account right now — the maintainer's network blocks most of these services outright, and no account is connected. A "Spotify connected" or "Deezer ready" state means the *client* believes it, not that a stream will play.
+
+**Please don't open issues asking for these to be fixed.** They are known-unfinished. If this project gets popular enough to justify the upkeep, they'll be revisited properly. Until then, treat every online provider as experimental.
+
+What *does* work without any online provider: your own music. Point it at a folder.
 
 ## 📦 Download
 
@@ -69,6 +91,16 @@ Allow Node/Electron through Windows Firewall (**Private networks**) if it won't 
 3. Paste your **Client ID** into Mineradio → Spotify panel → Connect
 
 Behind a firewall? Open **Proxy…**, enter your proxy, hit **Test**, toggle on/off anytime.
+
+### Downloading a track
+
+The download button in the player bar asks **which route** to use:
+
+- **Direct URL** — saves the exact stream the player is already using.
+- **yt-dlp** — resolves the track through the bundled extractor, so it can save a full track where the built-in path only had a 30-second preview.
+- **yt-dlp via proxy** — the same, routed through the proxy.
+
+`yt-dlp` is bundled (`bin/yt-dlp.exe`, [Unlicense](https://github.com/yt-dlp/yt-dlp)) and works offline of any account. Download only what you have the right to download.
 
 ### Overlays & hotkeys
 

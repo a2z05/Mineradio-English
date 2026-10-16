@@ -64,7 +64,7 @@ function cacheWrap(cache, key, ttlMs, producer) {
     });
 }
 
-async function innertubePost(endpoint, body, clientContext, userAgent) {
+async function innertubePost(endpoint, body, clientContext, userAgent, extraHeaders) {
   const url = `${YTMUSIC_BASE}/youtubei/v1/${endpoint}?key=${INNER_TUBE_KEY}&prettyPrint=false`;
   const payload = JSON.stringify(Object.assign({}, body, { context: clientContext }));
   const controller = new AbortController();
@@ -72,13 +72,13 @@ async function innertubePost(endpoint, body, clientContext, userAgent) {
   const fetchOptions = {
     method: 'POST',
     signal: controller.signal,
-    headers: {
+    headers: Object.assign({
       'User-Agent': userAgent || YTMUSIC_UA,
       'Content-Type': 'application/json',
       Origin: YTMUSIC_BASE,
       Referer: `${YTMUSIC_BASE}/`,
       Accept: 'application/json',
-    },
+    }, extraHeaders || {}),
     body: payload,
   };
   if (applyProxyOptions) {
@@ -245,7 +245,7 @@ async function handleYtMusicSearch(keywords, limit, offset) {
     const { status, body } = await innertubePost('search', {
       query,
       params,
-    }, INNERTUBE_CONTEXT_WEB, null);
+    }, INNERTUBE_CONTEXT_WEB, null, authHeaders());
     if (status >= 400) throw new Error(`YT Music search failed (${status})`);
     const items = [];
     walkJson(body, (node) => {
@@ -358,7 +358,7 @@ async function handleYtMusicLyric(videoId) {
     return { provider: 'ytmusic', source: 'none', id, lyric: '', tlyric: '', yrc: '', ytlrc: '', message: 'Missing video id.' };
   }
   try {
-    const { status, body } = await innertubePost('next', { videoId: id }, INNERTUBE_CONTEXT_WEB, null);
+    const { status, body } = await innertubePost('next', { videoId: id }, INNERTUBE_CONTEXT_WEB, null, authHeaders());
     if (status >= 400) throw new Error(`YT Music lyric failed (${status})`);
     let lyric = '';
     walkJson(body, (node) => {
@@ -404,10 +404,172 @@ async function handleYtMusicLyric(videoId) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Account (cookie auth)
+// ---------------------------------------------------------------------------
+//
+// YouTube Music has no OAuth client a desktop app can use without registering
+// one, and Google refuses its sign-in flow inside an embedded browser. What
+// does work is the session cookie the user's own browser already holds, sent on
+// the same InnerTube calls this module already makes — so the honest shape of
+// "sign in to YouTube Music" here is: import the cookie, then prove it works.
+//
+// Every claim made to the UI comes from checkAccountCookie(). A stored cookie
+// is never reported as a signed-in account on its own, because the common case
+// for a stale cookie is that it is present and expired.
+
+const AUTH_REQUIRED_COOKIES = ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID'];
+// __Secure-3PSID is the cookie that actually authorises the music.youtube.com
+// InnerTube calls; the classic SAPISID pair alone gets a signed-in page but no
+// account on the data endpoints.
+const AUTH_PREFERRED_COOKIES = ['__Secure-3PSID', '__Secure-1PSID', 'SID'];
+
+let authCookie = '';
+let authState = { loggedIn: false, name: '', channelId: '', checkedAt: 0, reason: '' };
+
+// Parses whatever the user pasted. Accepts a raw Cookie header, a JSON export
+// ({ cookies: [...] }), or a name=value pair list with newlines or semicolons —
+// because a cookie is copied from three different places in practice and
+// refusing two of them is how a working session gets reported as broken.
+function normalizeCookieHeader(raw) {
+  const text = String(raw == null ? '' : raw).trim();
+  if (!text) return '';
+  let pairs = [];
+  if (/^[\s]*[\[{]/.test(text)) {
+    try {
+      const parsed = JSON.parse(text);
+      const list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.cookies) ? parsed.cookies : []);
+      pairs = list
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const name = String(item.name || item.key || '').trim();
+          const value = String(item.value == null ? '' : item.value);
+          return name ? { name, value } : null;
+        })
+        .filter(Boolean);
+    } catch (_) { pairs = []; }
+  }
+  if (!pairs.length) {
+    String(text).split(/[\r\n;]+/).forEach((part) => {
+      const item = String(part || '').trim();
+      if (!item) return;
+      const eq = item.indexOf('=');
+      if (eq <= 0) return;
+      const name = item.slice(0, eq).trim();
+      const value = item.slice(eq + 1).trim();
+      if (name) pairs.push({ name, value });
+    });
+  }
+  // Later duplicates win, matching how a browser resolves a repeated cookie.
+  const seen = new Map();
+  pairs.forEach((pair) => {
+    if (pair.value === '') return;
+    seen.set(pair.name, pair.value);
+  });
+  if (!seen.size) return '';
+  return Array.from(seen.entries()).map(([name, value]) => `${name}=${value}`).join('; ');
+}
+
+function cookieValueFromHeader(header, name) {
+  const match = String(header || '').match(new RegExp('(?:^|;\\s*)' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'));
+  return match ? match[1] : '';
+}
+
+// A cookie header is only plausibly a YouTube session if it carries the pair
+// Google requires for an authenticated request. Without this check a user who
+// pastes a random cookie gets "signed in" and then silent failures.
+function cookieLooksLikeYouTubeAuth(header) {
+  const has = (name) => !!cookieValueFromHeader(header, name);
+  const hasSidPair = has('SID') && (has('SAPISID') || has('APISID') || has('__Secure-3PAPISID'));
+  const hasSecure = has('__Secure-3PSID') || has('__Secure-1PSID');
+  return hasSidPair || hasSecure;
+}
+
+function missingAuthCookieNames(header) {
+  return AUTH_REQUIRED_COOKIES.filter((name) => !cookieValueFromHeader(header, name));
+}
+
+function setYtMusicAuthCookie(raw) {
+  const header = normalizeCookieHeader(raw);
+  authCookie = cookieLooksLikeYouTubeAuth(header) ? header : '';
+  // A new cookie invalidates the previous verdict; nothing is claimed about it
+  // until checkAccountCookie() has actually asked.
+  authState = { loggedIn: false, name: '', channelId: '', checkedAt: 0, reason: header && !authCookie ? 'incomplete_cookie' : '' };
+  searchCache.clear();
+  return { accepted: !!authCookie, header: authCookie, missing: authCookie ? [] : missingAuthCookieNames(normalizeCookieHeader(raw)) };
+}
+
+function clearYtMusicAuthCookie() {
+  authCookie = '';
+  authState = { loggedIn: false, name: '', channelId: '', checkedAt: 0, reason: '' };
+  searchCache.clear();
+}
+
+function hasYtMusicAuthCookie() {
+  return !!authCookie;
+}
+
+function authHeaders() {
+  return authCookie ? { Cookie: authCookie, 'X-Goog-AuthUser': '0' } : {};
+}
+
+// Asks InnerTube who this cookie belongs to. account/account_menu is the
+// cheapest endpoint that answers with an identity: signed out it returns the
+// standard signed-out menu with no account name, signed in it returns the
+// channel name and id.
+async function checkAccountCookie() {
+  if (!authCookie) {
+    authState = { loggedIn: false, name: '', channelId: '', checkedAt: Date.now(), reason: 'no_cookie' };
+    return Object.assign({ ok: true }, authState);
+  }
+  try {
+    const { status, body } = await innertubePost('account/account_menu', {}, INNERTUBE_CONTEXT_WEB, YTMUSIC_UA, authHeaders());
+    if (status >= 400 || !body) {
+      authState = { loggedIn: false, name: '', channelId: '', checkedAt: Date.now(), reason: 'account_endpoint_failed' };
+      return Object.assign({ ok: false }, authState);
+    }
+    let name = '';
+    let channelId = '';
+    walkJson(body, (node) => {
+      if (!node || typeof node !== 'object') return;
+      // The signed-in header carries the channel in accountName / channelHandle;
+      // a signed-out menu has neither, so their absence is the signed-out test.
+      if (!name && typeof node.accountName === 'string') name = node.accountName.trim();
+      if (!channelId && node.channelId && typeof node.channelId === 'string') channelId = node.channelId.trim();
+    });
+    authState = {
+      loggedIn: !!name,
+      name,
+      channelId,
+      checkedAt: Date.now(),
+      reason: name ? '' : 'cookie_expired',
+    };
+    return Object.assign({ ok: true }, authState);
+  } catch (err) {
+    // A network failure is not evidence the cookie is bad. Keep the previous
+    // verdict and say why it could not be re-checked.
+    authState = Object.assign({}, authState, { checkedAt: Date.now(), reason: 'unreachable' });
+    return Object.assign({ ok: false, error: String(err && err.message || err) }, authState);
+  }
+}
+
+// Read-only accessor for callers that need the cookie without re-checking.
+function getYtMusicAuthCookie() {
+  return authCookie;
+}
+
 function getYtMusicCapabilities() {
   return {
     configured: true,
-    loggedIn: true,
+    // EN-FORK: this used to be a hardcoded `loggedIn: true`, which the account
+    // modal read as "you are signed in to YouTube Music" before anything had
+    // been asked of the network. It is now the real answer: signed in only when
+    // a cookie has been stored AND the account endpoint confirmed it still
+    // belongs to someone.
+    loggedIn: !!authState.loggedIn,
+    accountName: authState.name || '',
+    accountChannelId: authState.channelId || '',
+    capability: 'account',
     capabilities: {
       search: true,
       metadata: true,
@@ -415,8 +577,8 @@ function getYtMusicCapabilities() {
       lyricMode: 'description',
       playableUrl: true,
       playableMode: 'direct-url',
-      userPlaylists: false,
-      likedTracks: false,
+      userPlaylists: !!authState.loggedIn,
+      likedTracks: !!authState.loggedIn,
       chart: false,
     },
   };
@@ -432,5 +594,13 @@ module.exports = {
   handleYtMusicSongUrl,
   handleYtMusicLyric,
   getYtMusicCapabilities,
+  // EN-FORK: real account state, replacing the hardcoded loggedIn:true.
+  setYtMusicAuthCookie,
+  clearYtMusicAuthCookie,
+  hasYtMusicAuthCookie,
+  getYtMusicAuthCookie,
+  checkAccountCookie,
+  normalizeCookieHeader,
+  cookieLooksLikeYouTubeAuth,
   resetYtMusicRuntimeStateForTests,
 };

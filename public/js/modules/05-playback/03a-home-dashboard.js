@@ -842,7 +842,10 @@ function playHomeNextFromDock() {
 }
 
 function openHomeDashboardLibrary() {
-  var loggedIn = typeof hasAnyPlatformLogin === 'function' && hasAnyPlatformLogin()
+  // EN-FORK: the library door opens when there is music to reach, which no
+  // longer requires a signed-in account — the keyless sources count.
+  var loggedIn = (typeof hasPlayableSource === 'function' && hasPlayableSource())
+    || (typeof hasAnyPlatformLogin === 'function' && hasAnyPlatformLogin())
     || homeDiscoverState && homeDiscoverState.loggedIn;
   if (loggedIn && typeof openHomeLibrary === 'function') {
     openHomeLibrary();

@@ -14,6 +14,11 @@
     // offered but off by default.
     ['itunes', 'Apple Music (previews)'],
     ['archive', 'Internet Archive'],
+    // EN-FORK: the bundled extractor is a separate route to YouTube. It gets
+    // its own box because the network that blocks YouTube is the one where it
+    // must go through the proxy, while the services that still resolve
+    // directly can stay direct.
+    ['ytdlp', 'yt-dlp (YouTube extractor)'],
   ];
 
   function el(id) { return document.getElementById(id); }

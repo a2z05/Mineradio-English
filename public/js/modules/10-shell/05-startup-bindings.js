@@ -59,15 +59,18 @@ startQishuiLoginStatusAutoRefresh();
 startSpotifyLoginStatusAutoRefresh();
 if (startupLoginStatusPromise && startupLoginStatusPromise.then) {
   startupLoginStatusPromise.then(function () {
-    if (hasAnyPlatformLogin()) {
+    // EN-FORK: the feed is loaded whenever a source exists — the keyless
+    // catalogs need no account, so requiring a login here is what produced a
+    // blank home for a user who never signs in to anything.
+    if (hasPlayableSource()) {
       refreshUserPlaylists(true);
       loadHomeDiscover(true);
     }
     if (restoredPlaybackAtStartup) queueStartupAutoplayAfterHomeReveal('login-status');
     if (document.body.classList.contains('splash-active')) return;
-    var homeShown = updateEmptyHomeVisibility({ forceLoad: hasAnyPlatformLogin() });
-    if (!hasAnyPlatformLogin()) maybeRunStartupLoginGuide('status');
-    else if (!homeShown) maybeRunStartupLoginGuide('status');
+    var homeShown = updateEmptyHomeVisibility({ forceLoad: hasPlayableSource() });
+    if (!hasPlayableSource()) maybeRunStartupLoginGuide('status');
+    else if (!hasHomeFeedContent() && !homeShown) maybeRunStartupLoginGuide('status');
   }, function () {
     if (restoredPlaybackAtStartup) queueStartupAutoplayAfterHomeReveal('login-status');
   });
@@ -102,6 +105,9 @@ updateCustomCoverButton();
 updateCustomLyricControls();
 updateLikeButtons();
 setTimeout(initUpdatePreview, 9000);
+// EN-FORK: the download buttons open a route menu (Direct URL / yt-dlp) instead
+// of firing the direct downloader straight away.
+if (typeof bindDownloadRouteButtons === 'function') bindDownloadRouteButtons();
 window.addEventListener('beforeunload', function () {
   saveLastPlaybackSnapshot(true, 'beforeunload');
 });

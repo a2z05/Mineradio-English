@@ -135,6 +135,10 @@ const {
   handleYtMusicSongUrl,
   handleYtMusicLyric,
   getYtMusicCapabilities,
+  setYtMusicAuthCookie,
+  clearYtMusicAuthCookie,
+  hasYtMusicAuthCookie,
+  checkAccountCookie,
 } = require('./ytmusic-api');
 const {
   setDeezerProxyApplier,
@@ -371,6 +375,16 @@ const WEATHER_DEFAULT_LOCATION = {
 //  Spotify PKCE 授权会话 + 手机遥控状态
 // ====================================================================
 const appProxy = require('./app-proxy');
+// EN-FORK: the bundled extractor, used as both a playback resolver and a
+// download backend.
+const {
+  ytDlpAvailable,
+  ytDlpVersion,
+  getYtDlpCapabilities,
+  resolveWithYtDlp,
+  downloadWithYtDlp,
+  searchWithYtDlp,
+} = require('./ytdlp');
 setYtMusicProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'ytmusic'));
 setDeezerProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'deezer'));
 setSoundCloudProxyApplier((opts, appName) => appProxy.applyToOptions(opts, appName || 'soundcloud'));
@@ -5822,6 +5836,66 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ---------- Track download via yt-dlp ----------
+  // The second download route. It takes a YouTube URL or a "name artist" query
+  // rather than a direct media URL, which is the difference that matters when
+  // the provider only hands back a 30-second preview or an expiring stream.
+  if (pn === '/api/download/ytdlp' && req.method === 'POST') {
+    if (!remoteRequestIsLocal(req)) {
+      sendJSON(res, { ok: false, error: 'LOCAL_ONLY' }, 403);
+      return;
+    }
+    if (!ytDlpAvailable()) {
+      sendJSON(res, { ok: false, error: 'YTDLP_UNAVAILABLE', message: 'yt-dlp is not installed in this build.' }, 501);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const query = String(body.query || body.url || '').trim();
+      const name = String(body.name || '').trim();
+      if (!query && !name) {
+        sendJSON(res, { ok: false, error: 'INVALID_QUERY' }, 400);
+        return;
+      }
+      // A track with no URL still has a name and an artist, and that is enough
+      // for yt-dlp to search for it. Prefer the URL when there is one so the
+      // download lands on the exact entry that was playing.
+      const target = query || name;
+      const downloadsDir = path.join(os.homedir(), 'Downloads', 'Mineradio');
+      // The proxy URL is derived from the saved config, never from the request:
+      // `viaProxy` can only ask for the proxy, not name one. When it is asked
+      // for and unavailable the download still runs, but the reply says so and
+      // the UI reports it — a deliberate proxy choice is never silently
+      // bypassed without telling the user it was.
+      const proxyUrl = appProxy.proxyUrlFor('ytdlp');
+      const wantsProxy = body.viaProxy === true;
+      const result = await downloadWithYtDlp(target, downloadsDir, {
+        proxy: proxyUrl,
+        onProgress: (line) => broadcastRemoteEvent('download-progress', { line: String(line).slice(0, 200) }),
+      });
+      if (!result.ok) {
+        sendJSON(res, { ok: false, error: result.reason, message: result.message, saved: result.path || '', usedProxy: !!proxyUrl }, 502);
+        return;
+      }
+      broadcastRemoteEvent('download', { saved: result.path, bytes: result.bytes });
+      sendJSON(res, {
+        ok: true,
+        saved: result.path,
+        bytes: result.bytes,
+        usedProxy: !!proxyUrl,
+        proxyRequested: wantsProxy,
+        // Only a request that went answered-nowhere earns a warning.
+        warning: wantsProxy && !proxyUrl
+          ? 'The proxy route was requested but no proxy is active for yt-dlp, so this went direct.'
+          : '',
+      });
+    } catch (err) {
+      console.error('[YtDlpDownload]', err);
+      sendJSON(res, { ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
   // ---------- Track download to the user's Downloads folder ----------
   if (pn === '/api/download/track' && req.method === 'POST') {
     if (!remoteRequestIsLocal(req)) {
@@ -6117,7 +6191,167 @@ const server = http.createServer(async (req, res) => {
 
   // ---------- EN-FORK global providers (YouTube Music / Deezer / SoundCloud)
   if (pn === '/api/ytmusic/status') {
+    // EN-FORK: the account is reported honestly now, but a stored cookie is not
+    // re-verified on every status poll — the modal asks
+    // /api/ytmusic/auth/status for that. This keeps the hot path free of a
+    // network round-trip while still never claiming a login that does not exist.
     sendJSON(res, { provider: 'ytmusic', ...getYtMusicCapabilities() });
+    return;
+  }
+
+  // ---------- EN-FORK: YouTube Music account (cookie) ----------
+  // The real account surface: a stored cookie is reported as a signed-in
+  // account only after account/account_menu has named the channel it belongs
+  // to. A stale or partial cookie answers "not signed in" with the reason.
+  if (pn === '/api/ytmusic/auth/status') {
+    if (!spotifyRequestHasExpectedOrigin(req)) {
+      sendJSON(res, { ok: false, error: 'ORIGIN_REJECTED' }, 403);
+      return;
+    }
+    try {
+      const hasCookie = hasYtMusicAuthCookie();
+      // Without a cookie there is nothing to ask YouTube about, so the answer
+      // is immediate and no network request is spent.
+      const check = hasCookie ? await checkAccountCookie() : null;
+      const caps = getYtMusicCapabilities();
+      sendJSON(res, {
+        provider: 'ytmusic',
+        ok: !!(check ? check.ok : true),
+        hasCookie,
+        loggedIn: !!caps.loggedIn,
+        name: caps.accountName || '',
+        channelId: caps.accountChannelId || '',
+        reason: check ? check.reason || '' : 'no_cookie',
+      });
+    } catch (err) {
+      console.error('[YtMusicAuthStatus]', err);
+      sendJSON(res, { provider: 'ytmusic', ok: false, loggedIn: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/ytmusic/auth/cookie' && req.method === 'POST') {
+    if (!spotifyRequestHasExpectedOrigin(req)) {
+      sendJSON(res, { ok: false, error: 'ORIGIN_REJECTED' }, 403);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const raw = body.cookie || body.data || body.text || '';
+      const saved = setYtMusicAuthCookie(raw);
+      if (!saved.accepted) {
+        sendJSON(res, {
+          ok: false,
+          error: 'INCOMPLETE_YT_MUSIC_COOKIE',
+          missing: saved.missing || [],
+          message: 'That does not look like a YouTube session cookie. Copy the whole Cookie header while signed in at music.youtube.com.',
+        }, 400);
+        return;
+      }
+      // A stored cookie is not a signed-in account until Google agrees, so the
+      // save returns the verified identity rather than assuming one.
+      const check = await checkAccountCookie();
+      const caps = getYtMusicCapabilities();
+      sendJSON(res, {
+        provider: 'ytmusic',
+        ok: true,
+        saved: true,
+        loggedIn: !!caps.loggedIn,
+        name: caps.accountName || '',
+        channelId: caps.accountChannelId || '',
+        reason: check && check.reason || '',
+        message: caps.loggedIn
+          ? 'Signed in to YouTube Music'
+          : 'Cookie saved, but YouTube did not report an account for it. It may have expired — sign in again and copy a fresh one.',
+      });
+    } catch (err) {
+      console.error('[YtMusicAuthCookie]', err);
+      sendJSON(res, { ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/ytmusic/auth/clear' && req.method === 'POST') {
+    if (!spotifyRequestHasExpectedOrigin(req)) {
+      sendJSON(res, { ok: false, error: 'ORIGIN_REJECTED' }, 403);
+      return;
+    }
+    clearYtMusicAuthCookie();
+    sendJSON(res, { provider: 'ytmusic', ok: true, loggedIn: false });
+    return;
+  }
+
+  // ---------- EN-FORK: yt-dlp as a route ----------
+  // One bundled extractor, three entry points: what it can do, a search, a
+  // stream URL, and a file on disk. The proxy is resolved per call so that
+  // ticking the ytdlp box takes effect without a restart.
+  if (pn === '/api/ytdlp/status') {
+    const caps = getYtDlpCapabilities();
+    if (caps.available && !caps.version) ytDlpVersion().catch(() => {});
+    sendJSON(res, { provider: 'ytdlp', ...caps });
+    return;
+  }
+
+  if (pn === '/api/ytdlp/search') {
+    try {
+      const result = await searchWithYtDlp(url.searchParams.get('keywords') || '', {
+        limit: url.searchParams.get('limit'),
+        proxy: appProxy.proxyUrlFor('ytdlp'),
+      });
+      sendJSON(res, {
+        provider: 'ytdlp',
+        songs: result.songs || [],
+        ok: !!result.ok,
+        error: result.ok ? undefined : result.reason,
+        message: result.message || '',
+      }, result.ok ? 200 : 502);
+    } catch (err) {
+      console.error('[YtDlpSearch]', err);
+      sendJSON(res, { provider: 'ytdlp', songs: [], ok: false, error: err.message }, 502);
+    }
+    return;
+  }
+
+  if (pn === '/api/ytdlp/song/url') {
+    try {
+      const id = url.searchParams.get('id') || '';
+      const target = url.searchParams.get('url') || id;
+      const result = await resolveWithYtDlp(target, { proxy: appProxy.proxyUrlFor('ytdlp') });
+      if (!result.ok) {
+        sendJSON(res, {
+          provider: 'ytdlp',
+          source: 'ytdlp',
+          id,
+          url: '',
+          playable: false,
+          playbackMode: 'recommend-match',
+          reason: result.reason,
+          restriction: {
+            category: 'provider_limited',
+            reason: result.reason,
+            message: result.message,
+            action: 'switch_source',
+          },
+        });
+        return;
+      }
+      sendJSON(res, {
+        provider: 'ytdlp',
+        source: 'ytdlp',
+        id,
+        url: `/api/audio?url=${encodeURIComponent(result.url)}&app=ytdlp`,
+        directUrl: result.url,
+        playable: true,
+        trial: false,
+        level: 'standard',
+        playbackMode: 'direct-url',
+        resolver: result.resolver,
+        restriction: undefined,
+      });
+    } catch (err) {
+      console.error('[YtDlpSongUrl]', err);
+      sendJSON(res, { provider: 'ytdlp', url: '', playable: false, error: err.message }, 502);
+    }
     return;
   }
 

@@ -138,7 +138,10 @@ function updateEmptyHomeVisibility(opts) {
   if (show) {
     setPeek(document.getElementById('search-area'), true, 'search');
     renderHomeDiscover();
-    if (!hasAnyPlatformLogin()) {
+    // EN-FORK: the starter (empty) feed is only correct when there is genuinely
+    // nothing to play. The keyless catalogs always are, so this now loads the
+    // real feed instead of a blank home on a fresh install.
+    if (!hasPlayableSource()) {
       homeDiscoverState.loading = false;
       homeDiscoverState.loaded = true;
       homeDiscoverState.loggedIn = false;
@@ -198,7 +201,9 @@ async function playHomeDaily() {
   homeForcedOpen = false;
   homeSuppressed = false;
   setHomeControlsLocked(false);
-  if (!hasAnyPlatformLogin() && !homeDiscoverState.loggedIn) {
+  // EN-FORK: no account is required to play the home feed — the keyless
+  // catalogs fill it. Only a build with no source at all has nothing to offer.
+  if (!hasPlayableSource() && !homeDiscoverState.loggedIn) {
     showLoginModal({ source: 'home-daily' });
     return;
   }
@@ -221,7 +226,7 @@ async function playHomePrivateRadio() {
   homeForcedOpen = false;
   homeSuppressed = false;
   setHomeControlsLocked(false);
-  if (!hasAnyPlatformLogin() && !homeDiscoverState.loggedIn) {
+  if (!hasPlayableSource() && !homeDiscoverState.loggedIn) {
     showLoginModal({ source: 'home-private' });
     return;
   }
@@ -262,11 +267,20 @@ function playHomeSong(index) {
   forcePlaybackControlsInteractive();
   playQueueAt(currentIdx).catch(function (e) { console.warn('[HomeSongPlay]', e); });
 }
+// Whether the personalize gate should stand aside: an account, or a keyless
+// feed that already produced playlists to open. Personalization needs a login;
+// opening a playlist from the feed does not.
+function homePersonalGateOpen() {
+  return homeDiscoverState.loggedIn
+    || (typeof hasPlayableSource === 'function' && hasPlayableSource()
+      && !!(homeDiscoverState.playlists && homeDiscoverState.playlists.length));
+}
+
 function openHomePlaylist(index) {
   homeForcedOpen = false;
   homeSuppressed = false;
   setHomeControlsLocked(false);
-  if (!hasAnyPlatformLogin() && !homeDiscoverState.loggedIn) {
+  if (!homePersonalGateOpen()) {
     runHomeSearch('');
     return;
   }
@@ -292,14 +306,14 @@ function openHomePodcast(index) {
   loadPodcastRadioIntoQueue(item.id, true, item.name || '');
 }
 function openHomeThirdCard() {
-  if (!hasAnyPlatformLogin() && !homeDiscoverState.loggedIn) {
+  if (!homePersonalGateOpen()) {
     openHomeLocalImport();
     return;
   }
   openHomePodcast(0);
 }
 function openHomeLibrary() {
-  if (!hasAnyPlatformLogin() && !homeDiscoverState.loggedIn) {
+  if (!homePersonalGateOpen()) {
     openHomeProductGuide();
     return;
   }

@@ -192,7 +192,10 @@ function scheduleStartupAutoplayRetry(jobId, reason, delay) {
 }
 function tryStartupAutoplayHomeFallback(jobId) {
   if (startupAutoplayHomeFallbackTried) return false;
-  if (!hasAnyPlatformLogin()) return false;
+  // EN-FORK: the home-feed fallback plays from the keyless catalogs, which need
+  // no account, so requiring a login here suppressed autoplay for everyone who
+  // never signs in.
+  if (!hasPlayableSource()) return false;
   startupAutoplayHomeFallbackTried = true;
   Promise.resolve().then(async function () {
     try {

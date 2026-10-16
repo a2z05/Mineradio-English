@@ -31,10 +31,21 @@ var kugouLoginAutoRefreshTimer = null;
 var qishuiLoginAutoRefreshTimer = null;
 var spotifyLoginStatus = { provider: 'spotify', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: 'Spotify', userId: '', avatar: '', product: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: false, playbackMode: 'recommend-match' };
 var spotifyLoginAutoRefreshTimer = null;
-// EN-FORK global providers: no login needed — always "ready".
-var ytmusicStatus = { provider: 'ytmusic', loggedIn: true, configured: true, preview: false, nickname: 'YT Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: true, playbackMode: 'direct-url' };
-var deezerStatus = { provider: 'deezer', loggedIn: true, configured: true, preview: false, nickname: 'Deezer', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: true, playbackMode: 'preview' };
-var soundcloudStatus = { provider: 'soundcloud', loggedIn: true, configured: true, preview: false, nickname: 'SoundCloud', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: true, playbackMode: 'direct-url' };
+// EN-FORK global providers.
+//
+// `loggedIn` means a real authenticated account and nothing else. These three
+// used to ship as loggedIn:true — a hardcoded default that the account modal
+// rendered as "signed in to Deezer" for a provider nothing had ever asked
+// about. YouTube Music now reports the real state of its session; Deezer and
+// SoundCloud report that they have no account at all.
+//
+// Being usable is a SEPARATE fact, and it is the one that keeps the app working
+// with no sign-in anywhere: these providers need no account, so `keylessReady`
+// is what the home page and the fallback chain actually consult. Conflating the
+// two is what made "signed in" the only way to have a working app.
+var ytmusicStatus = { provider: 'ytmusic', loggedIn: false, configured: true, keylessReady: true, preview: false, nickname: 'YT Music', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: true, playbackMode: 'direct-url' };
+var deezerStatus = { provider: 'deezer', loggedIn: false, configured: true, keylessReady: true, preview: false, nickname: 'Deezer', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: true, playbackMode: 'preview' };
+var soundcloudStatus = { provider: 'soundcloud', loggedIn: false, configured: true, keylessReady: true, preview: false, nickname: 'SoundCloud', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, playbackKeyReady: true, playbackMode: 'direct-url' };
 var qqLoginWasLoggedIn = false;
 var kugouLoginWasLoggedIn = false;
 var qishuiLoginWasLoggedIn = false;

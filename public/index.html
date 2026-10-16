@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="css/library-folders.css?v=20261002-library-folders">
   <link rel="stylesheet" href="css/mini-player.css?v=20261002-mini-player">
   <link rel="stylesheet" href="css/now-playing.css?v=20261002-now-playing">
+  <link rel="stylesheet" href="css/download-routes.css?v=20261016-download-routes">
 </head>
 
 <body>
@@ -150,6 +151,11 @@
             aria-selected="true">All</button>
           <button id="search-mode-ytmusic" type="button" onclick="setSearchMode('ytmusic')"
             aria-selected="false">YT</button>
+          <!-- EN-FORK: the bundled extractor searches YouTube by its own route,
+               which matters on a network where the InnerTube endpoint is the
+               part that fails. Hidden until the server reports the binary. -->
+          <button id="search-mode-ytdlp" type="button" onclick="setSearchMode('ytdlp')"
+            aria-selected="false" title="Search via the bundled yt-dlp extractor" style="display:none">YD</button>
           <button id="search-mode-deezer" type="button" onclick="setSearchMode('deezer')" aria-selected="false">DZ</button>
           <button id="search-mode-soundcloud" type="button" onclick="setSearchMode('soundcloud')" aria-selected="false">SC</button>
           <button id="search-mode-spotify" type="button" onclick="setSearchMode('spotify')" aria-selected="false">SP</button>
@@ -1734,23 +1740,31 @@
           <div class="login-auth-body">
             <div id="qr-shell" class="qr-shell">
               <img id="qr-img" src="" alt="">
+              <!-- EN-FORK: a QR card for providers that never render a QR. The
+                   label and the action now follow the selected provider. -->
               <button id="qq-web-login-card" class="qq-login-mark" type="button"
-                onclick="openProviderWebLogin()"><b>QQ</b><span>Open the official QR window</span></button>
+                onclick="openProviderWebLogin()"><b>SP</b><span>Open the official sign-in window</span></button>
             </div>
+            <!-- EN-FORK: this panel was the QQ cookie importer, left behind when
+                 the Chinese providers were removed. Its Save button called a
+                 handler that had been deleted with them — a clickable control
+                 that threw a ReferenceError. It is now the YouTube Music
+                 session importer, wired to a handler that exists, for the one
+                 provider in this build that has a real account. -->
             <div id="qq-cookie-panel" class="qq-cookie-panel">
               <textarea id="qq-cookie-input" class="qq-cookie-input" spellcheck="false" autocomplete="off"
-                placeholder="uin=...; qqmusic_key=...; qm_keyst=..."></textarea>
+                placeholder="Copy the whole Cookie header from music.youtube.com while signed in — or paste a JSON cookie export"></textarea>
               <div class="qq-cookie-actions">
-                <div class="qq-cookie-note">Imported from your signed-in session at y.qq.com.</div>
+                <div id="qq-cookie-note" class="qq-cookie-note">Sign in at music.youtube.com in your browser, then copy the Cookie request header.</div>
                 <button id="qq-cookie-save-btn" class="modal-btn primary" type="button"
-                  onclick="submitQQCookieLogin()">Save</button>
+                  onclick="submitProviderSessionImport()">Save session</button>
               </div>
             </div>
           </div>
           <div class="btn-row login-auth-actions">
             <button class="modal-btn" onclick="skipLoginAndFocusSearch()">Search a song first</button>
             <button id="qq-cookie-toggle-btn" class="modal-btn" type="button"
-              onclick="toggleQQCookiePanel()">Manual import</button>
+              onclick="toggleQQCookiePanel()">Import session</button>
             <button id="refresh-qr-btn" class="modal-btn primary" onclick="startSelectedLoginConnection()">Start sign-in</button>
           </div>
         </div>

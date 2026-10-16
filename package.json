@@ -1,7 +1,7 @@
 {
   "name": "mineradio",
   "productName": "Mineradio English",
-  "version": "2.1.0-en.17",
+  "version": "2.1.0-en.18",
   "description": "Immersive Windows music player blending desktop mode, a lyrics stage, particle visuals and a 3D playlist shelf — full English edition.",
   "author": "Mineradio",
   "license": "GPL-3.0-only",
@@ -58,6 +58,12 @@
       "public/index.html"
     ],
     "asar": false,
+    "extraResources": [
+      {
+        "from": "bin/yt-dlp.exe",
+        "to": "bin/yt-dlp.exe"
+      }
+    ],
     "fileAssociations": [
       {
         "ext": "mp3",
